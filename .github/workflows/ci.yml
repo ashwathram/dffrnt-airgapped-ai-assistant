@@ -18,9 +18,12 @@ jobs:
       - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: '**/requirements*.txt'
+          python-version: '3.14'
+          # TODO: Enable caching once we have requirements.txt or pyproject.toml
+          # cache: 'pip'
+          # cache-dependency-path: |
+          #   **/requirements*.txt
+          #   **/pyproject.toml
 
       - name: Install dependencies
         run: |
