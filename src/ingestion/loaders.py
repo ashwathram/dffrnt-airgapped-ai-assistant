@@ -16,16 +16,22 @@ def _normalize_whitespace(s: str) -> str:
 def read_pdf(path: Path) -> Dict:
     try:
         # Prefer the maintained `pypdf` package if available (mitigates known PyPDF2 CVEs)
-        from pypdf import PdfReader  # type: ignore
+        import pypdf as _pypdf  # type: ignore
+        PdfReaderClass = _pypdf.PdfReader
     except Exception:
         try:
-            from PyPDF2 import PdfReader
+            import PyPDF2 as _pyPdf2
+
+            PdfReaderClass = _pyPdf2.PdfReader
         except Exception as e:
             raise RuntimeError(
-                "A PDF reader is required to read PDF files. Install with `pip install pypdf` or `pip install pypdf2`"
+                (
+                    "A PDF reader is required to read PDF files. Install with "
+                    "pip install pypdf or pip install pypdf2"
+                )
             ) from e
 
-    reader = PdfReader(str(path))
+    reader = PdfReaderClass(str(path))
     sections: List[Dict] = []
     full_parts: List[str] = []
     offset = 0
