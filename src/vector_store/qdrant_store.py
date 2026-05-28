@@ -43,6 +43,19 @@ class QdrantStore:
             client_any = cast(Any, self.client)
             client_any.upsert(collection_name=self.collection_name, points=cast(Any, batch))
 
+    def delete_by_source_file(self, source_file: str):
+        """Delete all points whose payload source_file matches the given path."""
+        points_selector = rest_models.Filter(
+            must=[
+                rest_models.FieldCondition(
+                    key="source_file",
+                    match=rest_models.MatchValue(value=source_file),
+                )
+            ]
+        )
+        client_any = cast(Any, self.client)
+        client_any.delete(collection_name=self.collection_name, points_selector=points_selector)
+
     def search(
         self, query_vector: List[float], top: int = 5, filter: Optional[dict] = None
     ) -> List[Dict]:
