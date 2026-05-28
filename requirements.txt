@@ -1,2 +1,4 @@
-# Core dependencies (add later)
-# For now it's empty or you can add common ones
+# Core runtime dependencies for local ingestion and retrieval
+python-docx
+python-pptx
+pypdf==6.12.2
