@@ -17,6 +17,7 @@ def read_pdf(path: Path) -> Dict:
     try:
         # Prefer the maintained `pypdf` package if available (mitigates known PyPDF2 CVEs)
         import pypdf as _pypdf  # type: ignore
+
         PdfReaderClass = _pypdf.PdfReader
     except Exception:
         try:
