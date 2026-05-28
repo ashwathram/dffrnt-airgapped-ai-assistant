@@ -2,6 +2,7 @@
 
 Provides `Embedder` with `embed_texts(texts)` returning a list of vectors.
 """
+
 from typing import List
 import numpy as np
 
@@ -12,6 +13,7 @@ class Embedder:
         self.model = None
         try:
             from sentence_transformers import SentenceTransformer
+
             self.model = SentenceTransformer(model_name)
             # infer vector size
             self.dim = self.model.get_sentence_embedding_dimension()
@@ -26,14 +28,14 @@ class Embedder:
             vecs = []
             for t in texts:
                 h = abs(hash(t))
-                rng = np.random.RandomState(h % (2 ** 32))
+                rng = np.random.RandomState(h % (2**32))
                 vec = rng.rand(self.dim).astype(float)
                 vecs.append(vec.tolist())
             return vecs
 
         all_vecs = []
         for i in range(0, len(texts), batch_size):
-            batch = texts[i:i+batch_size]
+            batch = texts[i : i + batch_size]
             vecs = self.model.encode(batch, show_progress_bar=False)
             all_vecs.extend(vecs.tolist())
         return all_vecs

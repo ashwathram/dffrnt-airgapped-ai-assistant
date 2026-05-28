@@ -1,8 +1,10 @@
 """Chunking helpers for fixed-size, sentence, paragraph, and recursive splits."""
+
 from __future__ import annotations
 
 import re
 import uuid
+from pathlib import Path
 from typing import Dict, List, Sequence
 
 
@@ -111,21 +113,47 @@ def chunk_recursive(text: str, chunk_size: int = 1200, overlap: int = 150) -> Li
         if sentence_chunks and len(sentence_chunks) > 1:
             for sentence_chunk in sentence_chunks:
                 if len(sentence_chunk["text"]) <= chunk_size:
-                    chunks.append(_build_chunk(sentence_chunk["text"], paragraph["char_start"] + sentence_chunk["char_start"], paragraph["char_start"] + sentence_chunk["char_end"]))
+                    chunks.append(
+                        _build_chunk(
+                            sentence_chunk["text"],
+                            paragraph["char_start"] + sentence_chunk["char_start"],
+                            paragraph["char_start"] + sentence_chunk["char_end"],
+                        )
+                    )
                 else:
-                    fixed_chunks = chunk_text(sentence_chunk["text"], chunk_size=chunk_size, overlap=overlap)
+                    fixed_chunks = chunk_text(
+                        sentence_chunk["text"], chunk_size=chunk_size, overlap=overlap
+                    )
                     for fixed_chunk in fixed_chunks:
-                        chunks.append(_build_chunk(fixed_chunk["text"], paragraph["char_start"] + sentence_chunk["char_start"] + fixed_chunk["char_start"], paragraph["char_start"] + sentence_chunk["char_start"] + fixed_chunk["char_end"]))
+                        chunks.append(
+                            _build_chunk(
+                                fixed_chunk["text"],
+                                paragraph["char_start"]
+                                + sentence_chunk["char_start"]
+                                + fixed_chunk["char_start"],
+                                paragraph["char_start"]
+                                + sentence_chunk["char_start"]
+                                + fixed_chunk["char_end"],
+                            )
+                        )
             continue
 
         fixed_chunks = chunk_text(piece, chunk_size=chunk_size, overlap=overlap)
         for fixed_chunk in fixed_chunks:
-            chunks.append(_build_chunk(fixed_chunk["text"], paragraph["char_start"] + fixed_chunk["char_start"], paragraph["char_start"] + fixed_chunk["char_end"]))
+            chunks.append(
+                _build_chunk(
+                    fixed_chunk["text"],
+                    paragraph["char_start"] + fixed_chunk["char_start"],
+                    paragraph["char_start"] + fixed_chunk["char_end"],
+                )
+            )
 
     return chunks
 
 
-def chunk_by_strategy(text: str, strategy: str = "fixed", chunk_size: int = 1200, overlap: int = 150) -> List[Dict]:
+def chunk_by_strategy(
+    text: str, strategy: str = "fixed", chunk_size: int = 1200, overlap: int = 150
+) -> List[Dict]:
     strategy = strategy.lower().strip()
     if strategy == "fixed":
         return chunk_text(text, chunk_size=chunk_size, overlap=overlap)
@@ -145,30 +173,41 @@ def list_chunking_strategies() -> List[str]:
     return ["fixed", "sentence", "paragraph", "recursive", "semantic"]
 
 
-def chunk_file(file_record: dict, strategy: str = "recursive", chunk_size: int = 1000, overlap: int = 150) -> List[Dict]:
-    """Chunk a file (as returned by `load_file`) into chunks with deterministic `chunk_id`s and metadata.
+def chunk_file(
+    file_record: dict, strategy: str = "recursive", chunk_size: int = 1000, overlap: int = 150
+) -> List[Dict]:
+    """Chunk a file into metadata-rich chunks with deterministic IDs.
 
-    file_record should contain keys: `source_file`, `filename`, `file_type`, and `sections`.
-    Each section is a dict with `text`, `char_start`, `char_end`, `page_number`, `slide_index`, `section_heading`.
-    Returns a list of chunk dicts with metadata fields.
+    The input should look like the dict returned by `load_file`.
     """
     if not file_record:
         return []
 
     filename = file_record.get("filename") or Path(file_record.get("source_file", "")).name
     file_type = file_record.get("file_type")
-    sections = file_record.get("sections") or [{"text": file_record.get("text",""), "char_start": 0, "char_end": len(file_record.get("text","")), "page_number": None, "slide_index": None, "section_heading": None}]
+    sections = file_record.get("sections") or [
+        {
+            "text": file_record.get("text", ""),
+            "char_start": 0,
+            "char_end": len(file_record.get("text", "")),
+            "page_number": None,
+            "slide_index": None,
+            "section_heading": None,
+        }
+    ]
 
     all_chunks: List[Dict] = []
     for sidx, section in enumerate(sections):
         sec_text = section.get("text", "")
-        sec_heading = section.get("section_heading") or f"section{sidx+1}"
+        sec_heading = section.get("section_heading") or f"section{sidx + 1}"
         sec_page = section.get("page_number")
         sec_slide = section.get("slide_index")
         sec_start = section.get("char_start", 0)
 
         # chunk the section text using existing strategies (returns relative char offsets)
-        relative_chunks = chunk_by_strategy(sec_text, strategy=strategy, chunk_size=chunk_size, overlap=overlap)
+        relative_chunks = chunk_by_strategy(
+            sec_text, strategy=strategy, chunk_size=chunk_size, overlap=overlap
+        )
 
         for idx, rc in enumerate(relative_chunks, start=1):
             # rc char offsets are relative to section; convert to absolute
