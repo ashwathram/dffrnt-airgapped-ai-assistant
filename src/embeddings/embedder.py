@@ -35,7 +35,7 @@ class Embedder:
 
         all_vecs = []
         for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
+            batch = texts[i:i + batch_size]
             vecs = self.model.encode(batch, show_progress_bar=False)
             all_vecs.extend(vecs.tolist())
         return all_vecs
