@@ -1,11 +1,9 @@
 """File loaders that return clean text plus rich metadata.
 
-Each loader returns a dict with:
-- `text`: full text
-- `file_type`: one of pdf/docx/pptx/csv/txt/md
-- `source_file`, `filename`, `document_title` (when available)
-- `sections`: a list of sections with `text`, `page_number`/`slide_index`, `section_heading`, `char_start`, `char_end`
+Each loader returns a dict with full text, file type, source path, and
+section metadata for downstream chunking.
 """
+
 from pathlib import Path
 from typing import Dict, List
 import re
@@ -17,11 +15,24 @@ def _normalize_whitespace(s: str) -> str:
 
 def read_pdf(path: Path) -> Dict:
     try:
-        from PyPDF2 import PdfReader
-    except Exception as e:
-        raise RuntimeError("PyPDF2 is required to read PDF files. Install with `pip install pypdf2`") from e
+        # Prefer the maintained `pypdf` package if available (mitigates known PyPDF2 CVEs)
+        import pypdf as _pypdf  # type: ignore
 
-    reader = PdfReader(str(path))
+        PdfReaderClass = _pypdf.PdfReader
+    except Exception:
+        try:
+            import PyPDF2 as _pyPdf2
+
+            PdfReaderClass = _pyPdf2.PdfReader
+        except Exception as e:
+            raise RuntimeError(
+                (
+                    "A PDF reader is required to read PDF files. Install with "
+                    "pip install pypdf or pip install pypdf2"
+                )
+            ) from e
+
+    reader = PdfReaderClass(str(path))
     sections: List[Dict] = []
     full_parts: List[str] = []
     offset = 0
@@ -30,7 +41,7 @@ def read_pdf(path: Path) -> Dict:
     try:
         meta = reader.metadata
         if meta and getattr(meta, "title", None):
-            title = _normalize_whitespace(meta.title)
+            title = _normalize_whitespace(meta.title or "")
     except Exception:
         title = None
 
@@ -42,14 +53,16 @@ def read_pdf(path: Path) -> Dict:
         full_parts.append(text)
         start = offset
         end = offset + len(text)
-        sections.append({
-            "text": text,
-            "page_number": i,
-            "slide_index": None,
-            "section_heading": None,
-            "char_start": start,
-            "char_end": end,
-        })
+        sections.append(
+            {
+                "text": text,
+                "page_number": i,
+                "slide_index": None,
+                "section_heading": None,
+                "char_start": start,
+                "char_end": end,
+            }
+        )
         offset = end + 2
 
     full_text = "\n\n".join(full_parts)
@@ -59,7 +72,17 @@ def read_pdf(path: Path) -> Dict:
         "source_file": str(path),
         "filename": path.name,
         "document_title": title,
-        "sections": sections or [{"text": full_text, "page_number": None, "slide_index": None, "section_heading": None, "char_start": 0, "char_end": len(full_text)}],
+        "sections": sections
+        or [
+            {
+                "text": full_text,
+                "page_number": None,
+                "slide_index": None,
+                "section_heading": None,
+                "char_start": 0,
+                "char_end": len(full_text),
+            }
+        ],
     }
 
 
@@ -67,7 +90,9 @@ def read_docx(path: Path) -> Dict:
     try:
         import docx
     except Exception as e:
-        raise RuntimeError("python-docx is required to read DOCX files. Install with `pip install python-docx`") from e
+        raise RuntimeError(
+            "python-docx is required to read DOCX files. Install with `pip install python-docx`"
+        ) from e
 
     doc = docx.Document(str(path))
     paragraphs = [p for p in doc.paragraphs if p.text is not None]
@@ -83,12 +108,23 @@ def read_docx(path: Path) -> Dict:
             continue
         style = getattr(p, "style", None)
         style_name = getattr(style, "name", "") if style is not None else ""
-        is_heading = style_name.lower().startswith("heading") or style_name.lower().startswith("title")
+        is_heading = style_name.lower().startswith("heading") or style_name.lower().startswith(
+            "title"
+        )
         if is_heading:
             # flush current
             if current_parts:
                 full = "\n\n".join(current_parts)
-                sections.append({"text": full, "page_number": None, "slide_index": None, "section_heading": current_heading, "char_start": offset, "char_end": offset + len(full)})
+                sections.append(
+                    {
+                        "text": full,
+                        "page_number": None,
+                        "slide_index": None,
+                        "section_heading": current_heading,
+                        "char_start": offset,
+                        "char_end": offset + len(full),
+                    }
+                )
                 offset += len(full) + 2
                 current_parts = []
             current_heading = text
@@ -100,12 +136,30 @@ def read_docx(path: Path) -> Dict:
 
     if current_parts:
         full = "\n\n".join(current_parts)
-        sections.append({"text": full, "page_number": None, "slide_index": None, "section_heading": current_heading, "char_start": offset, "char_end": offset + len(full)})
+        sections.append(
+            {
+                "text": full,
+                "page_number": None,
+                "slide_index": None,
+                "section_heading": current_heading,
+                "char_start": offset,
+                "char_end": offset + len(full),
+            }
+        )
 
     full_text = "\n\n".join([s["text"] for s in sections])
     if not sections:
         full_text = "\n\n".join([p.text for p in paragraphs])
-        sections = [{"text": full_text, "page_number": None, "slide_index": None, "section_heading": None, "char_start": 0, "char_end": len(full_text)}]
+        sections = [
+            {
+                "text": full_text,
+                "page_number": None,
+                "slide_index": None,
+                "section_heading": None,
+                "char_start": 0,
+                "char_end": len(full_text),
+            }
+        ]
 
     return {
         "text": full_text,
@@ -121,7 +175,9 @@ def read_pptx(path: Path) -> Dict:
     try:
         from pptx import Presentation
     except Exception as e:
-        raise RuntimeError("python-pptx is required to read PPTX files. Install with `pip install python-pptx`") from e
+        raise RuntimeError(
+            "python-pptx is required to read PPTX files. Install with `pip install python-pptx`"
+        ) from e
 
     prs = Presentation(str(path))
     sections: List[Dict] = []
@@ -138,7 +194,16 @@ def read_pptx(path: Path) -> Dict:
         if not slide_text:
             continue
         full_parts.append(slide_text)
-        sections.append({"text": slide_text, "page_number": None, "slide_index": i, "section_heading": None, "char_start": offset, "char_end": offset + len(slide_text)})
+        sections.append(
+            {
+                "text": slide_text,
+                "page_number": None,
+                "slide_index": i,
+                "section_heading": None,
+                "char_start": offset,
+                "char_end": offset + len(slide_text),
+            }
+        )
         offset += len(slide_text) + 2
 
     full_text = "\n\n".join(full_parts)
@@ -148,7 +213,17 @@ def read_pptx(path: Path) -> Dict:
         "source_file": str(path),
         "filename": path.name,
         "document_title": None,
-        "sections": sections or [{"text": full_text, "page_number": None, "slide_index": None, "section_heading": None, "char_start": 0, "char_end": len(full_text)}],
+        "sections": sections
+        or [
+            {
+                "text": full_text,
+                "page_number": None,
+                "slide_index": None,
+                "section_heading": None,
+                "char_start": 0,
+                "char_end": len(full_text),
+            }
+        ],
     }
 
 
@@ -156,7 +231,9 @@ def read_csv(path: Path) -> Dict:
     try:
         import pandas as pd
     except Exception as e:
-        raise RuntimeError("pandas is required to read CSV files. Install with `pip install pandas`") from e
+        raise RuntimeError(
+            "pandas is required to read CSV files. Install with `pip install pandas`"
+        ) from e
 
     df = None
     last_error = None
@@ -180,7 +257,16 @@ def read_csv(path: Path) -> Dict:
     for _, row in df.iterrows():
         parts.append("\t".join([str(x) for x in row.tolist()]))
     full_text = "\n".join(parts)
-    sections = [{"text": full_text, "page_number": None, "slide_index": None, "section_heading": None, "char_start": 0, "char_end": len(full_text)}]
+    sections = [
+        {
+            "text": full_text,
+            "page_number": None,
+            "slide_index": None,
+            "section_heading": None,
+            "char_start": 0,
+            "char_end": len(full_text),
+        }
+    ]
     return {
         "text": full_text,
         "file_type": "csv",
@@ -195,12 +281,9 @@ def read_text_or_md(path: Path) -> Dict:
     text = path.read_text(encoding="utf-8")
     # split markdown headings as sections
     sections: List[Dict] = []
-    offset = 0
-    pattern = re.compile(r"(^#{1,6}\s+.*?$)|(^.+?$)(?=\n#|\Z)|(^.+?$)", re.M)
     # fallback: split on blank lines
     if path.suffix.lower() == ".md":
         # simple split by headings
-        parts = re.split(r"(?m:^(#{1,6})\s+)", text)
         # naive: if headings present, split into sections by heading lines
         headings = re.findall(r"(?m:^(#{1,6})\s+(.*)$)", text)
         if headings:
@@ -213,7 +296,16 @@ def read_text_or_md(path: Path) -> Dict:
                     continue
                 start = cursor
                 end = start + len(b)
-                sections.append({"text": b, "page_number": None, "slide_index": None, "section_heading": None, "char_start": start, "char_end": end})
+                sections.append(
+                    {
+                        "text": b,
+                        "page_number": None,
+                        "slide_index": None,
+                        "section_heading": None,
+                        "char_start": start,
+                        "char_end": end,
+                    }
+                )
                 cursor = end + 2
         else:
             paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
@@ -221,7 +313,16 @@ def read_text_or_md(path: Path) -> Dict:
             for p in paras:
                 start = cursor
                 end = start + len(p)
-                sections.append({"text": p, "page_number": None, "slide_index": None, "section_heading": None, "char_start": start, "char_end": end})
+                sections.append(
+                    {
+                        "text": p,
+                        "page_number": None,
+                        "slide_index": None,
+                        "section_heading": None,
+                        "char_start": start,
+                        "char_end": end,
+                    }
+                )
                 cursor = end + 2
     else:
         paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
@@ -229,13 +330,31 @@ def read_text_or_md(path: Path) -> Dict:
         for p in paras:
             start = cursor
             end = start + len(p)
-            sections.append({"text": p, "page_number": None, "slide_index": None, "section_heading": None, "char_start": start, "char_end": end})
+            sections.append(
+                {
+                    "text": p,
+                    "page_number": None,
+                    "slide_index": None,
+                    "section_heading": None,
+                    "char_start": start,
+                    "char_end": end,
+                }
+            )
             cursor = end + 2
 
     full_text = "\n\n".join([s["text"] for s in sections])
     if not sections:
         full_text = text
-        sections = [{"text": full_text, "page_number": None, "slide_index": None, "section_heading": None, "char_start": 0, "char_end": len(full_text)}]
+        sections = [
+            {
+                "text": full_text,
+                "page_number": None,
+                "slide_index": None,
+                "section_heading": None,
+                "char_start": 0,
+                "char_end": len(full_text),
+            }
+        ]
 
     return {
         "text": full_text,
@@ -269,9 +388,18 @@ def load_file(path: str) -> Dict:
     raw = p.read_text(encoding="utf-8")
     return {
         "text": raw,
-        "file_type": suffix.lstrip('.'),
+        "file_type": suffix.lstrip("."),
         "source_file": str(p),
         "filename": p.name,
         "document_title": None,
-        "sections": [{"text": raw, "page_number": None, "slide_index": None, "section_heading": None, "char_start": 0, "char_end": len(raw)}],
+        "sections": [
+            {
+                "text": raw,
+                "page_number": None,
+                "slide_index": None,
+                "section_heading": None,
+                "char_start": 0,
+                "char_end": len(raw),
+            }
+        ],
     }
