@@ -39,7 +39,7 @@ class QdrantStore:
     def upsert(self, points: List[Dict], batch_size: int = 128):
         """Upsert points with `id`, `vector`, and `payload`."""
         for i in range(0, len(points), batch_size):
-            batch = points[i:i + batch_size]
+            batch = points[i : i + batch_size]
             client_any = cast(Any, self.client)
             client_any.upsert(collection_name=self.collection_name, points=cast(Any, batch))
 
