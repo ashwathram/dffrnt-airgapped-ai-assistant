@@ -71,7 +71,7 @@ def ingest_file(file_path, qdrant_client, embedder):
     print(f"  Embedding {len(chunks)} chunks...")
     embeddings = embedder.embed_documents([c["text"] for c in chunks])
 
-    from m2_vectorstore.vector_store import store_chunks
+    from vectorstore.vector_store import store_chunks
     store_chunks(qdrant_client, chunks, embeddings)
     print(f"  Done: {len(chunks)} chunks stored")
     return len(chunks)
@@ -87,8 +87,8 @@ def ingest_folder(folder_path, qdrant_client, embedder):
     return total
 
 if __name__ == "__main__":
-    from m2_vectorstore.vector_store import get_client, create_collection
-    from m3_llm.llm_client import get_embedder
+    from vectorstore.vector_store import get_client, create_collection
+    from llm.llm_client import get_embedder
 
     print("Testing M1 Document Ingestion...")
 

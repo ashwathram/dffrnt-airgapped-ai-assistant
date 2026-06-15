@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from config import API_HOST, API_PORT, AUDIT_LOG_PATH
-from m2_vectorstore.vector_store import get_client, create_collection
-from m4_rag.rag_pipeline import ask
+from vectorstore.vector_store import get_client, create_collection
+from rag.rag_pipeline import ask
 
 # ── App setup ─────────────────────────────────────────────────────
 app = FastAPI(title="DFFRNT AI Assistant")
@@ -98,8 +98,8 @@ def query_endpoint(request: QueryRequest):
 def ingest_endpoint(file_path: str):
     if not Path(file_path).exists():
         raise HTTPException(404, f"File not found: {file_path}")
-    from m1_ingestion.document_loader import ingest_file
-    from m3_llm.llm_client import get_embedder
+    from ingestion.document_loader import ingest_file
+    from llm.llm_client import get_embedder
     chunks = ingest_file(file_path, qdrant, get_embedder())
     write_audit("INGESTION", {
         "file":   Path(file_path).name,
@@ -165,8 +165,8 @@ async def upload_file(
     write_audit("UPLOAD", metadata)
 
     # Ingest into Qdrant
-    from m1_ingestion.document_loader import ingest_file
-    from m3_llm.llm_client import get_embedder
+    from ingestion.document_loader import ingest_file
+    from llm.llm_client import get_embedder
     try:
         chunks = ingest_file(str(save_path), qdrant, get_embedder())
         write_audit("INGESTION", {"file": filename, "chunks": chunks})

@@ -1,7 +1,7 @@
 import sys
 sys.path.append("..")
-from m3_llm.llm_client import get_llm, get_embedder
-from m2_vectorstore.vector_store import search
+from llm.llm_client import get_llm, get_embedder
+from vectorstore.vector_store import search
 
 SYSTEM_PROMPT = """You are a private knowledge assistant for DFFRNT consulting firm.
 
