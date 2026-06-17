@@ -1,0 +1,31 @@
+{"timestamp": "2026-06-16T23:46:38.034570+00:00", "event_type": "UPLOAD", "filename": "Sample - Superstore.csv", "file_type": "CSV", "file_size": 2277811, "upload_date": "2026-06-16T23:46:38.034554+00:00", "uploaded_by": "admin", "tags": []}
+{"timestamp": "2026-06-16T23:46:43.893692+00:00", "event_type": "INGESTION", "file": "Sample - Superstore.csv", "chunks": 0}
+{"timestamp": "2026-06-16T23:54:21.202470+00:00", "event_type": "UPLOAD", "filename": "challengefund3-technicalproposal-kartoza.pdf", "file_type": "PDF", "file_size": 2981963, "upload_date": "2026-06-16T23:54:21.202451+00:00", "uploaded_by": "admin", "tags": ["proposal"]}
+{"timestamp": "2026-06-16T23:54:51.176445+00:00", "event_type": "INGESTION", "file": "challengefund3-technicalproposal-kartoza.pdf", "chunks": 314}
+{"timestamp": "2026-06-16T23:55:01.154123+00:00", "event_type": "DELETION", "filename": "test.txt"}
+{"timestamp": "2026-06-16T23:55:28.370695+00:00", "event_type": "QUERY", "question_hash": "532eaabd9574880d", "question_length": 4, "sources_count": 5, "history_turns": 0}
+{"timestamp": "2026-06-17T00:03:15.142935+00:00", "event_type": "UPLOAD", "filename": "Resume-Sample-1-Software-Engineer.pdf", "file_type": "PDF", "file_size": 123524, "upload_date": "2026-06-17T00:03:15.142887+00:00", "uploaded_by": "admin", "tags": ["hr", "resume", "software-engineering"]}
+{"timestamp": "2026-06-17T00:03:16.142941+00:00", "event_type": "INGESTION", "file": "Resume-Sample-1-Software-Engineer.pdf", "chunks": 7}
+{"timestamp": "2026-06-17T00:04:17.062658+00:00", "event_type": "QUERY", "question_hash": "0239b151ac569341", "question_length": 68, "sources_count": 5, "history_turns": 0}
+{"timestamp": "2026-06-17T00:05:28.614083+00:00", "event_type": "QUERY", "question_hash": "73921649718526e9", "question_length": 29, "sources_count": 5, "history_turns": 2}
+{"timestamp": "2026-06-17T00:05:39.021968+00:00", "event_type": "DELETION", "filename": "Resume-Sample-1-Software-Engineer.pdf"}
+{"timestamp": "2026-06-17T00:07:40.215547+00:00", "event_type": "UPLOAD", "filename": "Resume-Sample-1-Software-Engineer.pdf", "file_type": "PDF", "file_size": 123524, "upload_date": "2026-06-17T00:07:40.215524+00:00", "uploaded_by": "admin", "tags": ["hr", "resume", "software-engineering"]}
+{"timestamp": "2026-06-17T00:07:40.912219+00:00", "event_type": "INGESTION", "file": "Resume-Sample-1-Software-Engineer.pdf", "chunks": 7}
+{"timestamp": "2026-06-17T00:10:13.535742+00:00", "event_type": "DELETION", "filename": "Resume-Sample-1-Software-Engineer.pdf"}
+{"timestamp": "2026-06-17T00:10:45.799139+00:00", "event_type": "UPLOAD", "filename": "Resume-Sample-1-Software-Engineer.pdf", "file_type": "PDF", "file_size": 123524, "upload_date": "2026-06-17T00:10:45.799121+00:00", "uploaded_by": "admin", "tags": ["hr", "resume", "software-engineering"]}
+{"timestamp": "2026-06-17T00:10:46.521990+00:00", "event_type": "INGESTION", "file": "Resume-Sample-1-Software-Engineer.pdf", "chunks": 7}
+{"timestamp": "2026-06-17T00:11:56.972594+00:00", "event_type": "QUERY", "question_hash": "b51879fdc1792518", "question_length": 44, "sources_count": 5, "history_turns": 0}
+{"timestamp": "2026-06-17T00:14:03.517587+00:00", "event_type": "DELETION", "filename": "challengefund3-technicalproposal-kartoza.pdf"}
+{"timestamp": "2026-06-17T00:14:16.870424+00:00", "event_type": "QUERY", "question_hash": "4f0ae3e7f4d79d57", "question_length": 43, "sources_count": 5, "history_turns": 0}
+{"timestamp": "2026-06-17T00:14:29.489275+00:00", "event_type": "QUERY", "question_hash": "d33a170c3f762531", "question_length": 34, "sources_count": 5, "history_turns": 2}
+{"timestamp": "2026-06-17T00:17:29.222672+00:00", "event_type": "QUERY", "question_hash": "5624be301c5779cb", "question_length": 73, "sources_count": 5, "history_turns": 4}
+{"timestamp": "2026-06-17T00:22:51.471131+00:00", "event_type": "UPLOAD", "filename": "challengefund3-technicalproposal-kartoza.pdf", "file_type": "PDF", "file_size": 2981963, "upload_date": "2026-06-17T00:22:51.471113+00:00", "uploaded_by": "admin", "tags": ["hr", "resume", "software-engineering"]}
+{"timestamp": "2026-06-17T00:23:16.687354+00:00", "event_type": "INGESTION", "file": "challengefund3-technicalproposal-kartoza.pdf", "chunks": 314}
+{"timestamp": "2026-06-17T00:23:31.882700+00:00", "event_type": "QUERY", "question_hash": "f085f448d4adbace", "question_length": 37, "sources_count": 5, "history_turns": 0}
+{"timestamp": "2026-06-17T00:24:02.912638+00:00", "event_type": "DELETION", "filename": "challengefund3-technicalproposal-kartoza.pdf"}
+{"timestamp": "2026-06-17T00:25:26.445232+00:00", "event_type": "UPLOAD", "filename": "challengefund3-technicalproposal-kartoza.pdf", "file_type": "PDF", "file_size": 2981963, "upload_date": "2026-06-17T00:25:26.445213+00:00", "uploaded_by": "admin", "tags": []}
+{"timestamp": "2026-06-17T00:25:55.253993+00:00", "event_type": "INGESTION", "file": "challengefund3-technicalproposal-kartoza.pdf", "chunks": 314}
+{"timestamp": "2026-06-17T00:27:11.608440+00:00", "event_type": "QUERY", "question_hash": "9114783c43491245", "question_length": 37, "sources_count": 5, "history_turns": 0}
+{"timestamp": "2026-06-17T00:27:33.376938+00:00", "event_type": "QUERY", "question_hash": "6bbe3890b58a2134", "question_length": 45, "sources_count": 5, "history_turns": 2}
+{"timestamp": "2026-06-17T00:27:54.559212+00:00", "event_type": "QUERY", "question_hash": "7c11983e70c2d984", "question_length": 30, "sources_count": 5, "history_turns": 4}
+{"timestamp": "2026-06-17T00:28:18.602732+00:00", "event_type": "QUERY", "question_hash": "bbd863d1c0975001", "question_length": 65, "sources_count": 5, "history_turns": 6}

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from config import API_HOST, API_PORT, AUDIT_LOG_PATH
@@ -51,6 +52,11 @@ class QueryResponse(BaseModel):
     question: str
 
 # ══ ENDPOINTS ════════════════════════════════════════════════════
+
+# ── UI ───────────────────────────────────────────────────────────
+@app.get("/")
+def serve_ui():
+    return FileResponse("src/ui/index.html")
 
 # ── Health ────────────────────────────────────────────────────────
 @app.get("/health")

@@ -1,0 +1,61 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Install dependencies",
+            "type": "shell",
+            "command": "uv sync",
+            "options": { "cwd": "${workspaceFolder}" },
+            "presentation": { "reveal": "silent", "panel": "shared" }
+        },
+        {
+            "label": "Create data and log directories",
+            "type": "shell",
+            "command": "mkdir -p data logs",
+            "options": { "cwd": "${workspaceFolder}" },
+            "presentation": { "reveal": "silent", "panel": "shared" }
+        },
+        {
+            "label": "Start Qdrant",
+            "type": "shell",
+            "command": "docker start qdrant 2>/dev/null || docker run -d --name qdrant -p 6333:6333 qdrant/qdrant; until curl -sf http://localhost:6333/healthz > /dev/null 2>&1; do sleep 1; done",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "silent", "panel": "shared" }
+        },
+        {
+            "label": "Start Ollama",
+            "type": "shell",
+            "command": "docker start ollama 2>/dev/null || docker run -d --name ollama -p 11434:11434 ollama/ollama; until curl -sf http://localhost:11434 > /dev/null 2>&1; do sleep 1; done",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "silent", "panel": "shared" }
+        },
+        {
+            "label": "Pull Ollama models",
+            "type": "shell",
+            "command": "docker exec ollama ollama pull qwen2.5:0.5b && docker exec ollama ollama pull nomic-embed-text",
+            "dependsOn": ["Start Ollama"],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            "label": "Setup: All prerequisites",
+            "dependsOn": [
+                "Install dependencies",
+                "Create data and log directories",
+                "Start Qdrant",
+                "Pull Ollama models"
+            ],
+            "dependsOrder": "parallel",
+            "group": "build"
+        }
+    ]
+}

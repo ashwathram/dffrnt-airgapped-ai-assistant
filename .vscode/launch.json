@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "DFFRNT AI Assistant (Local)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/api/main.py",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "ENVIRONMENT": "macbook",
+                "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/src"
+            },
+            "preLaunchTask": "Setup: All prerequisites",
+            "console": "integratedTerminal"
+        }
+    ]
+}
