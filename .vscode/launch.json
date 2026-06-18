@@ -5,11 +5,10 @@
             "name": "DFFRNT AI Assistant (Local)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/src/api/main.py",
+            "module": "dffrnt_assistant.api.app",
             "cwd": "${workspaceFolder}",
             "env": {
-                "ENVIRONMENT": "macbook",
-                "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/src"
+                "PYTHONPATH": "${workspaceFolder}"
             },
             "preLaunchTask": "Setup: All prerequisites",
             "console": "integratedTerminal"

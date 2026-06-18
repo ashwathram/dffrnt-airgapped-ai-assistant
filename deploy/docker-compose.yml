@@ -1,0 +1,21 @@
+# Offline runtime: Qdrant + Ollama. Images and the Ollama model store are loaded
+# from the bundle by install_offline.sh — nothing is fetched from the net.
+#
+# Do not run `docker compose` against this file directly. Use start.sh, which
+# reads config.toml and injects the GPU reservation + ports dynamically.
+services:
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ./ollama_models:/root/.ollama/models
+    restart: unless-stopped

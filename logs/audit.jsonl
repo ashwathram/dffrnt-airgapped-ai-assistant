@@ -29,3 +29,17 @@
 {"timestamp": "2026-06-17T00:27:33.376938+00:00", "event_type": "QUERY", "question_hash": "6bbe3890b58a2134", "question_length": 45, "sources_count": 5, "history_turns": 2}
 {"timestamp": "2026-06-17T00:27:54.559212+00:00", "event_type": "QUERY", "question_hash": "7c11983e70c2d984", "question_length": 30, "sources_count": 5, "history_turns": 4}
 {"timestamp": "2026-06-17T00:28:18.602732+00:00", "event_type": "QUERY", "question_hash": "bbd863d1c0975001", "question_length": 65, "sources_count": 5, "history_turns": 6}
+{"timestamp": "2026-06-17T23:28:30.215653+00:00", "event_type": "UPLOAD", "filename": "dmava_mckinseyco.pdf", "file_type": "PDF", "file_size": 2730719, "upload_date": "2026-06-17T23:28:30.215638+00:00", "uploaded_by": "admin", "tags": []}
+{"timestamp": "2026-06-17T23:52:35.939687+00:00", "event_type": "UPLOAD", "filename": "diagnostic-1781740355.txt", "file_type": "TXT", "file_size": 83, "upload_date": "2026-06-17T23:52:35.939671+00:00", "uploaded_by": "diag", "tags": ["test"]}
+{"timestamp": "2026-06-17T23:52:42.082910+00:00", "event_type": "INGESTION", "file": "diagnostic-1781740355.txt", "chunks": 2}
+{"timestamp": "2026-06-17T23:56:58.352846+00:00", "event_type": "UPLOAD", "filename": "Sample - Superstore.csv", "file_type": "CSV", "file_size": 2277811, "upload_date": "2026-06-17T23:56:58.352827+00:00", "uploaded_by": "diag", "tags": []}
+{"timestamp": "2026-06-17T23:57:17.248685+00:00", "event_type": "INGESTION", "file": "Sample - Superstore.csv", "chunks": 5122}
+{"timestamp": "2026-06-17T23:58:02.517391+00:00", "event_type": "UPLOAD", "filename": "dmava_mckinseyco.pdf", "file_type": "PDF", "file_size": 2730719, "upload_date": "2026-06-17T23:58:02.517365+00:00", "uploaded_by": "diag", "tags": []}
+{"timestamp": "2026-06-17T23:58:12.869356+00:00", "event_type": "INGESTION", "file": "dmava_mckinseyco.pdf", "chunks": 3116}
+{"timestamp": "2026-06-17T23:58:30.331190+00:00", "event_type": "DELETION", "filename": "diagnostic-1781740355.txt"}
+{"timestamp": "2026-06-18T00:09:13.874214+00:00", "event_type": "QUERY", "question_hash": "532eaabd9574880d", "question_length": 4, "sources_count": 5, "history_turns": 0}
+{"timestamp": "2026-06-18T00:09:48.077418+00:00", "event_type": "QUERY", "question_hash": "e524a057c34405d0", "question_length": 37, "sources_count": 5, "history_turns": 2}
+{"timestamp": "2026-06-18T00:10:16.057639+00:00", "event_type": "DELETION", "filename": "Sample - Superstore.csv"}
+{"timestamp": "2026-06-18T00:10:20.909338+00:00", "event_type": "UPLOAD", "filename": "Sample - Superstore.csv", "file_type": "CSV", "file_size": 2277811, "upload_date": "2026-06-18T00:10:20.909322+00:00", "uploaded_by": "admin", "tags": ["Finance", "Sales", "Data"]}
+{"timestamp": "2026-06-18T00:10:40.115683+00:00", "event_type": "INGESTION", "file": "Sample - Superstore.csv", "chunks": 5122}
+{"timestamp": "2026-06-18T00:11:14.855573+00:00", "event_type": "QUERY", "question_hash": "9e576f0be5bef1ae", "question_length": 40, "sources_count": 5, "history_turns": 4}

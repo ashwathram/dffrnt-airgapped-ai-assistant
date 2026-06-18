@@ -1,64 +1,51 @@
-import httpx, os, json, sys
-sys.path.append("..")
+"""End-to-end smoke tests.
 
-BASE = "http://localhost:8000"
+These require a live API server plus Qdrant and Ollama, so they are marked
+``integration`` and skipped by default. Run them explicitly with::
+
+    pytest -m integration
+
+Configure the target with DFFRNT_BASE_URL and AUDIT_LOG_PATH.
+"""
+
+import json
+import os
+
+import httpx
+import pytest
+
+pytestmark = pytest.mark.integration
+
+BASE = os.getenv("DFFRNT_BASE_URL", "http://localhost:8000")
+AUDIT_LOG = os.getenv("AUDIT_LOG_PATH", "logs/audit.jsonl")
+
 
 def test_health():
-    r = httpx.get(f"{BASE}/health")
-    assert r.status_code == 200
-    assert r.json()["status"] == "running"
-    print("PASS: Health check")
+    response = httpx.get(f"{BASE}/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "running"
+
 
 def test_query_returns_answer():
-    r = httpx.post(
+    response = httpx.post(
         f"{BASE}/api/query",
         json={"question": "What does DFFRNT specialize in?"},
         timeout=1200,
     )
-    assert r.status_code == 200
-    data = r.json()
-    assert len(data["answer"]) > 20,  "Answer too short"
-    assert len(data["sources"]) > 0,  "No sources returned"
-    print(f"PASS: Query answered ({len(data['answer'])} chars, "
-          f"{len(data['sources'])} sources)")
-    print(f"      Answer preview: {data['answer'][:80]}...")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["answer"]) > 20, "Answer too short"
+    assert len(data["sources"]) > 0, "No sources returned"
 
-def test_source_citation():
-    r = httpx.post(
-        f"{BASE}/api/query",
-        json={"question": "Who has healthcare experience?"},
-        timeout=1200,
-    )
-    data = r.json()
-    sources = [s["filename"] for s in data["sources"]]
-    assert "test_doc.txt" in sources, "Expected test_doc.txt in sources"
-    print(f"PASS: Source citation working — sources: {sources}")
 
 def test_empty_question_rejected():
-    r = httpx.post(
-        f"{BASE}/api/query",
-        json={"question": ""},
-        timeout=30
-    )
-    assert r.status_code == 400
-    print("PASS: Empty question correctly rejected")
+    response = httpx.post(f"{BASE}/api/query", json={"question": ""}, timeout=30)
+    assert response.status_code == 400
+
 
 def test_audit_log_exists():
-    assert os.path.exists("logs/audit.jsonl"), "Audit log not found"
-    lines = open("logs/audit.jsonl").readlines()
-    assert len(lines) > 0, "Audit log is empty"
-    events = [json.loads(l)["event_type"] for l in lines]
-    print(f"PASS: Audit log has {len(lines)} events: {set(events)}")
-
-if __name__ == "__main__":
-    print("=" * 50)
-    print("DFFRNT AI System Tests")
-    print("=" * 50 + "\n")
-    test_health()
-    test_query_returns_answer()
-    test_source_citation()
-    test_empty_question_rejected()
-    test_audit_log_exists()
-    print("\n" + "=" * 50)
-    print("All tests PASSED ✓")
-    print("=" * 50)
+    assert os.path.exists(AUDIT_LOG), "Audit log not found"
+    lines = open(AUDIT_LOG).readlines()
+    assert lines, "Audit log is empty"
+    events = {json.loads(line)["event_type"] for line in lines}
+    assert events

@@ -1,0 +1,42 @@
+# DFFRNT AI Assistant configuration.
+#
+# Copy to `config.toml` and edit, or set any value as an UPPER_SNAKE_CASE env var
+# (e.g. API_PORT=9000). Precedence: env > config.toml > built-in defaults.
+
+# Deployment target. Only affects GPU acceleration: local-cuda turns on Ollama
+# CUDA when started via deploy/start.sh. The LLM model is set by llm_model below.
+environment = "aws"
+
+# Ollama GPU acceleration for the Docker stack (deploy/start.sh reads this).
+# Auto-enabled for environment = "local-cuda"; set true to force it for any environment.
+gpu = false
+
+# --- Ollama (LLM + embeddings) ---
+ollama_url = "http://localhost:11434"
+llm_model = "qwen3:4b"             # LLM served by Ollama (used everywhere)
+embed_model = "nomic-embed-text"
+vector_size = 768                  # MUST match the embed_model's output dimension
+llm_temperature = 0.1
+llm_timeout = 600                  # seconds
+
+# --- Qdrant vector store ---
+qdrant_url = "http://localhost:6333"
+collection_name = "dffrnt_documents"
+distance = "cosine"                # cosine | dot | euclid
+top_k = 5
+
+# --- Chunking ---
+chunk_strategy = "recursive"       # fixed | sentence | paragraph | recursive
+chunk_size = 512
+chunk_overlap = 64
+
+# --- Retrieval / prompting ---
+history_turns = 6
+# system_prompt = "You are ..."    # uncomment to replace the default system prompt
+
+# --- API / paths ---
+api_host = "0.0.0.0"
+api_port = 8000
+data_dir = "data"
+source_root = "database/raw"
+audit_log_path = "logs/audit.jsonl"
