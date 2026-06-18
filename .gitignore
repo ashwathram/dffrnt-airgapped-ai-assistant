@@ -35,6 +35,9 @@ htmlcov/
 data/
 .claude/
 
+# Runtime audit logs
+logs/
+
 # Local runtime config (copy from config.toml.example)
 config.toml
 
