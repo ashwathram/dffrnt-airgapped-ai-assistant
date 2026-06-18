@@ -7,6 +7,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    MatchAny,
     MatchValue,
     PointStruct,
     VectorParams,
@@ -44,12 +45,22 @@ class VectorStore:
             ]
             self.client.upsert(collection_name=self.collection_name, points=batch)
 
-    def search(self, query_vector: List[float], top_k: int) -> List[Dict]:
+    def search(
+        self, query_vector: List[float], top_k: int, tag_filter: List[str] = None
+    ) -> List[Dict]:
+        """Top-k nearest chunks, optionally restricted to those carrying any of
+        the given tags (so the assistant searches only the scoped documents)."""
+        query_filter = None
+        if tag_filter:
+            query_filter = Filter(
+                must=[FieldCondition(key="tags", match=MatchAny(any=list(tag_filter)))]
+            )
         results = self.client.query_points(
             collection_name=self.collection_name,
             query=query_vector,
             limit=top_k,
             with_payload=True,
+            query_filter=query_filter,
         ).points
         return [{"payload": r.payload, "score": r.score} for r in results]
 
@@ -68,6 +79,16 @@ class VectorStore:
         self.client.delete(
             collection_name=self.collection_name,
             points_selector=Filter(
+                must=[FieldCondition(key="filename", match=MatchValue(value=filename))]
+            ),
+        )
+
+    def set_payload_by_filename(self, filename: str, payload: Dict) -> None:
+        """Merge `payload` into every chunk of a document (e.g. to update tags)."""
+        self.client.set_payload(
+            collection_name=self.collection_name,
+            payload=payload,
+            points=Filter(
                 must=[FieldCondition(key="filename", match=MatchValue(value=filename))]
             ),
         )

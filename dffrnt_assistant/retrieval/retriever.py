@@ -12,10 +12,11 @@ class Retriever:
         self.embedder = embedder
         self.settings = settings
 
-    def retrieve(self, question: str) -> List[Dict]:
-        """Return the top-k hits as ``[{"payload": ..., "score": ...}, ...]``."""
+    def retrieve(self, question: str, tag_filter: List[str] = None) -> List[Dict]:
+        """Return the top-k hits as ``[{"payload": ..., "score": ...}, ...]``,
+        optionally scoped to documents carrying any of ``tag_filter``."""
         query_vector = self.embedder.embed_query(question)
-        return self.store.search(query_vector, self.settings.top_k)
+        return self.store.search(query_vector, self.settings.top_k, tag_filter)
 
     @staticmethod
     def build_context(hits: List[Dict]) -> str:

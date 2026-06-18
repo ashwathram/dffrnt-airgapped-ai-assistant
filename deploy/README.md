@@ -5,7 +5,7 @@ Build a bundle on a networked machine, copy it to the air-gapped target, install
 ## 1. Build (networked machine, matching the target OS/arch)
 
 ```bash
-ollama pull qwen2.5:7b && ollama pull nomic-embed-text   # vendor the models
+ollama pull qwen3:4b && ollama pull nomic-embed-text   # vendor the models (must match config.toml)
 deploy/build_offline.sh
 # -> dist/offline-bundle.tar.gz
 ```

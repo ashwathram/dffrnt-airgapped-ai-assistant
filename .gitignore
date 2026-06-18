@@ -43,3 +43,5 @@ deploy/**/qdrant_storage/
 deploy/**/ollama_models/
 
 data/
+
+front-end/

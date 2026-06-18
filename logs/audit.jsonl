@@ -43,3 +43,43 @@
 {"timestamp": "2026-06-18T00:10:20.909338+00:00", "event_type": "UPLOAD", "filename": "Sample - Superstore.csv", "file_type": "CSV", "file_size": 2277811, "upload_date": "2026-06-18T00:10:20.909322+00:00", "uploaded_by": "admin", "tags": ["Finance", "Sales", "Data"]}
 {"timestamp": "2026-06-18T00:10:40.115683+00:00", "event_type": "INGESTION", "file": "Sample - Superstore.csv", "chunks": 5122}
 {"timestamp": "2026-06-18T00:11:14.855573+00:00", "event_type": "QUERY", "question_hash": "9e576f0be5bef1ae", "question_length": 40, "sources_count": 5, "history_turns": 4}
+{"timestamp": "2026-06-18T00:44:03.745723+00:00", "event_type": "QUERY", "question_hash": "9956b47e63bab678", "question_length": 63, "sources_count": 5, "answer_length": 106, "history_turns": 0, "streamed": true}
+{"timestamp": "2026-06-18T00:44:58.776950+00:00", "event_type": "QUERY", "question_hash": "1c4200d8a494d2af", "question_length": 86, "sources_count": 5, "answer_length": 103, "history_turns": 0, "streamed": true}
+{"timestamp": "2026-06-18T00:55:20.043576+00:00", "event_type": "QUERY", "question_hash": "e575025a48b748f3", "question_length": 38, "sources_count": 5, "answer_length": 106, "history_turns": 0, "streamed": true}
+{"timestamp": "2026-06-18T00:57:01.488021+00:00", "event_type": "QUERY", "question_hash": "e575025a48b748f3", "question_length": 38, "sources_count": 5, "answer_length": 113, "history_turns": 0, "streamed": true}
+{"timestamp": "2026-06-18T01:16:14.467336+00:00", "event_type": "QUERY", "question_hash": "2c00032e034b2885", "question_length": 5, "sources_count": 5, "answer_length": 182, "history_turns": 0, "streamed": true}
+{"timestamp": "2026-06-18T01:57:53.741273+00:00", "event_type": "UPLOAD", "filename": "zz_audit_test.txt", "file_type": "TXT", "file_size": 69, "upload_date": "2026-06-18T01:57:53.741257+00:00", "uploaded_by": "auditor", "tags": ["Finance", "Data"]}
+{"timestamp": "2026-06-18T01:57:54.798176+00:00", "event_type": "INGESTION", "file": "zz_audit_test.txt", "chunks": 1}
+{"timestamp": "2026-06-18T01:57:54.873792+00:00", "event_type": "DELETION", "filename": "zz_audit_test.txt"}
+{"timestamp": "2026-06-18T01:57:54.883047+00:00", "event_type": "UPLOAD", "filename": "zz_audit_test.txt", "file_type": "TXT", "file_size": 69, "upload_date": "2026-06-18T01:57:54.883035+00:00", "uploaded_by": "auditor", "tags": ["Finance"]}
+{"timestamp": "2026-06-18T01:57:54.940298+00:00", "event_type": "INGESTION", "file": "zz_audit_test.txt", "chunks": 1}
+{"timestamp": "2026-06-18T01:57:54.977213+00:00", "event_type": "DELETION", "filename": "zz_audit_test.txt"}
+{"timestamp": "2026-06-18T16:10:40.436771+00:00", "event_type": "UPLOAD", "filename": "zz_tagtest.txt", "file_type": "TXT", "file_size": 33, "upload_date": "2026-06-18T16:10:40.436756+00:00", "uploaded_by": "auditor", "tags": ["Finance"]}
+{"timestamp": "2026-06-18T16:10:41.512644+00:00", "event_type": "INGESTION", "file": "zz_tagtest.txt", "chunks": 1}
+{"timestamp": "2026-06-18T16:10:42.408102+00:00", "event_type": "DELETION", "filename": "zz_tagtest.txt"}
+{"timestamp": "2026-06-18T16:22:11.506435+00:00", "event_type": "UPLOAD", "filename": "zz_d.txt", "file_type": "TXT", "file_size": 17, "upload_date": "2026-06-18T16:22:11.506410+00:00", "uploaded_by": "admin", "tags": ["Finance"]}
+{"timestamp": "2026-06-18T16:22:12.602760+00:00", "event_type": "INGESTION", "file": "zz_d.txt", "chunks": 1}
+{"timestamp": "2026-06-18T16:22:12.868966+00:00", "event_type": "TAG_UPDATE", "filename": "zz_d.txt", "tags": ["Sales", "Data"]}
+{"timestamp": "2026-06-18T16:22:13.104924+00:00", "event_type": "DELETION", "filename": "zz_d.txt"}
+{"timestamp": "2026-06-18T16:22:14.191338+00:00", "event_type": "QUERY", "question_hash": "4a91ff9b12fe03db", "question_length": 28, "sources_count": 0, "answer_length": 102, "history_turns": 0, "tag_filter": ["no_such_tag"], "streamed": true}
+{"timestamp": "2026-06-18T16:44:04.544172+00:00", "event_type": "QUERY", "question_hash": "51b957ce16db6634", "question_length": 66, "sources_count": 5, "answer_length": 107, "history_turns": 0, "tag_filter": [], "streamed": true}
+{"timestamp": "2026-06-18T16:44:04.719375+00:00", "event_type": "QUERY", "question_hash": "bae9264d6d972b80", "question_length": 9, "sources_count": 0, "answer_length": 102, "history_turns": 0, "tag_filter": ["__nope__"], "streamed": true}
+{"timestamp": "2026-06-18T16:44:35.864499+00:00", "event_type": "UPLOAD", "filename": "zz_pass.txt", "file_type": "TXT", "file_size": 22, "upload_date": "2026-06-18T16:44:35.864481+00:00", "uploaded_by": "admin", "tags": ["Finance"]}
+{"timestamp": "2026-06-18T16:44:35.962275+00:00", "event_type": "INGESTION", "file": "zz_pass.txt", "chunks": 1}
+{"timestamp": "2026-06-18T16:44:36.252258+00:00", "event_type": "TAG_UPDATE", "filename": "zz_pass.txt", "tags": ["Sales", "Data"]}
+{"timestamp": "2026-06-18T16:44:36.533831+00:00", "event_type": "DELETION", "filename": "zz_pass.txt"}
+{"timestamp": "2026-06-18T16:44:36.539983+00:00", "event_type": "UPLOAD", "filename": "zz_pass.txt", "file_type": "TXT", "file_size": 22, "upload_date": "2026-06-18T16:44:36.539971+00:00", "uploaded_by": "admin", "tags": ["Finance"]}
+{"timestamp": "2026-06-18T16:44:36.595351+00:00", "event_type": "INGESTION", "file": "zz_pass.txt", "chunks": 1}
+{"timestamp": "2026-06-18T16:44:36.632787+00:00", "event_type": "DELETION", "filename": "zz_pass.txt"}
+{"timestamp": "2026-06-18T16:57:58.957195+00:00", "event_type": "UPLOAD", "filename": "zz_newest.txt", "file_type": "TXT", "file_size": 16, "upload_date": "2026-06-18T16:57:58.957177+00:00", "uploaded_by": "admin", "tags": []}
+{"timestamp": "2026-06-18T16:58:00.001889+00:00", "event_type": "INGESTION", "file": "zz_newest.txt", "chunks": 1}
+{"timestamp": "2026-06-18T16:58:00.443340+00:00", "event_type": "DELETION", "filename": "zz_newest.txt"}
+{"timestamp": "2026-06-18T16:59:21.369677+00:00", "event_type": "QUERY", "question_hash": "2c00032e034b2885", "question_length": 5, "sources_count": 5, "answer_length": 459, "history_turns": 0, "tag_filter": [], "streamed": true}
+{"timestamp": "2026-06-18T17:07:00.754488+00:00", "event_type": "QUERY", "question_hash": "d906273e40990aa4", "question_length": 39, "sources_count": 5, "answer_length": 431, "history_turns": 0, "tag_filter": [], "streamed": true}
+{"timestamp": "2026-06-18T17:07:56.737115+00:00", "event_type": "QUERY", "question_hash": "d906273e40990aa4", "question_length": 39, "sources_count": 5, "answer_length": 813, "history_turns": 0, "tag_filter": [], "streamed": true}
+{"timestamp": "2026-06-18T17:08:42.297031+00:00", "event_type": "QUERY", "question_hash": "03bf78d6d565011e", "question_length": 39, "sources_count": 5, "answer_length": 485, "history_turns": 0, "tag_filter": [], "streamed": true}
+{"timestamp": "2026-06-18T17:17:30.537853+00:00", "event_type": "QUERY", "question_hash": "e06ffe5563aed14c", "question_length": 49, "sources_count": 5, "answer_length": 280, "history_turns": 0, "tag_filter": [], "streamed": true}
+{"timestamp": "2026-06-18T17:17:30.676392+00:00", "event_type": "QUERY", "question_hash": "bae9264d6d972b80", "question_length": 9, "sources_count": 0, "answer_length": 102, "history_turns": 0, "tag_filter": ["__nope__"], "streamed": true}
+{"timestamp": "2026-06-18T17:19:09.791700+00:00", "event_type": "UPLOAD", "filename": "zz_sweep.txt", "file_type": "TXT", "file_size": 6, "upload_date": "2026-06-18T17:19:09.791684+00:00", "uploaded_by": "admin", "tags": []}
+{"timestamp": "2026-06-18T17:19:09.861072+00:00", "event_type": "INGESTION", "file": "zz_sweep.txt", "chunks": 1}
+{"timestamp": "2026-06-18T17:19:10.108219+00:00", "event_type": "DELETION", "filename": "zz_sweep.txt"}

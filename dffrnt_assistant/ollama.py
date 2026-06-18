@@ -7,7 +7,7 @@ HTTP or ML client dependency. Replaces langchain-ollama / sentence-transformers.
 import json
 import urllib.error
 import urllib.request
-from typing import List
+from typing import Iterator, List, Tuple
 
 
 class OllamaClient:
@@ -81,3 +81,41 @@ class OllamaClient:
             },
         )
         return out.get("response", "")
+
+    def generate_stream(self, prompt: str) -> Iterator[Tuple[str, str]]:
+        """Yield ``(channel, text)`` pairs as Ollama produces them.
+
+        ``channel`` is "thinking" for a reasoning model's chain-of-thought
+        (Ollama exposes it in a separate ``thinking`` field) or "answer" for the
+        final response text. Ollama's /api/generate with stream=True returns
+        newline-delimited JSON objects; urllib reads them off the socket
+        incrementally, so tokens are yielded as they are generated.
+        """
+        data = json.dumps(
+            {
+                "model": self.llm_model,
+                "prompt": prompt,
+                "stream": True,
+                "options": {"temperature": self.temperature},
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            self.base_url + "/api/generate",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            for line in response:
+                line = line.strip()
+                if not line:
+                    continue
+                chunk = json.loads(line.decode("utf-8"))
+                thinking = chunk.get("thinking")
+                if thinking:
+                    yield ("thinking", thinking)
+                token = chunk.get("response", "")
+                if token:
+                    yield ("answer", token)
+                if chunk.get("done"):
+                    break

@@ -1,640 +1,163 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/jpeg" href="/ui/img/dffrnt_favicon.jpg" />
 <title>DFFRNT AI Assistant</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:Calibri,Arial,sans-serif;background:#f5f7fa;color:#333;}
-.header{background:#1B3A5C;color:white;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;}
-.header h1{font-size:22px;}
-.header .sub{font-size:13px;color:#BDD7EE;margin-top:4px;}
-.badge{background:#1F6B75;color:white;padding:4px 12px;border-radius:4px;font-size:12px;}
-.tabs{background:#1B3A5C;padding:0 32px;display:flex;gap:4px;}
-.tab{padding:10px 28px;cursor:pointer;color:#BDD7EE;border-radius:6px 6px 0 0;font-size:15px;border:none;background:transparent;}
-.tab:hover{background:rgba(255,255,255,0.1);color:white;}
-.tab.active{background:#f5f7fa;color:#1B3A5C;font-weight:bold;}
-.content{max-width:960px;margin:30px auto;padding:0 20px;}
-.panel{display:none;}
-.panel.active{display:block;}
-/* Buttons */
-.btn{color:white;padding:10px 24px;font-size:14px;border:none;border-radius:6px;cursor:pointer;margin-top:8px;}
-.btn-blue{background:#1B3A5C;}.btn-blue:hover{background:#2E75B6;}
-.btn-green{background:#375623;}.btn-green:hover{background:#1F6B75;}
-.btn-red{background:#7F0000;}.btn-red:hover{background:#c0392b;}
-.btn-gray{background:#666;}.btn-gray:hover{background:#333;}
-.btn:disabled{background:#999;cursor:not-allowed;}
-.btn-sm{padding:6px 14px;font-size:13px;margin-top:0;}
-/* Chat */
-textarea{width:100%;padding:12px;font-size:15px;border:2px solid #2E75B6;border-radius:6px;resize:vertical;font-family:inherit;}
-.chat-history{background:white;border-radius:8px;padding:16px;margin-bottom:16px;max-height:400px;overflow-y:auto;display:none;}
-.chat-turn{margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #eee;}
-.chat-turn:last-child{border-bottom:none;margin-bottom:0;}
-.chat-q{font-weight:bold;color:#1B3A5C;margin-bottom:6px;}
-.chat-a{color:#333;line-height:1.6;white-space:pre-wrap;}
-.chat-sources{margin-top:8px;}
-.source{background:#EAF3DE;padding:6px 10px;margin:3px 0;border-radius:4px;font-size:12px;border-left:3px solid #375623;display:inline-block;margin-right:6px;}
-.loading{color:#666;font-style:italic;margin-top:10px;display:none;}
-.error-msg{color:#c0392b;background:#fdf0f0;border-left:4px solid #c0392b;padding:12px;border-radius:4px;margin-top:12px;display:none;}
-.hint{font-size:13px;color:#888;margin-top:6px;}
-.clear-btn{float:right;font-size:13px;color:#c0392b;cursor:pointer;background:none;border:none;padding:0;}
-.clear-btn:hover{text-decoration:underline;}
-/* Upload */
-.section-title{color:#1B3A5C;font-size:20px;font-weight:bold;margin-bottom:6px;}
-.section-sub{color:#666;font-size:14px;margin-bottom:20px;}
-.upload-box{background:white;border:2px dashed #2E75B6;border-radius:8px;padding:40px;text-align:center;margin-bottom:20px;cursor:pointer;transition:background 0.2s;}
-.upload-box:hover,.upload-box.dragover{background:#f0f7ff;}
-.upload-box input{display:none;}
-.upload-icon{font-size:48px;margin-bottom:10px;}
-.upload-box strong{color:#1B3A5C;font-size:16px;display:block;}
-.upload-box p{color:#888;margin-top:8px;font-size:13px;}
-.meta-form{background:white;border-radius:8px;padding:20px;margin-bottom:16px;}
-.meta-form h3{color:#1B3A5C;margin-bottom:16px;font-size:15px;}
-.form-row{display:flex;gap:16px;margin-bottom:12px;}
-.form-group{flex:1;}
-.form-group label{display:block;font-size:13px;color:#555;margin-bottom:4px;font-weight:bold;}
-.form-group input{width:100%;padding:8px 12px;border:1px solid #ccc;border-radius:4px;font-size:14px;}
-.file-queue{background:white;border-radius:8px;padding:16px;margin-bottom:16px;display:none;}
-.file-queue h3{color:#1B3A5C;margin-bottom:12px;font-size:15px;}
-.file-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #eee;font-size:14px;}
-.file-item:last-child{border-bottom:none;}
-.file-name{font-weight:bold;color:#1B3A5C;flex:1;}
-.file-size{color:#888;font-size:12px;margin:0 16px;}
-.status-pending{color:#888;}
-.status-uploading{color:#2E75B6;font-style:italic;}
-.status-done{color:#375623;font-weight:bold;}
-.status-error{color:#c0392b;}
-.status-dup{color:#E65100;font-weight:bold;}
-/* Confirmation dialog */
-.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;display:none;align-items:center;justify-content:center;}
-.modal-overlay.active{display:flex;}
-.modal{background:white;border-radius:8px;padding:24px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.3);}
-.modal h3{color:#1B3A5C;margin-bottom:16px;font-size:18px;}
-.modal-meta{background:#f5f7fa;border-radius:6px;padding:16px;margin-bottom:16px;}
-.modal-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;font-size:14px;}
-.modal-row:last-child{border-bottom:none;}
-.modal-label{color:#666;font-weight:bold;}
-.modal-value{color:#1B3A5C;}
-.modal-actions{display:flex;gap:12px;justify-content:flex-end;}
-/* Result box */
-.result-box{border-radius:6px;padding:14px 16px;margin-top:12px;font-size:14px;display:none;}
-.result-success{background:#EAF3DE;border-left:4px solid #375623;color:#375623;}
-.result-error{background:#fdf0f0;border-left:4px solid #c0392b;color:#c0392b;}
-.result-warn{background:#FFF8E1;border-left:4px solid #F57F17;color:#E65100;}
-/* Library */
-.doc-card{background:white;border-radius:8px;padding:20px;margin-top:0;}
-.doc-card h3{color:#1B3A5C;margin-bottom:16px;border-bottom:2px solid #2E75B6;padding-bottom:8px;font-size:16px;}
-.stats-row{display:flex;gap:12px;margin-bottom:20px;}
-.stat-box{background:#D9E8F5;border-radius:8px;padding:14px 20px;text-align:center;flex:1;}
-.stat-num{font-size:28px;font-weight:bold;color:#1B3A5C;}
-.stat-label{font-size:12px;color:#555;margin-top:4px;}
-.doc-table{width:100%;border-collapse:collapse;font-size:14px;}
-.doc-table th{background:#1B3A5C;color:white;padding:10px 12px;text-align:left;font-weight:normal;}
-.doc-table td{padding:10px 12px;border-bottom:1px solid #eee;}
-.doc-table tr:hover td{background:#f8f9fa;}
-.doc-table tr:last-child td{border-bottom:none;}
-.tag{background:#D9E8F5;color:#1B3A5C;padding:2px 8px;border-radius:10px;font-size:11px;margin-right:4px;}
-.no-docs{color:#888;font-style:italic;text-align:center;padding:30px;}
-.refresh-btn{background:none;border:1px solid #2E75B6;color:#2E75B6;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px;float:right;}
-.refresh-btn:hover{background:#D9E8F5;}
-.del-btn{background:none;border:1px solid #c0392b;color:#c0392b;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;}
-.del-btn:hover{background:#fdf0f0;}
-</style>
+<meta name="description" content="Branded AI assistant with chat and a document library, served fully offline." />
+<!--
+  DFFRNT AI Assistant — vanilla HTML/CSS/JS UI (no npm, no framework, no CDN).
+  Design language ported from the Figma "Conversational AI Assistant UI" prototype.
+
+  Assets live under /ui (served by a StaticFiles mount in api/app.py) and are split
+  into native ES modules + plain CSS — no build step, works on an air-gapped box.
+    styles/  fonts · theme · layout · chat · library · tags
+    js/      util · icons · state · api · sidebar · chat · scope · library ·
+             upload · tags · settings · app (entry)
+
+  Implemented against the live backend: streaming chat with thinking, tag-scoped
+  retrieval, saved conversations, the document library (tag display/search/filter
+  + per-doc tag editing), upload (validation, per-file tags, duplicate handling),
+  and tag taxonomy CRUD + import.
+
+  Intentionally out of scope (no backend support / not portable to an offline
+  served app):
+    - Per-file/folder upload descriptions (the backend stores no description field).
+    - Opening the original source/document file (browser file:// access is blocked).
+-->
+<link rel="stylesheet" href="/ui/styles/fonts.css" />
+<link rel="stylesheet" href="/ui/styles/theme.css" />
+<link rel="stylesheet" href="/ui/styles/layout.css" />
+<link rel="stylesheet" href="/ui/styles/chat.css" />
+<link rel="stylesheet" href="/ui/styles/library.css" />
+<link rel="stylesheet" href="/ui/styles/tags.css" />
+<script type="module" src="/ui/js/app.js"></script>
 </head>
 <body>
+<div class="app">
+  <!-- ── Sidebar ──────────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="logo">DF</div>
+      <span class="name">DFFRNT AI Assistant</span>
+      <button class="toggle" id="sidebarToggle" title="Collapse sidebar"><span data-icon="panelLeft" class="icon"></span></button>
+    </div>
 
-<!-- Header -->
-<div class="header">
-  <div>
-    <h1>🔒 DFFRNT AI Assistant</h1>
-    <div class="sub">Private Knowledge Assistant — AWS Testing Environment</div>
-  </div>
-  <span class="badge">AWS Test</span>
+    <div class="nav">
+      <button class="nav-btn" id="navNewChat" title="New chat"><span data-icon="plus" class="icon"></span><span>New chat</span></button>
+      <button class="nav-btn" id="navLibrary" title="Document Library"><span data-icon="library" class="icon"></span><span>Document Library</span></button>
+    </div>
+
+    <div class="recent-label">
+      <span data-icon="clock" class="icon"></span> RECENT
+      <button class="recent-clear" id="clearHistoryBtn" title="Clear all conversations"><span data-icon="trash" class="icon"></span></button>
+    </div>
+    <div class="search-wrap">
+      <span data-icon="search" class="icon"></span>
+      <input id="chatSearch" placeholder="Search chats…" />
+    </div>
+    <div class="history scroll-none" id="chatHistory"></div>
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────────────── -->
+  <main class="main">
+    <div class="topbar">
+      <span class="title" id="topbarTitle">New conversation</span>
+    </div>
+    <div class="content">
+      <!-- Chat panel -->
+      <section class="chat" id="chatPanel">
+        <div class="chat-scope" id="chatScope"></div>
+        <div class="messages scroll-thin" id="messages"></div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <textarea id="composer" rows="1" placeholder="Ask anything about your documents…"></textarea>
+            <div class="row">
+              <div class="row-left">
+                <button class="settings-btn" id="settingsBtn" title="Settings"><span data-icon="settings" class="icon"></span></button>
+                <div class="settings-menu hidden" id="settingsMenu">
+                  <div class="settings-heading">Settings</div>
+                  <button class="settings-item" id="toggleThinking">
+                    <span class="si-label">
+                      Show thinking
+                      <span class="si-sub">Display the model's reasoning</span>
+                    </span>
+                    <span class="switch" id="thinkingSwitch"><span class="knob"></span></span>
+                  </button>
+                </div>
+              </div>
+              <div class="row-right">
+                <span class="count" id="charCount"></span>
+                <button class="send-btn" id="sendBtn" title="Send (Enter)"><span data-icon="send" class="icon"></span></button>
+              </div>
+            </div>
+          </div>
+          <p class="disclaimer">AI can make mistakes. Verify important information from source documents.</p>
+        </div>
+      </section>
+
+      <!-- Library panel -->
+      <section class="library hidden" id="libraryPanel">
+        <div class="library-inner">
+          <div class="lib-head">
+            <div>
+              <h2>Document Library</h2>
+              <p>Documents available to the assistant's knowledge base.</p>
+            </div>
+            <div class="lib-actions">
+              <button class="btn btn-ghost" id="manageTagsBtn"><span data-icon="tag" class="icon"></span> Manage Tags</button>
+              <button class="btn btn-primary" id="uploadOpenBtn"><span data-icon="upload" class="icon"></span> Upload</button>
+              <div class="stats">
+                <div class="stat"><div class="v" id="statDocs">–</div><div class="l">DOCUMENTS</div></div>
+                <div class="stat"><div class="v" id="statChunks">–</div><div class="l">CHUNKS</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="doc-search">
+            <span data-icon="search" class="icon"></span>
+            <input id="docSearch" placeholder="Search documents…" />
+          </div>
+          <div class="doc-filter" id="docFilter"></div>
+          <div id="docList"></div>
+        </div>
+      </section>
+    </div>
+  </main>
 </div>
 
-<!-- Tabs (Screen 1, 2, 4) -->
-<div class="tabs">
-  <button class="tab active" onclick="switchTab('chat',this)">💬 Chat</button>
-  <button class="tab" onclick="switchTab('upload',this)">📁 Upload</button>
-  <button class="tab" onclick="switchTab('library',this)">📚 Document Library</button>
-</div>
-
-<!-- Confirmation Modal (Screen 3 — FR-13) -->
-<div class="modal-overlay" id="confirm-modal">
+<!-- Tag Manager modal -->
+<div class="modal-overlay hidden" id="tagModal">
   <div class="modal">
-    <h3>✅ Document Ingested Successfully</h3>
-    <div class="modal-meta" id="modal-meta"></div>
-    <div class="modal-actions">
-      <button class="btn btn-blue" onclick="closeModal()">Close</button>
-      <button class="btn btn-green" onclick="switchTab('chat', document.querySelector('.tab')); closeModal()">Go to Chat</button>
+    <div class="modal-head">
+      <div class="modal-title"><span data-icon="tag" class="icon"></span> Tag Manager</div>
+      <button class="modal-close" id="tagModalClose" title="Close"><span data-icon="x" class="icon"></span></button>
+    </div>
+    <div class="modal-body" id="tagModalBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="tagImportBtn"><span data-icon="upload" class="icon"></span> Import from documents</button>
+      <button class="btn btn-primary" id="tagModalDone">Done</button>
     </div>
   </div>
 </div>
 
-<!-- Duplicate Warning Modal (FR-12) -->
-<div class="modal-overlay" id="dup-modal">
+<!-- Upload modal -->
+<div class="modal-overlay hidden" id="uploadModal">
   <div class="modal">
-    <h3>⚠️ Duplicate Document Detected</h3>
-    <p id="dup-message" style="margin-bottom:16px;color:#666;font-size:14px;"></p>
-    <div class="modal-actions">
-      <button class="btn btn-gray" onclick="closeDupModal()">Cancel</button>
-      <button class="btn btn-red" onclick="forceUpload()">Replace Anyway</button>
+    <div class="modal-head">
+      <div class="modal-title"><span data-icon="upload" class="icon"></span> Upload Documents</div>
+      <button class="modal-close" id="uploadModalClose" title="Close"><span data-icon="x" class="icon"></span></button>
+    </div>
+    <div class="modal-body" id="uploadModalBody"></div>
+    <div class="modal-foot">
+      <span class="up-summary" id="upSummary"></span>
+      <div class="up-footbtns">
+        <button class="btn btn-ghost" id="uploadCloseBtn">Close</button>
+        <button class="btn btn-primary" id="uploadStartBtn">Upload</button>
+      </div>
     </div>
   </div>
 </div>
-
-<div class="content">
-
-  <!-- ══ SCREEN 1: CHAT ══ -->
-  <div id="panel-chat" class="panel active">
-    <br>
-    <!-- Conversation history display -->
-    <div class="chat-history" id="chat-history">
-      <button class="clear-btn" onclick="clearConversation()">✕ Clear conversation</button>
-      <div id="history-turns"></div>
-    </div>
-
-    <label><strong>Ask a question about DFFRNT documents:</strong></label>
-    <br><br>
-    <textarea id="q" rows="3"
-      placeholder="Example: Who has experience in healthcare consulting?
-Example: What services does DFFRNT offer?
-(Follow-up questions remember previous context)"></textarea>
-    <br>
-    <button class="btn btn-blue" id="ask-btn" onclick="sendQuestion()">
-      Ask Question
-    </button>
-    <p class="hint">Tip: Ctrl+Enter to submit · Follow-up questions use conversation context</p>
-    <p class="loading" id="chat-loading">⏳ Thinking... (may take a few minutes on CPU)</p>
-    <div class="error-msg" id="chat-error"></div>
-  </div>
-
-  <!-- ══ SCREEN 2: UPLOAD ══ -->
-  <div id="panel-upload" class="panel">
-    <br>
-    <div class="section-title">Admin Document Upload</div>
-    <div class="section-sub">
-      Upload DFFRNT internal documents. Assign metadata tags before uploading
-      to enable reliable retrieval and browsing.
-    </div>
-
-    <!-- FR-10: Metadata form -->
-    <div class="meta-form">
-      <h3>📋 Document Metadata</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Uploaded By</label>
-          <input type="text" id="meta-uploader" value="admin"
-                 placeholder="Your name or username">
-        </div>
-        <div class="form-group">
-          <label>Tags (comma separated)</label>
-          <input type="text" id="meta-tags"
-                 placeholder="e.g. HR, Finance, RFP, 2024">
-        </div>
-      </div>
-    </div>
-
-    <!-- Upload drop zone -->
-    <div class="upload-box" id="upload-zone"
-         onclick="document.getElementById('fileInput').click()"
-         ondragover="dragOver(event)"
-         ondragleave="dragLeave(event)"
-         ondrop="handleDrop(event)">
-      <input type="file" id="fileInput" multiple
-             accept=".pdf,.docx,.pptx,.txt,.csv,.xlsx"
-             onchange="filesSelected(event)">
-      <div class="upload-icon">📂</div>
-      <strong>Click to select files or drag and drop here</strong>
-      <p>Supported: PDF, DOCX, PPTX, TXT, CSV, XLSX</p>
-      <p style="margin-top:4px">Multiple files can be selected at once</p>
-    </div>
-
-    <!-- File queue -->
-    <div class="file-queue" id="file-queue">
-      <h3>Selected Files</h3>
-      <div id="file-list"></div>
-    </div>
-
-    <button class="btn btn-green" id="upload-btn"
-            onclick="uploadAllFiles()" style="display:none">
-      ⬆ Upload and Ingest All Files
-    </button>
-
-    <div class="result-box" id="upload-result"></div>
-  </div>
-
-  <!-- ══ SCREEN 4: DOCUMENT LIBRARY ══ -->
-  <div id="panel-library" class="panel">
-    <br>
-    <div class="doc-card">
-      <h3>
-        📚 Knowledge Base Documents
-        <button class="refresh-btn" onclick="loadDocuments()">↻ Refresh</button>
-      </h3>
-      <div class="stats-row">
-        <div class="stat-box">
-          <div class="stat-num" id="stat-docs">—</div>
-          <div class="stat-label">Documents</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-num" id="stat-chunks">—</div>
-          <div class="stat-label">Total Chunks</div>
-        </div>
-      </div>
-      <div id="doc-list">
-        <p class="no-docs">Click Refresh to load documents</p>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<script>
-// Same-origin: the API serves this page, so relative paths keep it portable.
-const API = "";
-
-// ── Conversation state (FR-03) ────────────────────────────────────
-let conversationHistory = [];
-let pendingFile         = null;  // For duplicate confirmation
-
-// ── Tab switching ─────────────────────────────────────────────────
-function switchTab(name, el) {
-  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-  if (el) el.classList.add("active");
-  document.getElementById("panel-" + name).classList.add("active");
-  if (name === "library") loadDocuments();
-}
-
-// ── CHAT (FR-01, FR-02, FR-03, FR-05) ────────────────────────────
-async function sendQuestion() {
-  const q      = document.getElementById("q").value.trim();
-  const btn    = document.getElementById("ask-btn");
-  const loader = document.getElementById("chat-loading");
-  const errDiv = document.getElementById("chat-error");
-
-  if (!q) { alert("Please type a question."); return; }
-
-  btn.disabled      = true;
-  loader.style.display = "block";
-  errDiv.style.display = "none";
-
-  try {
-    const res = await fetch(API + "/api/query", {
-      method:  "POST",
-      headers: {"Content-Type": "application/json"},
-      body:    JSON.stringify({
-        question:             q,
-        conversation_history: conversationHistory,  // FR-03
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || "Server error " + res.status);
-    }
-
-    const data = await res.json();
-
-    // Add to conversation history (FR-03)
-    conversationHistory.push({role: "user",      content: q});
-    conversationHistory.push({role: "assistant",  content: data.answer});
-
-    // Render conversation
-    renderConversation();
-
-    // Clear input
-    document.getElementById("q").value = "";
-
-  } catch(e) {
-    errDiv.textContent   = "Error: " + e.message;
-    errDiv.style.display = "block";
-  }
-
-  btn.disabled         = false;
-  loader.style.display = "none";
-}
-
-function renderConversation() {
-  const histDiv = document.getElementById("chat-history");
-  const turns   = document.getElementById("history-turns");
-
-  histDiv.style.display = "block";
-
-  // Build from conversation history pairs
-  let html = "";
-  for (let i = 0; i < conversationHistory.length; i += 2) {
-    const q = conversationHistory[i];
-    const a = conversationHistory[i + 1];
-    if (!q || !a) continue;
-    html += `
-      <div class="chat-turn">
-        <div class="chat-q">💬 ${escapeHtml(q.content)}</div>
-        <div class="chat-a">${escapeHtml(a.content)}</div>
-      </div>`;
-  }
-  turns.innerHTML = html;
-
-  // Scroll to bottom
-  histDiv.scrollTop = histDiv.scrollHeight;
-}
-
-function clearConversation() {
-  conversationHistory = [];
-  document.getElementById("history-turns").innerHTML = "";
-  document.getElementById("chat-history").style.display = "none";
-}
-
-function escapeHtml(text) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\n/g, "<br>");
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("q").addEventListener("keydown",
-    e => { if (e.key === "Enter" && e.ctrlKey) sendQuestion(); });
-});
-
-// ── UPLOAD (FR-09, FR-10, FR-11, FR-12, FR-13, FR-14) ────────────
-let selectedFiles = [];
-
-function dragOver(e) {
-  e.preventDefault();
-  document.getElementById("upload-zone").classList.add("dragover");
-}
-function dragLeave(e) {
-  document.getElementById("upload-zone").classList.remove("dragover");
-}
-function handleDrop(e) {
-  e.preventDefault();
-  dragLeave(e);
-  selectedFiles = Array.from(e.dataTransfer.files);
-  renderQueue();
-}
-function filesSelected(e) {
-  selectedFiles = Array.from(e.target.files);
-  renderQueue();
-}
-
-function getIcon(f) {
-  const icons = {pdf:"📕",docx:"📘",pptx:"📙",txt:"📄",csv:"📊",xlsx:"📗"};
-  return icons[f.split(".").pop().toLowerCase()] || "📄";
-}
-function formatSize(b) {
-  if (b < 1024) return b + " B";
-  if (b < 1048576) return (b/1024).toFixed(1) + " KB";
-  return (b/1048576).toFixed(1) + " MB";
-}
-
-function renderQueue() {
-  if (!selectedFiles.length) return;
-  document.getElementById("file-queue").style.display = "block";
-  document.getElementById("upload-btn").style.display = "inline-block";
-  document.getElementById("file-list").innerHTML =
-    selectedFiles.map((f, i) => `
-      <div class="file-item" id="fi-${i}">
-        <span class="file-name">${getIcon(f.name)} ${f.name}</span>
-        <span class="file-size">${formatSize(f.size)}</span>
-        <span class="file-status status-pending" id="fs-${i}">Pending</span>
-      </div>`).join("");
-}
-
-async function uploadAllFiles() {
-  const btn = document.getElementById("upload-btn");
-  const res = document.getElementById("upload-result");
-  const uploader = document.getElementById("meta-uploader").value || "admin";
-  const tags     = document.getElementById("meta-tags").value || "";
-
-  btn.disabled         = true;
-  res.style.display    = "none";
-
-  let ok = 0, fail = 0, dup = 0;
-
-  for (let i = 0; i < selectedFiles.length; i++) {
-    const f  = selectedFiles[i];
-    const st = document.getElementById("fs-" + i);
-    const fi = document.getElementById("fi-" + i);
-
-    st.textContent = "Uploading...";
-    st.className   = "file-status status-uploading";
-    fi.style.background = "#f0f7ff";
-
-    try {
-      const fd = new FormData();
-      fd.append("file",        f);
-      fd.append("uploaded_by", uploader);
-      fd.append("tags",        tags);
-
-      const r = await fetch(API + "/api/upload", {method:"POST", body:fd});
-      const d = await r.json();
-
-      if (d.duplicate) {
-        // FR-12: Show duplicate warning
-        st.textContent      = "⚠️ Duplicate";
-        st.className        = "file-status status-dup";
-        fi.style.background = "#FFF8E1";
-        showDupModal(d.warning, f, uploader, tags, i);
-        dup++;
-      } else if (r.ok && d.success) {
-        st.textContent      = `✅ Done (${d.chunks} chunks)`;
-        st.className        = "file-status status-done";
-        fi.style.background = "#f0fff0";
-        ok++;
-        // FR-13: Show confirmation dialog
-        showConfirmModal(d);
-      } else {
-        // FR-14: Show clear error
-        st.textContent      = "❌ " + (d.detail || "Failed");
-        st.className        = "file-status status-error";
-        fi.style.background = "#fff0f0";
-        fail++;
-      }
-    } catch(e) {
-      st.textContent      = "❌ Network error";
-      st.className        = "file-status status-error";
-      fi.style.background = "#fff0f0";
-      fail++;
-    }
-  }
-
-  // Summary
-  if (dup === 0 && fail === 0) {
-    res.className   = "result-box result-success";
-    res.innerHTML   = `✅ <strong>All ${ok} file(s) uploaded successfully!</strong>`;
-  } else if (fail > 0) {
-    res.className   = "result-box result-error";
-    res.innerHTML   = `⚠️ <strong>${ok} succeeded, ${fail} failed, ${dup} duplicates.</strong>`;
-  } else {
-    res.className   = "result-box result-warn";
-    res.innerHTML   = `⚠️ <strong>${dup} duplicate(s) detected.</strong> Check warnings above.`;
-  }
-  res.style.display = "block";
-  btn.disabled      = false;
-
-  document.getElementById("fileInput").value = "";
-  selectedFiles = [];
-}
-
-// FR-13: Confirmation modal
-function showConfirmModal(data) {
-  const meta = document.getElementById("modal-meta");
-  const tags = data.tags && data.tags.length
-    ? data.tags.map(t => `<span class="tag">${t}</span>`).join(" ")
-    : "<span style='color:#888'>None</span>";
-  meta.innerHTML = `
-    <div class="modal-row">
-      <span class="modal-label">Filename</span>
-      <span class="modal-value">${data.filename}</span>
-    </div>
-    <div class="modal-row">
-      <span class="modal-label">File Type</span>
-      <span class="modal-value">${data.file_type}</span>
-    </div>
-    <div class="modal-row">
-      <span class="modal-label">File Size</span>
-      <span class="modal-value">${data.file_size}</span>
-    </div>
-    <div class="modal-row">
-      <span class="modal-label">Upload Date</span>
-      <span class="modal-value">${data.upload_date.replace("T"," ").substring(0,16)} UTC</span>
-    </div>
-    <div class="modal-row">
-      <span class="modal-label">Uploaded By</span>
-      <span class="modal-value">${data.uploaded_by}</span>
-    </div>
-    <div class="modal-row">
-      <span class="modal-label">Tags</span>
-      <span class="modal-value">${tags}</span>
-    </div>
-    <div class="modal-row">
-      <span class="modal-label">Chunks Created</span>
-      <span class="modal-value">${data.chunks}</span>
-    </div>`;
-  document.getElementById("confirm-modal").classList.add("active");
-}
-function closeModal() {
-  document.getElementById("confirm-modal").classList.remove("active");
-}
-
-// FR-12: Duplicate modal
-function showDupModal(message, file, uploader, tags, index) {
-  document.getElementById("dup-message").textContent = message;
-  pendingFile = {file, uploader, tags, index};
-  document.getElementById("dup-modal").classList.add("active");
-}
-function closeDupModal() {
-  document.getElementById("dup-modal").classList.remove("active");
-  pendingFile = null;
-}
-async function forceUpload() {
-  closeDupModal();
-  if (!pendingFile) return;
-  const {file, uploader, tags, index} = pendingFile;
-  const st = document.getElementById("fs-" + index);
-  const fi = document.getElementById("fi-" + index);
-  st.textContent = "Re-uploading...";
-  st.className   = "file-status status-uploading";
-
-  // Delete existing then re-upload
-  await fetch(`${API}/api/documents/${encodeURIComponent(file.name)}`,
-              {method: "DELETE"});
-
-  const fd = new FormData();
-  fd.append("file",        file);
-  fd.append("uploaded_by", uploader);
-  fd.append("tags",        tags);
-  const r = await fetch(API + "/api/upload", {method:"POST", body:fd});
-  const d = await r.json();
-
-  if (r.ok && d.success) {
-    st.textContent      = `✅ Replaced (${d.chunks} chunks)`;
-    st.className        = "file-status status-done";
-    fi.style.background = "#f0fff0";
-    showConfirmModal(d);
-  } else {
-    st.textContent      = "❌ " + (d.detail || "Failed");
-    st.className        = "file-status status-error";
-    fi.style.background = "#fff0f0";
-  }
-}
-
-// ── DOCUMENT LIBRARY (FR-06) ──────────────────────────────────────
-async function loadDocuments() {
-  const dl = document.getElementById("doc-list");
-  dl.innerHTML = '<p class="no-docs">Loading...</p>';
-
-  try {
-    const r = await fetch(API + "/api/documents");
-    const d = await r.json();
-
-    document.getElementById("stat-docs").textContent   = d.document_count;
-    document.getElementById("stat-chunks").textContent = d.total_chunks;
-
-    if (!d.documents || d.documents.length === 0) {
-      dl.innerHTML =
-        '<p class="no-docs">No documents ingested yet.<br>' +
-        'Upload documents using the Upload tab.</p>';
-      return;
-    }
-
-    dl.innerHTML = `
-      <table class="doc-table">
-        <thead>
-          <tr>
-            <th>File</th>
-            <th>Type</th>
-            <th>Size</th>
-            <th>Upload Date</th>
-            <th>Chunks</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${d.documents.map(doc => `
-            <tr>
-              <td>${getIcon(doc.filename)} ${doc.filename}</td>
-              <td>${doc.file_type}</td>
-              <td>${doc.file_size}</td>
-              <td>${doc.upload_date}</td>
-              <td>${doc.chunk_count}</td>
-              <td>
-                <button class="del-btn"
-                  onclick="deleteDocument('${doc.filename}')">
-                  🗑 Delete
-                </button>
-              </td>
-            </tr>`).join("")}
-        </tbody>
-      </table>`;
-  } catch(e) {
-    dl.innerHTML =
-      '<p class="no-docs" style="color:#c0392b">' +
-      'Could not load documents. Check server connection.</p>';
-  }
-}
-
-async function deleteDocument(filename) {
-  if (!confirm(`Delete '${filename}' from the knowledge base?\nThis cannot be undone.`))
-    return;
-  try {
-    const r = await fetch(
-      `${API}/api/documents/${encodeURIComponent(filename)}`,
-      {method: "DELETE"}
-    );
-    if (r.ok) {
-      loadDocuments();
-    } else {
-      const d = await r.json();
-      alert("Delete failed: " + (d.detail || "Unknown error"));
-    }
-  } catch(e) {
-    alert("Network error during delete: " + e.message);
-  }
-}
-</script>
 </body>
 </html>
