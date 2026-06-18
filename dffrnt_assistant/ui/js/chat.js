@@ -2,6 +2,7 @@
 import { $, esc, nowTime } from './util.js';
 import { svg } from './icons.js';
 import { state, SUGGESTIONS } from './state.js';
+import { renderMarkdown } from './markdown.js';
 import { queryStream, createConversation, updateConversation, getConversation } from './api.js';
 import { loadConversations, renderSidebar } from './sidebar.js';
 
@@ -10,14 +11,28 @@ const mkId = () => 'm' + (++nextId);  // stable per-message id for actions/targe
 let abortController = null;           // in-flight stream, so the Stop button can cancel it
 
 // Turn "[1]" markers into clickable citation chips mapped to sources by index.
-function renderContent(text, sources) {
-  return esc(text).replace(/\[(\d+)\]/g, (m, n) => {
+// Operates on already-escaped text so it can be reused as the Markdown inline
+// hook (it then only ever sees non-code text, leaving code spans untouched).
+function citeChips(sources) {
+  return (escaped) => escaped.replace(/\[(\d+)\]/g, (m, n) => {
     const i = parseInt(n, 10);
     if (sources && i >= 1 && i <= sources.length) {
       return `<span class="cite-chip" title="${esc(sources[i - 1].filename)}">${i}</span>`;
     }
     return m;
   });
+}
+
+// User turns: plain escaped text + citation chips (no Markdown).
+function renderContent(text, sources) {
+  return citeChips(sources)(esc(text));
+}
+
+// Assistant answers: render Markdown to safe HTML, with citation chips applied
+// to the plain-text runs. .md scopes the styling and resets the bubble's
+// pre-wrap (see styles/markdown.css).
+function renderAnswer(text, sources) {
+  return `<div class="md">${renderMarkdown(text, { inline: citeChips(sources) })}</div>`;
 }
 
 // Sources panel — collapses to the first 2 with a "+N more / Show less" toggle.
@@ -81,9 +96,9 @@ function bubbleInner(m) {
   } else if (!state.showThinking && m.streaming && !m.content) {
     html += '<span class="thinking-label">Thinking…</span>';
   }
-  // Answer text (with citation chips) + a caret while it streams.
+  // Answer text (Markdown + citation chips) + a caret while it streams.
   if (m.content) {
-    html += renderContent(m.content, m.sources);
+    html += renderAnswer(m.content, m.sources);
     if (m.streaming) html += '<span class="stream-cursor"></span>';
   }
   if (!m.streaming) html += sourcesHtml(m);

@@ -13,10 +13,19 @@ class Retriever:
         self.settings = settings
 
     def retrieve(self, question: str, tag_filter: List[str] = None) -> List[Dict]:
-        """Return the top-k hits as ``[{"payload": ..., "score": ...}, ...]``,
-        optionally scoped to documents carrying any of ``tag_filter``."""
+        """Return up to top-k hits as ``[{"payload": ..., "score": ...}, ...]``,
+        optionally scoped to documents carrying any of ``tag_filter``.
+
+        Hits scoring more than ``score_margin`` below the best hit are dropped, so
+        clearly-weaker (noisy) chunks never reach the prompt. The top hit is
+        always kept; with ``score_margin`` 0 the cut is disabled."""
         query_vector = self.embedder.embed_query(question)
-        return self.store.search(query_vector, self.settings.top_k, tag_filter)
+        hits = self.store.search(query_vector, self.settings.top_k, tag_filter)
+        margin = getattr(self.settings, "score_margin", 0) or 0
+        if hits and margin > 0:
+            cutoff = hits[0]["score"] - margin
+            hits = [h for h in hits if h["score"] >= cutoff]
+        return hits
 
     @staticmethod
     def build_context(hits: List[Dict]) -> str:

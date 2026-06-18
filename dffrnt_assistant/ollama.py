@@ -18,12 +18,18 @@ class OllamaClient:
         embed_model: str,
         temperature: float = 0.1,
         timeout: int = 600,
+        query_prefix: str = "",
+        doc_prefix: str = "",
     ):
         self.base_url = base_url.rstrip("/")
         self.llm_model = llm_model
         self.embed_model = embed_model
         self.temperature = temperature
         self.timeout = timeout
+        # Embedding task prefixes (e.g. nomic's "search_query: "/"search_document: ").
+        # embed_texts stays raw; the query/document helpers apply them.
+        self.query_prefix = query_prefix
+        self.doc_prefix = doc_prefix
         # Newer Ollama exposes a batch /api/embed; fall back to /api/embeddings.
         self._use_batch_embed = True
 
@@ -66,8 +72,13 @@ class OllamaClient:
             for text in texts
         ]
 
+    def embed_documents(self, texts: List[str], batch_size: int = 64) -> List[List[float]]:
+        """Embed documents for storage, with the document task prefix applied."""
+        return self.embed_texts([self.doc_prefix + t for t in texts], batch_size)
+
     def embed_query(self, text: str) -> List[float]:
-        return self.embed_texts([text])[0]
+        """Embed a search query, with the query task prefix applied."""
+        return self.embed_texts([self.query_prefix + text])[0]
 
     # -- Generation --------------------------------------------------------
     def generate(self, prompt: str) -> str:

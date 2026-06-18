@@ -85,8 +85,11 @@
   padding: 9px 4px 9px 12px; text-align: left; color: inherit;
 }
 .chat-open .icon { font-size: 14px; margin-top: 2px; flex-shrink: 0; }
-.chat-item .ct { min-width: 0; flex: 1; }
-.chat-item .ct .t { font-size: 13px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-item .ct { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+/* The title truncates against the column's available width (which tracks the
+   sidebar/viewport), so a long title is clipped with an ellipsis rather than
+   overflowing. overflow:hidden also lets the flex item shrink below its text. */
+.chat-item .ct .t { font-size: 13px; line-height: 1.3; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-item .ct .s { font-size: 11px; opacity: 0.5; margin-top: 3px; }
 .chat-more {
   flex-shrink: 0; padding: 6px; margin-right: 4px; border-radius: 6px; color: inherit;

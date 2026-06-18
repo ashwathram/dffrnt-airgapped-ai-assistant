@@ -83,3 +83,28 @@
 {"timestamp": "2026-06-18T17:19:09.791700+00:00", "event_type": "UPLOAD", "filename": "zz_sweep.txt", "file_type": "TXT", "file_size": 6, "upload_date": "2026-06-18T17:19:09.791684+00:00", "uploaded_by": "admin", "tags": []}
 {"timestamp": "2026-06-18T17:19:09.861072+00:00", "event_type": "INGESTION", "file": "zz_sweep.txt", "chunks": 1}
 {"timestamp": "2026-06-18T17:19:10.108219+00:00", "event_type": "DELETION", "filename": "zz_sweep.txt"}
+{"timestamp": "2026-06-18T20:35:21.678044+00:00", "event_type": "QUERY", "question_hash": "1136059d7a6fac55", "question_length": 70, "sources_count": 5, "answer_length": 6355, "history_turns": 0, "tag_filter": [], "streamed": true}
+{"timestamp": "2026-06-18T20:36:54.492975+00:00", "event_type": "TAG_UPDATE", "filename": "dmava_mckinseyco.pdf", "tags": []}
+{"timestamp": "2026-06-18T20:36:57.604229+00:00", "event_type": "TAG_UPDATE", "filename": "dmava_mckinseyco.pdf", "tags": ["McKinsey", "Resume"]}
+{"timestamp": "2026-06-18T20:37:00.779892+00:00", "event_type": "TAG_UPDATE", "filename": "Resume-Sample-1-Software-Engineer.pdf", "tags": ["Resume"]}
+{"timestamp": "2026-06-18T21:18:46.484593+00:00", "event_type": "UPLOAD", "filename": "resume_aiko_tanaka.txt", "file_type": "TXT", "file_size": 672, "upload_date": "2026-06-18T21:18:46.484576+00:00", "uploaded_by": "rag-eval", "tags": ["EvalResume"]}
+{"timestamp": "2026-06-18T21:18:47.644030+00:00", "event_type": "INGESTION", "file": "resume_aiko_tanaka.txt", "chunks": 7}
+{"timestamp": "2026-06-18T21:18:47.653725+00:00", "event_type": "UPLOAD", "filename": "resume_diego_fernandez.docx", "file_type": "DOCX", "file_size": 36773, "upload_date": "2026-06-18T21:18:47.653710+00:00", "uploaded_by": "rag-eval", "tags": ["EvalResume"]}
+{"timestamp": "2026-06-18T21:18:47.902078+00:00", "event_type": "INGESTION", "file": "resume_diego_fernandez.docx", "chunks": 6}
+{"timestamp": "2026-06-18T21:18:47.912001+00:00", "event_type": "UPLOAD", "filename": "resume_marcus_bellingham.docx", "file_type": "DOCX", "file_size": 36786, "upload_date": "2026-06-18T21:18:47.911987+00:00", "uploaded_by": "rag-eval", "tags": ["EvalResume"]}
+{"timestamp": "2026-06-18T21:18:48.070364+00:00", "event_type": "INGESTION", "file": "resume_marcus_bellingham.docx", "chunks": 6}
+{"timestamp": "2026-06-18T21:18:48.079502+00:00", "event_type": "UPLOAD", "filename": "resume_priya_raman.pdf", "file_type": "PDF", "file_size": 3932, "upload_date": "2026-06-18T21:18:48.079489+00:00", "uploaded_by": "rag-eval", "tags": ["EvalResume"]}
+{"timestamp": "2026-06-18T21:18:48.193561+00:00", "event_type": "INGESTION", "file": "resume_priya_raman.pdf", "chunks": 2}
+{"timestamp": "2026-06-18T21:18:48.202654+00:00", "event_type": "UPLOAD", "filename": "resume_sarah_oconnell.pdf", "file_type": "PDF", "file_size": 3825, "upload_date": "2026-06-18T21:18:48.202642+00:00", "uploaded_by": "rag-eval", "tags": ["EvalResume"]}
+{"timestamp": "2026-06-18T21:18:48.266820+00:00", "event_type": "INGESTION", "file": "resume_sarah_oconnell.pdf", "chunks": 2}
+{"timestamp": "2026-06-18T21:22:04.226262+00:00", "event_type": "QUERY", "question_hash": "dc9b66bb778ca0b6", "question_length": 36, "sources_count": 5, "history_turns": 0, "tag_filter": []}
+{"timestamp": "2026-06-18T21:22:08.766986+00:00", "event_type": "QUERY", "question_hash": "a6374815a573a21f", "question_length": 64, "sources_count": 5, "history_turns": 0, "tag_filter": []}
+{"timestamp": "2026-06-18T21:22:13.343445+00:00", "event_type": "QUERY", "question_hash": "6bdd370d61e5a80e", "question_length": 62, "sources_count": 5, "history_turns": 0, "tag_filter": []}
+{"timestamp": "2026-06-18T21:22:25.437726+00:00", "event_type": "QUERY", "question_hash": "6bdd370d61e5a80e", "question_length": 62, "sources_count": 5, "history_turns": 0, "tag_filter": ["EvalResume"]}
+{"timestamp": "2026-06-18T21:22:29.037946+00:00", "event_type": "QUERY", "question_hash": "1254696e4591b556", "question_length": 53, "sources_count": 5, "history_turns": 0, "tag_filter": []}
+{"timestamp": "2026-06-18T21:38:51.354969+00:00", "event_type": "QUERY", "question_hash": "dc9b66bb778ca0b6", "question_length": 36, "sources_count": 1, "history_turns": 0, "tag_filter": []}
+{"timestamp": "2026-06-18T21:40:00.259054+00:00", "event_type": "DELETION", "filename": "resume_priya_raman.pdf"}
+{"timestamp": "2026-06-18T21:40:00.302439+00:00", "event_type": "DELETION", "filename": "resume_marcus_bellingham.docx"}
+{"timestamp": "2026-06-18T21:40:00.340168+00:00", "event_type": "DELETION", "filename": "resume_aiko_tanaka.txt"}
+{"timestamp": "2026-06-18T21:40:00.377124+00:00", "event_type": "DELETION", "filename": "resume_diego_fernandez.docx"}
+{"timestamp": "2026-06-18T21:40:00.413644+00:00", "event_type": "DELETION", "filename": "resume_sarah_oconnell.pdf"}

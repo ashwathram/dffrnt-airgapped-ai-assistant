@@ -100,6 +100,10 @@ def read_docx(path: Path) -> Dict:
             flush()
             heading = text
             title = title or text
+            # Keep the heading/title text in its section so it is embedded too —
+            # otherwise a name or section label styled as a heading (common in
+            # Word resumes) would be lost from retrieval.
+            buffer.append(text)
         else:
             buffer.append(text)
     flush()

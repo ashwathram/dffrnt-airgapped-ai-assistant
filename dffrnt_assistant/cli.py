@@ -41,6 +41,8 @@ def main() -> int:
         settings.embed_model,
         settings.llm_temperature,
         settings.llm_timeout,
+        settings.embed_query_prefix,
+        settings.embed_document_prefix,
     )
 
     metadata_map = load_metadata_map(Path(args.metadata_file)) if args.metadata_file else None

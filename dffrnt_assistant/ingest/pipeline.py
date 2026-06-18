@@ -60,7 +60,7 @@ def ingest_file(path, store, embedder, settings, meta: Optional[dict] = None) ->
     if not chunks:
         return 0
 
-    vectors = embedder.embed_texts([chunk["text"] for chunk in chunks])
+    vectors = embedder.embed_documents([chunk["text"] for chunk in chunks])
     points = [
         {
             "id": str(uuid.uuid5(uuid.NAMESPACE_URL, chunk["chunk_id"])),

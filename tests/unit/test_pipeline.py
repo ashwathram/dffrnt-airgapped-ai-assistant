@@ -8,6 +8,9 @@ class FakeEmbedder:
     def embed_texts(self, texts):
         return [[0.0] * 8 for _ in texts]
 
+    def embed_documents(self, texts):
+        return self.embed_texts(texts)
+
 
 class FakeStore:
     def __init__(self):

@@ -35,6 +35,11 @@ class Settings:
     vector_size: int = 768             # must match `embed_model` output dim
     llm_temperature: float = 0.1
     llm_timeout: int = 600             # seconds; generation can be slow
+    # nomic-embed-text was trained with task prefixes; supplying them tightens the
+    # similarity spread and lifts relevant scores. Blank both for models that
+    # don't use prefixes. Changing these requires re-ingesting documents.
+    embed_query_prefix: str = "search_query: "
+    embed_document_prefix: str = "search_document: "
 
     # -- Qdrant vector store ----------------------------------------------
     qdrant_url: str = "http://localhost:6333"
@@ -42,7 +47,11 @@ class Settings:
     tags_collection_name: str = "dffrnt_tags"  # tag taxonomy (managed, not vectors)
     conversations_collection_name: str = "dffrnt_conversations"  # saved chats
     distance: str = "cosine"           # cosine | dot | euclid
-    top_k: int = 5
+    top_k: int = 8                     # candidates fetched per query
+    # Relative cut: drop hits scoring more than this far below the best hit, so
+    # weak/noisy chunks never reach the prompt. A relative margin works where a
+    # fixed floor can't (cosine scores here cluster in a narrow band). 0 disables.
+    score_margin: float = 0.12
 
     # -- Chunking ----------------------------------------------------------
     chunk_strategy: str = "recursive"  # fixed | sentence | paragraph | recursive
