@@ -221,10 +221,13 @@ class AssistantService:
         tagsets: dict = {}  # filename -> set of tag strings (chunks share tags)
         mtimes: dict = {}   # filename -> file mtime, for newest-first ordering
         text_bytes = 0      # total chunk text held in the vector store
+        doc_text: dict = {} # filename -> chunk text bytes for that document
         for payload in self.store.all_payloads():
             payload = payload or {}
-            text_bytes += len((payload.get("text") or "").encode("utf-8"))
+            chunk_text_bytes = len((payload.get("text") or "").encode("utf-8"))
+            text_bytes += chunk_text_bytes
             filename = payload.get("filename", "unknown")
+            doc_text[filename] = doc_text.get(filename, 0) + chunk_text_bytes
             entry = documents.setdefault(
                 filename,
                 {
@@ -248,6 +251,12 @@ class AssistantService:
         repo_bytes = 0      # total size of the stored source files on disk
         for filename, info in documents.items():
             info["tags"] = sorted(tagsets.get(filename, set()))
+            # Bytes this document occupies in the vector store: its chunk text
+            # plus its embedding vectors (chunk_count × dims × 4 bytes, float32).
+            info["stored_bytes"] = (
+                doc_text.get(filename, 0)
+                + info["chunk_count"] * self.store.vector_size * 4
+            )
             path = self.data_dir / filename
             if path.exists():
                 stat = path.stat()

@@ -59,8 +59,6 @@ export async function loadDocuments() {
   docs = docRes.data.documents || [];
   state.documents = docs; // shared so the chat scope bar can count docs-in-scope
   if (tagRes.ok) { state.tagTypes = tagRes.data.tag_types || []; state.tags = tagRes.data.tags || []; }
-  $('statDocs').textContent = docRes.data.document_count;
-  $('statChunks').textContent = docRes.data.total_chunks;
   const n = docRes.data.document_count;
   $('libSubtitle').textContent =
     `${n} document${n === 1 ? '' : 's'} · Sorted by upload date, most recent first`;
@@ -80,6 +78,16 @@ function fmtBytes(n) {
   let v = n / 1024, i = 0;
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
   return v.toFixed(v >= 100 || i === 0 ? 0 : 1) + ' ' + units[i];
+}
+
+// Binary (KiB/MiB) size a document occupies in the vector DB, e.g. "1.2KiB (stored)".
+function fmtStored(n) {
+  if (n == null) return '';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let v = n, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+  const num = i === 0 ? v : v.toFixed(v >= 100 ? 0 : 1);
+  return `${num}${units[i]} (stored)`;
 }
 
 // Usage = vectors + chunk text + source files; cap = usage + free disk space.
@@ -105,12 +113,13 @@ function renderStorage(s) {
 function renderFilter() {
   const bar = $('docFilter');
   if (!state.tags.length) { bar.innerHTML = ''; return; }
+  // Neutral grey, unlabeled chips (the concept reserves type colours for the
+  // document-row tags; the filter is a plain pick-list).
+  const GREY = '#5a6a78';
   bar.innerHTML = `
-    <span class="df-label">${svg('tag')} Filter</span>
     ${state.tags.map((t) => {
       const on = activeFilter.includes(t.name);
-      const c = colorFor(t.name);
-      const style = on ? `background:${c};color:#fff;border-color:${c}` : `color:${c};border-color:${c}55`;
+      const style = on ? `background:${GREY};color:#fff;border-color:${GREY}` : `color:${GREY};border-color:${GREY}55`;
       return `<button class="df-chip${on ? ' on' : ''}" data-filter="${esc(t.name)}" style="${style}">${esc(t.name)}</button>`;
     }).join('')}
     ${activeFilter.length ? '<button class="df-clear" data-filter-clear>Clear</button>' : ''}`;
@@ -157,11 +166,13 @@ function editorHtml(d) {
     </div>`;
 }
 
-// Split the backend's "2026-06-23 14:30 UTC" into a date line + a time line.
+// Friendly upload date, e.g. "Jun 18, 2026", from the backend's "2026-06-18 …".
 function fmtUploaded(s) {
-  if (!s || s === 'Unknown') return { date: 'Unknown', time: '' };
-  const parts = s.split(' ');
-  return { date: parts[0], time: parts.slice(1).join(' ') };
+  if (!s || s === 'Unknown') return 'Unknown';
+  const datePart = s.split(' ')[0];
+  const d = new Date(datePart + 'T00:00:00');
+  return isNaN(d) ? datePart
+    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // Description cell: shows the text (or a muted placeholder) with a hover pencil,
@@ -213,10 +224,9 @@ function docRowHtml(d) {
       <td class="c-size">${esc(d.file_size)}</td>
       <td class="c-tags">${tagsCell(d)}</td>
       <td class="c-up">
-        <div class="up-date">${esc(up.date)}</div>
-        ${up.time ? `<div class="up-time">${esc(up.time)}</div>` : ''}
+        <div class="up-date">${esc(up)}</div>
         ${d.uploaded_by ? `<div class="up-by">${esc(d.uploaded_by)}</div>` : ''}
-        <div class="up-chunks">${d.chunk_count} chunk${d.chunk_count === 1 ? '' : 's'}</div>
+        <div class="up-stored">${esc(fmtStored(d.stored_bytes))}</div>
       </td>
       <td class="c-actions">
         <button class="doc-more" data-more="${esc(d.filename)}" title="More">${svg('more')}</button>
@@ -253,7 +263,7 @@ function renderList() {
         <tr>
           <th class="c-doc">DOCUMENT</th>
           <th class="c-type">TYPE</th>
-          <th class="c-size">SIZE</th>
+          <th class="c-size">RAW FILE SIZE</th>
           <th class="c-tags">TAGS</th>
           <th class="c-up">UPLOADED</th>
           <th class="c-actions"></th>
