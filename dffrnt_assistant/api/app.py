@@ -99,6 +99,10 @@ class DocTagsRequest(BaseModel):
     tags: List[str] = []
 
 
+class DocDescriptionRequest(BaseModel):
+    description: str = ""
+
+
 class ConversationCreate(BaseModel):
     title: str = ""
     messages: list = []
@@ -173,9 +177,13 @@ async def upload_file(
     file: UploadFile = File(...),
     uploaded_by: str = Form(default="admin"),
     tags: str = Form(default=""),
+    description: str = Form(default=""),
+    force: bool = Form(default=False),
 ):
     content = await file.read()
-    return _handle(lambda: service.upload(file.filename, content, uploaded_by, tags))
+    return _handle(
+        lambda: service.upload(file.filename, content, uploaded_by, tags, description, force)
+    )
 
 
 @app.get("/api/documents")
@@ -191,6 +199,11 @@ def delete_document(filename: str):
 @app.put("/api/documents/{filename}/tags")
 def update_document_tags(filename: str, body: DocTagsRequest):
     return _handle(lambda: service.update_tags(filename, body.tags))
+
+
+@app.put("/api/documents/{filename}/description")
+def update_document_description(filename: str, body: DocDescriptionRequest):
+    return _handle(lambda: service.update_description(filename, body.description))
 
 
 @app.get("/api/documents/{filename}/raw")

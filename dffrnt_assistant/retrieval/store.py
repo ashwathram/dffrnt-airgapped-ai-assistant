@@ -64,6 +64,23 @@ class VectorStore:
         ).points
         return [{"payload": r.payload, "score": r.score} for r in results]
 
+    def find_by_content_hash(self, content_hash: str) -> str | None:
+        """Filename of an existing document with this content hash, if any.
+
+        Lets the API detect a byte-identical file uploaded under a different
+        name (content duplicate), not just a same-name re-upload."""
+        if not content_hash:
+            return None
+        points, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="content_hash", match=MatchValue(value=content_hash))]
+            ),
+            limit=1,
+            with_payload=True,
+        )
+        return points[0].payload.get("filename") if points else None
+
     def has_document(self, filename: str) -> bool:
         """True if any chunk for this filename is already stored."""
         result = self.client.count(

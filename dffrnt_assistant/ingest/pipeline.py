@@ -14,7 +14,10 @@ from .loaders import load_file
 # Single source of truth for what the system accepts (API validation + CLI scan).
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".txt", ".md"}
 
-_METADATA_KEYS = ("document_type", "department", "client_project", "tags", "tag_paths")
+_METADATA_KEYS = (
+    "document_type", "department", "client_project", "tags", "tag_paths",
+    "description", "uploaded_by", "content_hash",
+)
 
 
 def build_payload(chunk: dict, document: dict, meta: Optional[dict] = None) -> dict:
@@ -35,6 +38,9 @@ def build_payload(chunk: dict, document: dict, meta: Optional[dict] = None) -> d
         "client_project": None,
         "tags": [],
         "tag_paths": [],
+        "description": "",
+        "uploaded_by": "",
+        "content_hash": "",
     }
     if meta:
         for key in _METADATA_KEYS:

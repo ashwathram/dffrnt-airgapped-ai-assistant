@@ -41,12 +41,15 @@ function sourcesHtml(m) {
   if (!sources.length) return '';
   const visible = m.sourcesExpanded ? sources : sources.slice(0, 2);
   // Each source links to the stored file (served from data_dir by the backend).
+  // Title (section heading or filename stem) headlines the card; the filename,
+  // page and score sit in the meta line, with a short excerpt of the cited chunk.
   const row = (s, i) => `
     <a class="source" href="/api/documents/${encodeURIComponent(s.filename)}/raw" target="_blank" rel="noopener" title="Open ${esc(s.filename)}">
       <span class="num">${i + 1}</span>
       <span class="body">
-        <span class="fn">${esc(s.filename)}</span>
-        <span class="meta">${s.page ? 'p. ' + esc(s.page) : ''}${s.score != null ? ' · score ' + s.score : ''}</span>
+        <span class="fn">${esc(s.title || s.filename)}</span>
+        <span class="meta">${esc(s.filename)}${s.page ? ' · p. ' + esc(s.page) : ''}${s.score != null ? ' · score ' + s.score : ''}</span>
+        ${s.excerpt ? `<span class="excerpt">“${esc(s.excerpt)}”</span>` : ''}
       </span>
       ${svg('externalLink')}
     </a>`;
@@ -66,7 +69,7 @@ function emptyStateHtml() {
       <div>
         <div class="orb">${svg('sparkles')}</div>
         <h2>How can I help you today?</h2>
-        <p>Ask questions about your documents. The assistant answers only from your knowledge base.</p>
+        <p>Ask questions about your documents. Use the tag filter above to focus on specific document sets.</p>
       </div>
       <div class="suggestions">
         ${SUGGESTIONS.map((s, i) => `<button class="suggestion" data-suggest="${i}">${svg(s.icon)}${esc(s.text)}</button>`).join('')}
@@ -76,12 +79,24 @@ function emptyStateHtml() {
 
 // Stylized, collapsible reasoning block — shown when "Show thinking" is on.
 // Open while streaming so the user can watch it think; collapsed once done.
+// The model streams free-form text; we render it as a bulleted "reasoning
+// trace" by splitting on newlines, highlighting the line currently streaming.
 function thinkingBlockHtml(m) {
   const openAttr = m.streaming ? ' open' : '';
-  const cursor = (m.streaming && !m.content) ? '<span class="stream-cursor"></span>' : '';
+  const label = m.streaming ? 'Thinking…' : 'Thought process';
+  const cursor = m.streaming ? '<span class="stream-cursor"></span>' : '';
+  const lines = (m.thinking || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const line = (text, current) =>
+    `<div class="trace-line${current ? ' current' : ''}">`
+    + '<span class="trace-dot"></span>'
+    + `<span class="trace-text">${esc(text)}${current && m.streaming ? cursor : ''}</span>`
+    + '</div>';
+  const items = lines.length
+    ? lines.map((l, i) => line(l, i === lines.length - 1)).join('')
+    : line('', true);
   return `<details class="thinking-block"${openAttr}>`
-    + `<summary>${svg('brain')} Thinking</summary>`
-    + `<div class="thinking-body">${esc(m.thinking)}${cursor}</div>`
+    + `<summary>${svg('brain')} ${label}</summary>`
+    + `<div class="thinking-body"><p class="trace-label">Reasoning trace</p>${items}</div>`
     + '</details>';
 }
 
@@ -185,7 +200,9 @@ export async function sendMessage(text) {
   text = (text || '').trim();
   if (!text || state.busy) return;
   state.messages.push({ id: mkId(), role: 'user', content: text, ts: nowTime() });
-  $('topbarTitle').textContent = 'Conversation';
+  // The conversation title is its first user turn (mirrors persist() below), so
+  // the top bar shows that rather than a generic label.
+  $('topbarTitle').textContent = (state.messages.find((m) => m.role === 'user') || {}).content || 'Conversation';
   await runQuery();
 }
 
@@ -220,7 +237,7 @@ export async function loadConversation(id) {
   renderMessages();
   refreshSendBtn();
   renderSidebar();
-  $('topbarTitle').textContent = 'Conversation';
+  $('topbarTitle').textContent = data.title || 'Conversation';
 }
 
 // Answer the most recent user turn. Used for both a fresh send and Regenerate,

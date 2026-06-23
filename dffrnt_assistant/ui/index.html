@@ -40,7 +40,7 @@
   <!-- ── Sidebar ──────────────────────────────────────────────────── -->
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="logo">DF</div>
+      <img class="logo" src="/ui/img/dffrnt_logo.jpeg" alt="DFFRNT logo" />
       <span class="name">DFFRNT AI Assistant</span>
       <button class="toggle" id="sidebarToggle" title="Collapse sidebar"><span data-icon="panelLeft" class="icon"></span></button>
     </div>
@@ -72,26 +72,18 @@
         <div class="chat-scope" id="chatScope"></div>
         <div class="messages scroll-thin" id="messages"></div>
         <div class="composer-wrap">
+          <div class="composer-tools">
+            <button class="think-toggle" id="thinkingToggle" title="Toggle thinking">
+              <span data-icon="brain" class="icon"></span>
+              <span class="tt-text" id="thinkingText">Thinking on</span>
+              <span class="switch" id="thinkingSwitch"><span class="knob"></span></span>
+            </button>
+          </div>
           <div class="composer">
             <textarea id="composer" rows="1" placeholder="Ask anything about your documents…"></textarea>
             <div class="row">
-              <div class="row-left">
-                <button class="settings-btn" id="settingsBtn" title="Settings"><span data-icon="settings" class="icon"></span></button>
-                <div class="settings-menu hidden" id="settingsMenu">
-                  <div class="settings-heading">Settings</div>
-                  <button class="settings-item" id="toggleThinking">
-                    <span class="si-label">
-                      Show thinking
-                      <span class="si-sub">Display the model's reasoning</span>
-                    </span>
-                    <span class="switch" id="thinkingSwitch"><span class="knob"></span></span>
-                  </button>
-                </div>
-              </div>
-              <div class="row-right">
-                <span class="count" id="charCount"></span>
-                <button class="send-btn" id="sendBtn" title="Send (Enter)"><span data-icon="send" class="icon"></span></button>
-              </div>
+              <span class="count" id="charCount"></span>
+              <button class="send-btn" id="sendBtn" title="Send (Enter)"><span data-icon="send" class="icon"></span></button>
             </div>
           </div>
           <p class="disclaimer">AI can make mistakes. Verify important information from source documents.</p>
@@ -104,7 +96,7 @@
           <div class="lib-head">
             <div>
               <h2>Document Library</h2>
-              <p>Documents available to the assistant's knowledge base.</p>
+              <p id="libSubtitle">Documents available to the assistant's knowledge base.</p>
             </div>
             <div class="lib-actions">
               <button class="btn btn-ghost" id="manageTagsBtn"><span data-icon="tag" class="icon"></span> Manage Tags</button>
@@ -115,6 +107,8 @@
               </div>
             </div>
           </div>
+
+          <div class="ai-storage" id="aiStorage"></div>
 
           <div class="doc-search">
             <span data-icon="search" class="icon"></span>

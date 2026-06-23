@@ -44,11 +44,13 @@ export function listDocuments() {
   return asJson(fetch('/api/documents'));
 }
 
-export function uploadFile(file, uploadedBy, tags) {
+export function uploadFile(file, uploadedBy, tags, description, force) {
   const fd = new FormData();
   fd.append('file', file);
   fd.append('uploaded_by', uploadedBy);
   fd.append('tags', tags);
+  fd.append('description', description || '');
+  fd.append('force', force ? 'true' : 'false');
   return asJson(fetch('/api/upload', { method: 'POST', body: fd }));
 }
 
@@ -57,6 +59,9 @@ export function deleteDocument(filename) {
 }
 export function updateDocTags(filename, tags) {
   return sendJson('/api/documents/' + encodeURIComponent(filename) + '/tags', 'PUT', { tags });
+}
+export function updateDocDescription(filename, description) {
+  return sendJson('/api/documents/' + encodeURIComponent(filename) + '/description', 'PUT', { description });
 }
 
 // -- Tag taxonomy ----------------------------------------------------------

@@ -9,7 +9,7 @@
 //   chat.js     - chat view (messages, composer, send)
 //   library.js  - document library (list, delete)
 //   upload.js   - upload modal (validation, per-file tags, dup handling)
-//   settings.js - composer settings dropdown (show-thinking toggle)
+//   settings.js - thinking toggle pill above the composer
 //   tags.js     - tag manager modal (taxonomy CRUD)
 //   app.js      - this file: coordinates views + boot
 import { $ } from './util.js';
@@ -30,7 +30,8 @@ function setView(view) {
   $('navLibrary').classList.toggle('active', view === 'library');
   $('topbarTitle').textContent = view === 'library'
     ? 'Document Library'
-    : (state.messages.length ? 'Conversation' : 'New conversation');
+    : (state.messages.find((m) => m.role === 'user') || {}).content
+      || (state.messages.length ? 'Conversation' : 'New conversation');
   if (view === 'library') loadDocuments();
   if (view === 'chat') renderScope(); // reflect taxonomy edits made elsewhere
 }

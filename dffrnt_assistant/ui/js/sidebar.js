@@ -11,6 +11,12 @@ import {
 let onSelect = () => {};
 let search = '';
 let menuOpenId = null;
+let renamingId = null;    // conversation id being renamed inline (null = none)
+let groupCollapsed = {};  // group name -> true when the user has collapsed it
+
+// Recent groups start expanded; older ones collapsed (mirrors the prototype).
+function defaultCollapsed(g) { return !(g === 'Pinned' || g === 'Today'); }
+function isCollapsed(g) { return g in groupCollapsed ? groupCollapsed[g] : defaultCollapsed(g); }
 
 function relTime(ts) {
   const secs = Date.now() / 1000 - ts;
@@ -49,12 +55,30 @@ export function renderSidebar() {
   const groups = {};
   for (const c of convos) (groups[groupOf(c)] = groups[groupOf(c)] || []).push(c);
 
+  // While searching, force every group open so matches are never hidden.
+  const searching = !!search.trim();
   let html = '';
   for (const g of GROUP_ORDER) {
     const items = groups[g];
     if (!items) continue;
-    html += `<div class="hist-group"><div class="hist-glabel">${g === 'Pinned' ? '📌 ' : ''}${g}</div>`;
+    const collapsed = !searching && isCollapsed(g);
+    html += `<div class="hist-group">
+      <button class="hist-glabel" data-group="${esc(g)}">
+        ${svg(collapsed ? 'chevronRight' : 'chevronDown')}
+        <span>${g === 'Pinned' ? '📌 ' : ''}${esc(g)}</span>
+      </button>`;
+    if (collapsed) { html += '</div>'; continue; }
     for (const c of items) {
+      if (renamingId === c.id) {
+        html += `
+          <div class="chat-item active">
+            <div class="chat-open chat-renaming">
+              ${svg('message')}
+              <input class="chat-rename" data-renameinput="${c.id}" value="${esc(c.title)}" />
+            </div>
+          </div>`;
+        continue;
+      }
       const active = c.id === state.conversationId ? ' active' : '';
       html += `
         <div class="chat-item${active}">
@@ -75,6 +99,9 @@ export function renderSidebar() {
   }
   box.innerHTML = html;
 
+  box.querySelectorAll('[data-group]').forEach((b) => {
+    b.onclick = () => { const g = b.dataset.group; groupCollapsed[g] = !isCollapsed(g); renderSidebar(); };
+  });
   box.querySelectorAll('[data-open]').forEach((b) => {
     b.onclick = () => { menuOpenId = null; onSelect(b.dataset.open); };
   });
@@ -84,6 +111,18 @@ export function renderSidebar() {
   box.querySelectorAll('[data-pin]').forEach((b) => { b.onclick = () => togglePin(b.dataset.pin); });
   box.querySelectorAll('[data-rename]').forEach((b) => { b.onclick = () => rename(b.dataset.rename); });
   box.querySelectorAll('[data-del]').forEach((b) => { b.onclick = () => remove(b.dataset.del); });
+
+  // Inline rename: focus the field, select its text, commit on Enter/blur.
+  const ri = box.querySelector('[data-renameinput]');
+  if (ri) {
+    ri.focus();
+    ri.setSelectionRange(0, ri.value.length);
+    ri.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitRename(ri.dataset.renameinput, ri.value); }
+      else if (e.key === 'Escape') { renamingId = null; renderSidebar(); }
+    };
+    ri.onblur = () => commitRename(ri.dataset.renameinput, ri.value);
+  }
 }
 
 // Fetch the list from the server, then render.
@@ -100,11 +139,23 @@ async function togglePin(id) {
   loadConversations();
 }
 
-async function rename(id) {
-  const c = state.conversations.find((x) => x.id === id);
+// Open the inline editor; the renderSidebar wiring focuses the field.
+function rename(id) {
   menuOpenId = null;
-  const title = prompt('Rename conversation', c ? c.title : '');
-  if (title && title.trim()) { await updateConversation(id, { title: title.trim() }); }
+  renamingId = id;
+  renderSidebar();
+}
+
+// Persist an inline rename (Enter/blur). Idempotent: a follow-up blur after
+// Enter is a no-op because renamingId is cleared first.
+async function commitRename(id, value) {
+  if (renamingId !== id) return;
+  renamingId = null;
+  const title = (value || '').trim();
+  const c = state.conversations.find((x) => x.id === id);
+  if (title && c && title !== c.title) {
+    await updateConversation(id, { title });
+  }
   loadConversations();
 }
 

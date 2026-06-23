@@ -22,7 +22,21 @@ PAYLOAD_FIELDS = (
     "client_project",
     "tags",
     "tag_paths",
+    "description",
+    "uploaded_by",
+    "content_hash",
 )
+
+# Longest excerpt (characters) sent with a citation before it is truncated.
+_EXCERPT_LIMIT = 240
+
+
+def _excerpt(payload: dict) -> str:
+    """A compact, whitespace-collapsed snippet of a chunk for citation cards."""
+    text = " ".join((payload.get("text") or "").split())
+    if len(text) > _EXCERPT_LIMIT:
+        text = text[:_EXCERPT_LIMIT].rstrip() + "…"
+    return text
 
 
 def page_label(payload: dict):
@@ -32,8 +46,14 @@ def page_label(payload: dict):
 
 def to_source(payload: dict, score) -> dict:
     """Map a stored payload + similarity score to the citation shape the UI expects."""
+    filename = payload.get("filename", "unknown")
+    # Human-friendly title is the filename without its extension (matches the
+    # concept); the full filename + page sit in the card's meta line.
+    title = filename.rsplit(".", 1)[0] if "." in filename else filename
     return {
-        "filename": payload.get("filename", "unknown"),
+        "filename": filename,
+        "title": title,
         "page": page_label(payload),
         "score": round(score, 4) if score is not None else None,
+        "excerpt": _excerpt(payload),
     }

@@ -2,6 +2,7 @@
 so the FastAPI layer stays a thin HTTP adapter."""
 
 import hashlib
+import shutil
 import time
 import uuid
 from datetime import datetime, timezone
@@ -118,28 +119,44 @@ class AssistantService:
         chunks = self._ingest(path)
         return {"message": f"Ingested {chunks} chunks from {path.name}"}
 
-    def upload(self, filename: str, content: bytes, uploaded_by: str, tags: str) -> dict:
+    def upload(
+        self, filename: str, content: bytes, uploaded_by: str, tags: str,
+        description: str = "", force: bool = False,
+    ) -> dict:
         ext = Path(filename).suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
             allowed = ", ".join(sorted(e[1:].upper() for e in SUPPORTED_EXTENSIONS))
             raise UserError(400, f"'{ext}' files are not supported. Please upload one of: {allowed}.")
 
         save_path = self.data_dir / filename
+        content_hash = hashlib.sha256(content).hexdigest()
 
-        # A real duplicate is one already *ingested* (in the vector store) with
-        # identical content — not merely a leftover file on disk. This lets users
-        # (re-)ingest files that exist on disk but aren't in the knowledge base.
-        if save_path.exists() and self.store.has_document(filename):
-            existing_hash = hashlib.sha256(save_path.read_bytes()).hexdigest()
-            if existing_hash == hashlib.sha256(content).hexdigest():
+        # Duplicate detection (skipped when the caller forces the upload, e.g.
+        # the user chose "Keep both"). Two kinds:
+        #   name    — same filename already ingested with identical content
+        #   content — byte-identical content already ingested under another name
+        if not force:
+            if (
+                save_path.exists()
+                and self.store.has_document(filename)
+                and hashlib.sha256(save_path.read_bytes()).hexdigest() == content_hash
+            ):
                 return {
-                    "duplicate": True,
-                    "success": False,
-                    "filename": filename,
+                    "duplicate": True, "kind": "name", "success": False,
+                    "filename": filename, "existing": filename,
                     "warning": (
                         f"'{filename}' is already in the knowledge base with identical "
-                        f"content. It was not re-ingested. Delete the existing version "
-                        f"first to replace it."
+                        f"content. Replace it, keep both, or skip."
+                    ),
+                }
+            content_dup = self.store.find_by_content_hash(content_hash)
+            if content_dup and content_dup != filename:
+                return {
+                    "duplicate": True, "kind": "content", "success": False,
+                    "filename": filename, "existing": content_dup,
+                    "warning": (
+                        f"'{filename}' has the same content as '{content_dup}', which is "
+                        f"already in the knowledge base. Replace it, keep both, or skip."
                     ),
                 }
 
@@ -147,7 +164,17 @@ class AssistantService:
 
         tag_items = [t.strip() for t in tags.split(",") if t.strip()]
         leaf_tags, tag_paths = normalize_tag_payload(tag_items)
-        meta = {"tags": leaf_tags, "tag_paths": tag_paths} if leaf_tags else None
+        # uploaded_by/description/content_hash are stored on every chunk (like
+        # tags) so the library can show them, dedup can match later uploads, and
+        # they survive re-reads of the vector store.
+        description = (description or "").strip()
+        meta = {
+            "uploaded_by": uploaded_by, "description": description,
+            "content_hash": content_hash,
+        }
+        if leaf_tags:
+            meta["tags"] = leaf_tags
+            meta["tag_paths"] = tag_paths
 
         upload_date = datetime.now(timezone.utc).isoformat()
         file_size = len(content)
@@ -160,6 +187,7 @@ class AssistantService:
                 "file_size": file_size,
                 "upload_date": upload_date,
                 "uploaded_by": uploaded_by,
+                "description": description,
                 "tags": leaf_tags,
             },
         )
@@ -182,6 +210,7 @@ class AssistantService:
             "file_size": _human_size(file_size),
             "upload_date": upload_date,
             "uploaded_by": uploaded_by,
+            "description": description,
             "tags": leaf_tags,
             "chunks": chunks,
         }
@@ -191,8 +220,10 @@ class AssistantService:
         documents: dict = {}
         tagsets: dict = {}  # filename -> set of tag strings (chunks share tags)
         mtimes: dict = {}   # filename -> file mtime, for newest-first ordering
+        text_bytes = 0      # total chunk text held in the vector store
         for payload in self.store.all_payloads():
             payload = payload or {}
+            text_bytes += len((payload.get("text") or "").encode("utf-8"))
             filename = payload.get("filename", "unknown")
             entry = documents.setdefault(
                 filename,
@@ -206,32 +237,64 @@ class AssistantService:
                     "file_path": str(self.data_dir / filename),
                     "file_size": "Unknown",
                     "upload_date": "Unknown",
+                    "uploaded_by": payload.get("uploaded_by") or "",
+                    "description": payload.get("description") or "",
                     "tags": [],
                 },
             )
             entry["chunk_count"] += 1
             tagsets.setdefault(filename, set()).update(payload.get("tags") or [])
 
+        repo_bytes = 0      # total size of the stored source files on disk
         for filename, info in documents.items():
             info["tags"] = sorted(tagsets.get(filename, set()))
             path = self.data_dir / filename
             if path.exists():
                 stat = path.stat()
                 mtimes[filename] = stat.st_mtime
+                repo_bytes += stat.st_size
                 info["file_size"] = _human_size(stat.st_size)
                 info["upload_date"] = datetime.fromtimestamp(
                     stat.st_mtime, tz=timezone.utc
                 ).strftime("%Y-%m-%d %H:%M UTC")
 
+        total_chunks = self.store.count()
         return {
-            "total_chunks": self.store.count(),
+            "total_chunks": total_chunks,
             "document_count": len(documents),
+            "storage": self._storage_stats(total_chunks, text_bytes, repo_bytes),
             # Newest first; documents whose file is missing (mtime 0) sort last.
             "documents": sorted(
                 documents.values(),
                 key=lambda d: mtimes.get(d["filename"], 0.0),
                 reverse=True,
             ),
+        }
+
+    def _storage_stats(self, total_chunks: int, text_bytes: int, repo_bytes: int) -> dict:
+        """Knowledge-base storage usage vs. the space available to the app.
+
+        Used = the vector store (embedding vectors + chunk text) plus the source
+        document repository on disk. The cap is that usage plus the free space
+        remaining on the volume the app writes to, so the bar reflects real disk
+        pressure rather than a hardcoded quota.
+        """
+        vector_bytes = total_chunks * self.store.vector_size * 4  # float32 embeddings
+        used = vector_bytes + text_bytes + repo_bytes
+        try:
+            target = self.data_dir if self.data_dir.exists() else Path.cwd()
+            free = shutil.disk_usage(target).free
+        except OSError:
+            free = 0
+        total = used + free
+        return {
+            "used_bytes": used,
+            "vector_bytes": vector_bytes,
+            "text_bytes": text_bytes,
+            "repo_bytes": repo_bytes,
+            "free_bytes": free,
+            "total_bytes": total,
+            "used_pct": round(used / total * 100, 2) if total else 0.0,
         }
 
     # -- Deletion ----------------------------------------------------------
@@ -263,6 +326,16 @@ class AssistantService:
         )
         self.audit.write("TAG_UPDATE", {"filename": filename, "tags": leaf_tags})
         return {"filename": filename, "tags": leaf_tags}
+
+    # -- Description -------------------------------------------------------
+    def update_description(self, filename: str, description: str) -> dict:
+        """Set a document's description by rewriting it on every chunk."""
+        if not self.store.has_document(filename):
+            raise UserError(404, f"Document not found: {filename}")
+        desc = (description or "").strip()
+        self.store.set_payload_by_filename(filename, {"description": desc})
+        self.audit.write("DESCRIPTION_UPDATE", {"filename": filename})
+        return {"filename": filename, "description": desc}
 
     # -- Tags --------------------------------------------------------------
     def distinct_document_tags(self) -> List[str]:
