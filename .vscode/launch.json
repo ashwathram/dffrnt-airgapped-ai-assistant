@@ -2,16 +2,62 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "DFFRNT AI Assistant (Local)",
+            // Development: run the API + UI on the host with the debugger, against
+            // the Qdrant + Ollama containers (started by the preLaunchTask). The
+            // localhost URLs below override config.toml, so debugging works even
+            // when config.toml is set up for the in-container prod hostnames.
+            "name": "DFFRNT AI Assistant (Dev: host API)",
             "type": "debugpy",
             "request": "launch",
             "module": "dffrnt_assistant.api.app",
             "cwd": "${workspaceFolder}",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}",
+                "QDRANT_URL": "http://localhost:6333",
+                "OLLAMA_URL": "http://localhost:11434"
             },
             "preLaunchTask": "Setup: All prerequisites",
             "console": "integratedTerminal"
+        },
+        {
+            // Production: run the deployed artifact, not a host process. This
+            // (re)builds the API + UI image from the current source with uv, then
+            // hands off to `run.sh start` — the canonical runner — which brings up
+            // the GPU-aware containerized `prod` stack (Qdrant + Ollama + API),
+            // recreating the api container with the fresh image and waiting for
+            // health. Re-launch any time to refresh after code changes. No
+            // debugger attaches; the stack runs detached afterward — tail it with
+            // `./deploy/run.sh logs api` and stop it with `./deploy/run.sh stop`.
+            "name": "DFFRNT AI Assistant (Prod: Docker container)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && bash deploy/run.sh start",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            // Package the AWS / online deployment bundle. Runs deploy/package.sh
+            // in AWS mode: builds the app image and writes the three deliverables
+            // (dffrnt-aws.tar.gz, install.sh, README.md) to dist/. Only the app
+            // image is bundled; the installer pulls the Qdrant/Ollama base images
+            // and models at deploy time, so no local model store is needed.
+            "name": "Package: AWS deployment",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=AWS",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            // Package the OFFLINE / air-gapped deployment bundle. Runs
+            // deploy/package.sh in OFFLINE mode: builds the app image and bundles
+            // the Qdrant/Ollama base images plus the Ollama model store (from
+            // ~/.ollama/models by default — override via OLLAMA_MODELS_DIR=<path>),
+            // writing dffrnt-offline.tar.gz, install.sh and README.md to dist/.
+            // Pull the models first if needed (see deploy/README.md).
+            "name": "Package: Offline deployment",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE",
+            "cwd": "${workspaceFolder}"
         }
     ]
 }

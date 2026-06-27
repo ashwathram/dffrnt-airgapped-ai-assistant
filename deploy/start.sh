@@ -1,31 +1,29 @@
 #!/usr/bin/env bash
 #
-# Start the Qdrant + Ollama stack, fully driven by config.toml.
+# Dev helper: bring up the Qdrant + Ollama containers only (GPU-aware), so the
+# API can run on the host — e.g. the VSCode debugger — against them. The full
+# containerized stack, including the API, is run by run.sh; this script is
+# dev-only and is not shipped in deployment bundles.
 #
-# Reads the resolved settings (ports, and whether GPU acceleration is on) from
-# the single source of truth and starts docker compose accordingly. GPU is
-# enabled when the config's `gpu` flag is true — e.g. environment = "local-cuda".
-# There is no separate GPU compose file: the device reservation is injected here.
+# GPU is enabled when config.toml's `gpu` flag is true (e.g. environment =
+# "local-cuda"); the device reservation is injected here, so there is a single
+# compose file with no separate GPU variant.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 
-# Pick a Python that can import the package: bundle venv, repo venv, or system.
+# Pick a Python that can import the package: repo venv, else system.
 PY="python3"
-for candidate in "$HERE/.venv/bin/python" "$ROOT/.venv/bin/python"; do
-  [ -x "$candidate" ] && PY="$candidate" && break
-done
+[ -x "$ROOT/.venv/bin/python" ] && PY="$ROOT/.venv/bin/python"
 
-# Locate config.toml: explicit env var, then bundle dir, then repo root.
-if [ -z "${DFFRNT_CONFIG:-}" ]; then
-  for candidate in "$HERE/config.toml" "$ROOT/config.toml"; do
-    [ -f "$candidate" ] && DFFRNT_CONFIG="$candidate" && break
-  done
+# Locate config.toml: explicit env var, then repo root.
+if [ -z "${DFFRNT_CONFIG:-}" ] && [ -f "$ROOT/config.toml" ]; then
+  DFFRNT_CONFIG="$ROOT/config.toml"
 fi
 export DFFRNT_CONFIG="${DFFRNT_CONFIG:-}"
 
-# Resolve settings through the package (honours env > config.toml > defaults).
+# Resolve ports + GPU through the package (honours env > config.toml > defaults).
 readarray -t CFG < <(PYTHONPATH="$ROOT" "$PY" -c "
 from dffrnt_assistant.config import load_settings
 s = load_settings()
@@ -37,13 +35,15 @@ export OLLAMA_PORT="${CFG[0]}"
 export QDRANT_PORT="${CFG[1]}"
 GPU="${CFG[2]}"
 
+# No --profile prod, so the api service stays down: only qdrant + ollama come up.
 COMPOSE=(docker compose -f "$HERE/docker-compose.yml")
 
+MODE="CPU"; [ "$GPU" = "1" ] && MODE="GPU"
+echo ">> $MODE mode (from config.toml) — dev services: ollama:$OLLAMA_PORT qdrant:$QDRANT_PORT"
+
 if [ "$GPU" = "1" ]; then
-  echo ">> GPU acceleration ON (from config.toml) — ollama:$OLLAMA_PORT qdrant:$QDRANT_PORT"
   # Inject the GPU reservation via a stdin override so there is a single compose file.
   printf 'services:\n  ollama:\n    gpus: all\n' | "${COMPOSE[@]}" -f - up -d
 else
-  echo ">> CPU mode (from config.toml) — ollama:$OLLAMA_PORT qdrant:$QDRANT_PORT"
   "${COMPOSE[@]}" up -d
 fi

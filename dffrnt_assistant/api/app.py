@@ -85,10 +85,6 @@ class QueryResponse(BaseModel):
     question: str
 
 
-class IngestRequest(BaseModel):
-    file_path: str
-
-
 class TagTypeRequest(BaseModel):
     name: str
     color: str = "#5D27B8"
@@ -170,11 +166,6 @@ def query_stream_endpoint(request: QueryRequest):
             yield json.dumps({"type": "error", "detail": str(exc)}) + "\n"
 
     return StreamingResponse(ndjson(), media_type="application/x-ndjson")
-
-
-@app.post("/api/ingest")
-def ingest_endpoint(request: IngestRequest):
-    return _handle(lambda: service.ingest_path(request.file_path))
 
 
 @app.post("/api/upload")

@@ -28,7 +28,7 @@ llm_repeat_penalty = 1.0
 llm_num_predict = -1
 # Optional embedding task prefixes (some models need "search_query: "/"search_document: ").
 # bge-m3 does NOT use prefixes, so leave both blank. Changing the embed model or
-# these prefixes requires re-ingesting (dffrnt-ingest --recreate).
+# these prefixes requires re-uploading documents (the vector dimension changes).
 embed_query_prefix = ""
 embed_document_prefix = ""
 
@@ -74,5 +74,4 @@ SAFETY
 api_host = "0.0.0.0"
 api_port = 8000
 data_dir = "data"
-source_root = "database/raw"
 audit_log_path = "logs/audit.jsonl"

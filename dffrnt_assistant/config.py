@@ -49,7 +49,7 @@ class Settings:
     # Optional embedding task prefixes (some models need "search_query: " /
     # "search_document: " to tighten the similarity spread). bge-m3 does NOT use
     # prefixes, so both stay blank. Changing the embed model or these prefixes
-    # requires re-ingesting documents (dffrnt-ingest --recreate).
+    # requires re-uploading documents (the vector dimension changes).
     embed_query_prefix: str = ""
     embed_document_prefix: str = ""
 
@@ -80,7 +80,6 @@ class Settings:
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     data_dir: str = "data"             # where uploaded files are stored
-    source_root: str = "database/raw"  # default folder for batch ingestion
     audit_log_path: str = "logs/audit.jsonl"
 
     def __post_init__(self) -> None:

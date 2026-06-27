@@ -1,12 +1,12 @@
 """The one ingestion pipeline: load -> chunk -> embed -> store.
 
-Used identically by the API upload route and the batch CLI, so a document
-ingested either way is retrievable by the assistant.
+Drives the API upload route, so every uploaded document is retrievable by the
+assistant.
 """
 
 import uuid
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Optional
 
 from .chunker import chunk_file
 from .loaders import load_file
@@ -79,26 +79,3 @@ def ingest_file(path, store, embedder, settings, meta: Optional[dict] = None) ->
     store.delete_by_filename(document.get("filename") or path.name)
     store.upsert(points)
     return len(points)
-
-
-def ingest_paths(
-    paths: Iterable,
-    store,
-    embedder,
-    settings,
-    metadata_map: Optional[dict] = None,
-) -> tuple[int, List[dict]]:
-    """Ingest many files. Returns (total_chunks, failed) where failed is a list
-    of ``{"path", "error"}`` dicts so one bad file never aborts the batch."""
-    total = 0
-    failed: List[dict] = []
-    for path in paths:
-        path = Path(path)
-        meta = None
-        if metadata_map:
-            meta = metadata_map.get(str(path)) or metadata_map.get(path.name)
-        try:
-            total += ingest_file(path, store, embedder, settings, meta)
-        except Exception as exc:
-            failed.append({"path": str(path), "error": str(exc)})
-    return total, failed

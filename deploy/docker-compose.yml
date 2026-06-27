@@ -1,8 +1,10 @@
-# Offline runtime: Qdrant + Ollama. Images and the Ollama model store are loaded
-# from the bundle by install_offline.sh — nothing is fetched from the net.
+# Runtime: Qdrant + Ollama. For OFFLINE bundles the images and Ollama model store
+# come from the bundle (install.sh loads the images; run.sh finds the cached
+# models); for AWS/online bundles Docker pulls the images and run.sh pulls the
+# models on first start.
 #
-# Do not run `docker compose` against this file directly. Use start.sh, which
-# reads config.toml and injects the GPU reservation + ports dynamically.
+# Do not run `docker compose` against this file directly. Use run.sh, which reads
+# config.toml and injects the GPU reservation + ports dynamically.
 services:
   qdrant:
     image: qdrant/qdrant
@@ -20,4 +22,32 @@ services:
       - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ./ollama_models:/root/.ollama/models
+    restart: unless-stopped
+
+  # The API + web UI, behind the `prod` profile. run.sh always uses this profile,
+  # so `run.sh start` runs the full containerized stack — the deployed artifact.
+  # In development the API instead runs on the host (e.g. the VSCode debugger)
+  # against the qdrant/ollama containers above, brought up by start.sh. The image
+  # talks to its siblings over the compose network (qdrant:6333 / ollama:11434),
+  # injected as env so they override the localhost URLs in the mounted config.toml.
+  api:
+    image: dffrnt-assistant:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: dffrnt-api
+    profiles: ["prod"]
+    depends_on:
+      - qdrant
+      - ollama
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - DFFRNT_CONFIG=/app/config.toml
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=http://ollama:11434
+    volumes:
+      - ${HOST_CONFIG:-../config.toml}:/app/config.toml:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
     restart: unless-stopped

@@ -1,55 +1,65 @@
-# Offline deployment
+# Deployment
 
-Build a bundle on a networked machine, copy it to the air-gapped target, install.
+Package the app into a single tarball + installer + README, copy those three files
+to the target, and install. The app ships as a Docker image, so the target needs
+**only Docker** — no Python, uv or pip. Two flavours:
+
+- **OFFLINE** — for an air-gapped box. Caches the app image, the Qdrant/Ollama
+  base images, and the Ollama model store, so installing needs no internet.
+- **AWS** (online) — ships only the app image; the installer pulls the base images
+  and models at deploy time, keeping the bundle small.
 
 ## 1. Build (networked machine, matching the target OS/arch)
 
 ```bash
-ollama pull qwen3:4b && ollama pull bge-m3   # vendor the models (must match config.toml)
-deploy/build_offline.sh
-# -> dist/offline-bundle.tar.gz
+# OFFLINE: vendor the models first, then point the packager at the model store
+ollama pull qwen3:4b && ollama pull bge-m3
+deploy/package.sh ~/.ollama/models OFFLINE
+
+# AWS / online: no local model store needed
+deploy/package.sh TARGET_SYSTEM=AWS
 ```
 
-Pull whichever `llm_model` your `config.toml` names: `qwen3:4b` is the lightweight
-default; `qwen3:30b-a3b` is the high-capacity MoE option. The embedding model is
-`bge-m3` (1024-dim). `build_offline.sh` vendors whatever is in your local Ollama
-model store, so make sure the model named in the bundle's `config.toml` is pulled.
+Both parameters accept positional or `KEY=VALUE` form, in any order:
 
-The bundle contains: Python wheels (`wheelhouse/`), the app wheel, the Qdrant +
-Ollama images (`images/`), the Ollama model store (`ollama_models/`), a
-`docker-compose.yml`, and a starter `config.toml`.
+```bash
+deploy/package.sh OLLAMA_MODELS_DIR=deploy/ollama_models TARGET_SYSTEM=OFFLINE
+```
+
+`package.sh` builds the app image from [Dockerfile](Dockerfile) and reads the
+models to vendor/pull from `config.toml.example` (`llm_model` + `embed_model`). It
+writes exactly three files to `dist/` and nothing else:
+
+```
+dist/
+  dffrnt-offline.tar.gz   (or dffrnt-aws.tar.gz)
+  install.sh
+  README.md
+```
+
+Env: `APP_IMAGE` (default `dffrnt-assistant:latest`), `OUT_DIR` (default `dist`).
 
 ## 2. Transfer
 
-Copy `dist/offline-bundle.tar.gz` to the target by whatever approved means
-(USB, one-way transfer, etc.) and unpack:
+Copy the three files in `dist/` to the target by approved means (USB, one-way
+transfer, etc.), keeping them together.
+
+## 3. Install & run (target)
 
 ```bash
-tar -xzf offline-bundle.tar.gz && cd offline-bundle
+./install.sh                 # checks prereqs, unpacks, loads images, starts the stack
+cd dffrnt && ./run.sh status # UI at http://localhost:8000
 ```
 
-## 3. Install & run (air-gapped target)
+See the generated `README.md` next to the tarball for the target-side details.
 
-```bash
-./install_offline.sh
-./start.sh                                  # starts Qdrant + Ollama (GPU if enabled)
-DFFRNT_CONFIG=./config.toml ./.venv/bin/dffrnt-api
-```
+## Files
 
-### GPU acceleration
-
-GPU is driven entirely by `config.toml` — there is no separate GPU compose file.
-Set `environment = "local-cuda"` (or `gpu = true`) and `start.sh` injects the
-NVIDIA device reservation automatically. This requires the NVIDIA Container
-Toolkit on the host; on non-GPU hosts leave the default and it runs on CPU.
-
-## Python 3.14 note
-
-This project targets Python 3.14. Prebuilt `cp314` wheels must exist for the
-target architecture for every dependency. Because the heavy ML stack
-(LangChain, torch, sentence-transformers) has been removed, the remaining
-dependencies are small and broadly available — but `build_offline.sh` still
-fails fast on the networked machine if any wheel is missing, so you find out
-before shipping. If a wheel is genuinely unavailable, either build it from
-source on a matching machine and drop it into `wheelhouse/`, or lower the
-`requires-python` pin in `pyproject.toml`.
+| File | Role |
+|------|------|
+| `package.sh` | Packager — builds the bundle + installer + README into `dist/` |
+| `install.sh` | Installer — deploys from the tarball (shipped in `dist/`) |
+| `run.sh` | Runner — manages the containers + API (shipped inside the tarball) |
+| `Dockerfile` | Builds the app image (`dffrnt-assistant:latest`) with uv |
+| `docker-compose.yml` | Qdrant + Ollama + API (`prod` profile) stack |
+| `README.target.md` | Template for the target-side `README.md` (filled in by `package.sh`) |

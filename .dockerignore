@@ -1,0 +1,24 @@
+# The image only needs pyproject.toml, uv.lock and dffrnt_assistant/. Everything
+# below is excluded from the build context so the daemon transfer stays small.
+.git
+.github
+.venv
+.vscode
+.cache
+.pytest_cache
+__pycache__
+**/__pycache__
+*.pyc
+
+# Runtime state and large corpora — never part of the image.
+data
+database
+logs
+dist
+deploy/qdrant_storage
+deploy/ollama_models
+
+# Dev-only trees.
+eval
+tests
+conftest.py

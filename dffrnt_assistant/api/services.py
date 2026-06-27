@@ -112,13 +112,6 @@ class AssistantService:
         self.audit.write("INGESTION", {"file": path.name, "chunks": chunks})
         return chunks
 
-    def ingest_path(self, file_path: str) -> dict:
-        path = Path(file_path)
-        if not path.exists():
-            raise UserError(404, f"File not found: {file_path}")
-        chunks = self._ingest(path)
-        return {"message": f"Ingested {chunks} chunks from {path.name}"}
-
     def upload(
         self, filename: str, content: bytes, uploaded_by: str, tags: str,
         description: str = "", force: bool = False,

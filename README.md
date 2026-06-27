@@ -25,7 +25,7 @@ The system runs **completely offline** on dedicated hardware. Embeddings and tex
 - Single conversational web UI: streaming answers, an optional reasoning trace, a document library, and an upload flow
 - Inline **`[n]` citations** that are clickable — clicking one scrolls to and highlights the cited source; cited sources are listed first, with retrieved-but-unused ones collapsed into a dimmed group below
 - Tag-based **scoping** to focus retrieval on a chosen subset of documents, plus saved conversations
-- Document ingestion for **PDF, DOCX, PPTX, XLSX, CSV, TXT, Markdown**, with one pipeline shared by the web upload and the batch CLI
+- Document ingestion for **PDF, DOCX, PPTX, XLSX, CSV, TXT, Markdown** through the web UI's upload flow (single files or whole folders)
 - Source attribution and a prompt-injection-resistant system prompt that refuses when the documents don't support an answer
 - Generation tuned for RAG: an explicit `num_ctx` so long prompts are never silently truncated, plus a relevance cut (`score_margin`) that drops weak chunks before they reach the prompt
 - A reproducible **evaluation harness** ([eval/](eval/)) for tuning retrieval and scoring answer quality
@@ -48,11 +48,10 @@ Question ──▶ retrieve (embed ▶ search ▶ assemble) ──▶ RAG (promp
 | Configuration (all tunables) | [config.py](dffrnt_assistant/config.py) |
 | Shared payload contract | [schema.py](dffrnt_assistant/schema.py) |
 | LLM management (Ollama, stdlib only) | [ollama.py](dffrnt_assistant/ollama.py) |
-| Document ingestion | [ingest/](dffrnt_assistant/ingest/) (`loaders`, `chunker`, `tags`, `metadata`, `pipeline`) |
+| Document ingestion | [ingest/](dffrnt_assistant/ingest/) (`loaders`, `chunker`, `tags`, `pipeline`) |
 | Retrieval & query assembly | [retrieval/](dffrnt_assistant/retrieval/) (`store`, `retriever`, `conversation_store`, `tag_store`) |
 | RAG | [rag/](dffrnt_assistant/rag/) (`prompt`, `pipeline`) |
 | Presentation (HTTP + UI) | [api/](dffrnt_assistant/api/) (`app`, `services`, `audit`) + [ui/](dffrnt_assistant/ui/) (`index.html` + `js/`, `styles/`) |
-| Batch ingestion CLI | [cli.py](dffrnt_assistant/cli.py) |
 | Evaluation harness | [eval/](eval/) (`rag_eval`, `answer_eval`, `prompt_size`, `sample_queries`) |
 
 ---
@@ -77,17 +76,30 @@ See [config.toml.example](config.toml.example) for the full list. Retrieval and 
 
 ---
 
-## Running locally
+## Running
 
-Requires a local Qdrant and Ollama (the VSCode task `Setup: All prerequisites` starts both via Docker and pulls the models).
+There are two ways to run, sharing one config (env > `config.toml` > defaults) and the same Qdrant + Ollama containers.
+
+### Development (host API)
+
+The API + UI run on the host (with the debugger / hot reload) against Qdrant and Ollama in Docker. The VSCode task `Setup: All prerequisites` starts both containers and pulls the models; the `DFFRNT AI Assistant (Dev: host API)` launch config then serves everything at http://localhost:8000.
 
 ```bash
-uv sync                       # installs the package + dependencies
-dffrnt-api                    # serve the API + UI at http://localhost:8000
-dffrnt-ingest --source-root database/raw   # batch-ingest a folder
+uv sync                            # installs the package + dependencies
+bash deploy/start.sh               # Qdrant + Ollama only
+dffrnt-api                         # serve the API + UI at http://localhost:8000
 ```
 
-Both entrypoints read the same configuration and write to the same Qdrant collection.
+### Production (Docker)
+
+The API + UI ship as their own image (built with uv, see [deploy/Dockerfile](deploy/Dockerfile)) and run alongside Qdrant and Ollama via the compose `prod` profile. `run.sh` is the canonical runner. The VSCode task `Run production stack (Docker)` (or launch config `DFFRNT AI Assistant (Prod: Docker container)`) does the whole thing; by hand:
+
+```bash
+docker build -t dffrnt-assistant:latest -f deploy/Dockerfile .
+bash deploy/run.sh start           # Qdrant + Ollama + API at http://localhost:8000
+```
+
+Add documents through the UI's upload flow (single files or whole folders).
 
 ---
 
@@ -115,6 +127,26 @@ python -m eval.answer_eval --temps 0.1,0.7   # compare generation settings on th
 
 ---
 
-## Offline deployment
+## Deployment
 
-Build a bundle (wheels + container images + models) on a networked machine, transfer the tarball, and install on the air-gapped target. See [deploy/README.md](deploy/README.md).
+Package the app on a networked machine into **three files** — a tarball, a single
+`install.sh`, and a `README.md` — transfer them to the target, and install. The app
+ships as a Docker image, so the target needs only Docker (Engine + Compose v2) — no
+Python, uv or pip. Two build flavours:
+
+- **OFFLINE** — for an air-gapped box; the bundle carries every image and the Ollama
+  model store, so installing needs no internet.
+- **AWS** (online) — ships only the app image and pulls the base images + models at
+  deploy time, keeping the tarball small.
+
+```bash
+# build (networked machine matching the target OS/arch)
+deploy/package.sh ~/.ollama/models OFFLINE   # or: deploy/package.sh TARGET_SYSTEM=AWS
+# -> dist/{dffrnt-<offline|aws>.tar.gz, install.sh, README.md}
+
+# install + run (target)
+./install.sh                                  # checks prereqs, unpacks, starts the stack
+cd dffrnt && ./run.sh status                  # manage with start|stop|restart|status|logs
+```
+
+See [deploy/README.md](deploy/README.md) for the full build/deploy guide.

@@ -35,7 +35,6 @@ packages = ["dffrnt_assistant"]
 
 [project.scripts]
 dffrnt-api = "dffrnt_assistant.api.app:main"
-dffrnt-ingest = "dffrnt_assistant.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
