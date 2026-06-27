@@ -55,16 +55,33 @@ if [ "$TARGET_USER" != "root" ]; then
   echo "   added '$TARGET_USER' to the docker group (re-login to take effect)"
 fi
 
-# ---- NVIDIA driver (Tesla / datacenter, headless server variant) ------------
+# ---- NVIDIA driver (Tesla T4 / datacenter, headless server variant) ---------
+# Two AWS-specific gotchas, both learned the hard way:
+#   1. The driver's kernel module is built by DKMS, which needs headers matching
+#      the RUNNING kernel — on AWS GPU instances that's the '-aws' flavour. Miss
+#      them and nvidia-smi later fails with "couldn't communicate with the NVIDIA
+#      driver" (the module silently never built).
+#   2. 'nvidia-utils' is a virtual package; apt refuses to choose a version. Pin a
+#      concrete '-server' driver (the supported variant for headless datacenter
+#      GPUs: Tesla T4/V100/A10G/...). Override the branch with NVIDIA_DRIVER_BRANCH.
 echo ">> [3/5] NVIDIA GPU driver"
+NVIDIA_DRIVER_BRANCH="${NVIDIA_DRIVER_BRANCH:-580}"   # 580-server suits the Tesla T4
 if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
-  echo "   driver already present:"
+  echo "   driver already present and responding:"
   nvidia-smi --query-gpu=name,driver_version --format=csv,noheader || true
 else
-  apt-get install -y ubuntu-drivers-common
-  # The -server driver variants are the supported choice for headless datacenter
-  # GPUs (Tesla T4/V100/A10G/...). autoinstall picks the recommended version.
-  ubuntu-drivers install --gpgpu || ubuntu-drivers autoinstall
+  # Headers for the running kernel are required for the DKMS build; the '-aws'
+  # meta keeps them tracking future kernel upgrades (best-effort on non-aws).
+  apt-get install -y "linux-headers-$(uname -r)" dkms ubuntu-drivers-common
+  apt-get install -y linux-headers-aws || true
+  # Pin the -server driver; fall back to ubuntu-drivers autodetect if that exact
+  # branch isn't in the archive for this release.
+  if ! apt-get install -y "nvidia-driver-${NVIDIA_DRIVER_BRANCH}-server"; then
+    echo "   nvidia-driver-${NVIDIA_DRIVER_BRANCH}-server unavailable — using ubuntu-drivers autoinstall"
+    ubuntu-drivers install --gpgpu || ubuntu-drivers autoinstall
+  fi
+  # Make sure the module actually built against the running kernel.
+  echo "   DKMS status:"; dkms status 2>/dev/null | sed 's/^/     /' || true
   echo "   driver installed — a REBOOT is required before nvidia-smi will work"
 fi
 
@@ -103,4 +120,9 @@ cat <<EOF
 
    (If you didn't reboot, '$TARGET_USER' must also re-login to use docker
     without sudo.)
+
+   If nvidia-smi still says "couldn't communicate with the NVIDIA driver"
+   AFTER rebooting, the DKMS module didn't build for this kernel:
+       sudo apt-get install -y linux-headers-\$(uname -r) linux-headers-aws
+       sudo dkms autoinstall && sudo reboot
 EOF
