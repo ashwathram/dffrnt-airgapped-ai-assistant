@@ -14,16 +14,10 @@ gpu = false
 # --- Ollama (LLM + embeddings) ---
 ollama_url = "http://localhost:11434"
 llm_model = "qwen3:4b"             # LLM served by Ollama (used everywhere)
-embed_model = "nomic-embed-text"
-vector_size = 768                  # MUST match the embed_model's output dimension
+embed_model = "bge-m3"
+vector_size = 1024                 # MUST match the embed_model's output dimension
 llm_temperature = 0.1
 llm_timeout = 600                  # seconds
-<<<<<<< Updated upstream
-# nomic-embed-text task prefixes (tighten similarity spread; lift relevant scores).
-# Blank both for models that don't use prefixes. Changing requires re-ingesting.
-embed_query_prefix = "search_query: "
-embed_document_prefix = "search_document: "
-=======
 # Generation options. num_ctx matters most: Ollama defaults to 4096, which
 # silently truncates RAG prompts once retrieved docs + history grow. The rest
 # are qwen3's recommended sampling knobs; num_predict -1 = no output cap.
@@ -37,7 +31,6 @@ llm_num_predict = -1
 # these prefixes requires re-ingesting (dffrnt-ingest --recreate).
 embed_query_prefix = ""
 embed_document_prefix = ""
->>>>>>> Stashed changes
 
 # --- Qdrant vector store ---
 qdrant_url = "http://localhost:6333"

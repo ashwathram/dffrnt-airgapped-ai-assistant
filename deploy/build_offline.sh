@@ -53,7 +53,7 @@ if [ -d "$MODELS_DIR" ]; then
   cp -a "$MODELS_DIR/." "$OUT/ollama_models/"
 else
   echo "!! $MODELS_DIR not found. Pull the models first, e.g.:" >&2
-  echo "     ollama pull qwen3:4b && ollama pull nomic-embed-text" >&2
+  echo "     ollama pull qwen3:4b && ollama pull bge-m3" >&2
   exit 1
 fi
 

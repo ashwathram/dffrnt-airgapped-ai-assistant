@@ -24,6 +24,12 @@ def main() -> int:
     parser.add_argument("--source-root", default=settings.source_root)
     parser.add_argument("--metadata-file", default=None, help="Optional JSON/CSV metadata sidecar")
     parser.add_argument("--limit", type=int, default=None, help="Ingest at most N files")
+    parser.add_argument(
+        "--recreate",
+        action="store_true",
+        help="Drop and recreate the collection first (required when the embed model's "
+        "vector dimension changes, e.g. switching to bge-m3). DESTROYS existing vectors.",
+    )
     args = parser.parse_args()
 
     root = Path(args.source_root)
@@ -34,7 +40,14 @@ def main() -> int:
     store = VectorStore(
         settings.qdrant_url, settings.collection_name, settings.vector_size, settings.distance
     )
-    store.ensure_collection()
+    if args.recreate:
+        print(
+            f"Recreating collection '{settings.collection_name}' at "
+            f"{settings.vector_size}-dim for embed model '{settings.embed_model}'..."
+        )
+        store.recreate_collection()
+    else:
+        store.ensure_collection()
     embedder = OllamaClient(
         settings.ollama_url,
         settings.llm_model,

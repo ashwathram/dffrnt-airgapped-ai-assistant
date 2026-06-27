@@ -37,6 +37,18 @@ class VectorStore:
             vectors_config=VectorParams(size=self.vector_size, distance=self.distance),
         )
 
+    def recreate_collection(self) -> None:
+        """Drop and recreate the collection at the current vector_size/distance.
+
+        Destructive: erases all stored vectors. Needed when the embedding model
+        changes output dimension (a collection keeps the size it was created with
+        and would otherwise reject vectors of a different length)."""
+        self.client.delete_collection(collection_name=self.collection_name)
+        self.client.create_collection(
+            collection_name=self.collection_name,
+            vectors_config=VectorParams(size=self.vector_size, distance=self.distance),
+        )
+
     def upsert(self, points: List[Dict], batch_size: int = 128) -> None:
         for start in range(0, len(points), batch_size):
             batch = [
