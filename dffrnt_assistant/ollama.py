@@ -26,7 +26,7 @@ class OllamaClient:
         self.embed_model = embed_model
         self.temperature = temperature
         self.timeout = timeout
-        # Embedding task prefixes (e.g. nomic's "search_query: "/"search_document: ").
+        # Optional embedding task prefixes ("search_query: "/"search_document: ").
         # embed_texts stays raw; the query/document helpers apply them.
         self.query_prefix = query_prefix
         self.doc_prefix = doc_prefix

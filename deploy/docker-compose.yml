@@ -6,6 +6,7 @@
 services:
   qdrant:
     image: qdrant/qdrant
+    container_name: qdrant
     ports:
       - "${QDRANT_PORT:-6333}:6333"
     volumes:
@@ -14,6 +15,7 @@ services:
 
   ollama:
     image: ollama/ollama
+    container_name: ollama
     ports:
       - "${OLLAMA_PORT:-11434}:11434"
     volumes:

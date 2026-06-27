@@ -14,14 +14,15 @@ gpu = false
 # --- Ollama (LLM + embeddings) ---
 ollama_url = "http://localhost:11434"
 llm_model = "qwen3:4b"             # LLM served by Ollama (used everywhere)
-embed_model = "nomic-embed-text"
-vector_size = 768                  # MUST match the embed_model's output dimension
+embed_model = "bge-m3"
+vector_size = 1024                 # MUST match the embed_model's output dimension
 llm_temperature = 0.1
 llm_timeout = 600                  # seconds
-# nomic-embed-text task prefixes (tighten similarity spread; lift relevant scores).
-# Blank both for models that don't use prefixes. Changing requires re-ingesting.
-embed_query_prefix = "search_query: "
-embed_document_prefix = "search_document: "
+# Optional embedding task prefixes (some models need "search_query: "/"search_document: ").
+# bge-m3 does NOT use prefixes, so leave both blank. Changing the embed model or
+# these prefixes requires re-ingesting (dffrnt-ingest --recreate).
+embed_query_prefix = ""
+embed_document_prefix = ""
 
 # --- Qdrant vector store ---
 qdrant_url = "http://localhost:6333"

@@ -31,15 +31,16 @@ class Settings:
     # -- Ollama (LLM + embeddings) ----------------------------------------
     ollama_url: str = "http://localhost:11434"
     llm_model: str = "qwen3:4b"        # always from config.toml / env
-    embed_model: str = "nomic-embed-text"
-    vector_size: int = 768             # must match `embed_model` output dim
+    embed_model: str = "bge-m3"
+    vector_size: int = 1024            # must match `embed_model` output dim
     llm_temperature: float = 0.1
     llm_timeout: int = 600             # seconds; generation can be slow
-    # nomic-embed-text was trained with task prefixes; supplying them tightens the
-    # similarity spread and lifts relevant scores. Blank both for models that
-    # don't use prefixes. Changing these requires re-ingesting documents.
-    embed_query_prefix: str = "search_query: "
-    embed_document_prefix: str = "search_document: "
+    # Optional embedding task prefixes (some models need "search_query: " /
+    # "search_document: " to tighten the similarity spread). bge-m3 does NOT use
+    # prefixes, so both stay blank. Changing the embed model or these prefixes
+    # requires re-ingesting documents (dffrnt-ingest --recreate).
+    embed_query_prefix: str = ""
+    embed_document_prefix: str = ""
 
     # -- Qdrant vector store ----------------------------------------------
     qdrant_url: str = "http://localhost:6333"
