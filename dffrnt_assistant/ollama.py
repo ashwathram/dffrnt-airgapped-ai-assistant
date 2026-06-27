@@ -20,6 +20,11 @@ class OllamaClient:
         timeout: int = 600,
         query_prefix: str = "",
         doc_prefix: str = "",
+        num_ctx: int = 8192,
+        top_p: float = 0.95,
+        top_k: int = 20,
+        repeat_penalty: float = 1.0,
+        num_predict: int = -1,
     ):
         self.base_url = base_url.rstrip("/")
         self.llm_model = llm_model
@@ -30,6 +35,19 @@ class OllamaClient:
         # embed_texts stays raw; the query/document helpers apply them.
         self.query_prefix = query_prefix
         self.doc_prefix = doc_prefix
+        # Generation options sent with every /api/generate call. num_ctx is the
+        # important one: Ollama defaults it to 4096, which silently truncates RAG
+        # prompts once the retrieved documents + history grow — dropping context
+        # the answer depends on. The rest are qwen3's recommended sampling knobs.
+        # num_predict -1 = unlimited (no output cap).
+        self.gen_options = {
+            "temperature": temperature,
+            "num_ctx": num_ctx,
+            "top_p": top_p,
+            "top_k": top_k,
+            "repeat_penalty": repeat_penalty,
+            "num_predict": num_predict,
+        }
         # Newer Ollama exposes a batch /api/embed; fall back to /api/embeddings.
         self._use_batch_embed = True
 
@@ -88,7 +106,7 @@ class OllamaClient:
                 "model": self.llm_model,
                 "prompt": prompt,
                 "stream": False,
-                "options": {"temperature": self.temperature},
+                "options": self.gen_options,
             },
         )
         return out.get("response", "")
@@ -107,7 +125,7 @@ class OllamaClient:
                 "model": self.llm_model,
                 "prompt": prompt,
                 "stream": True,
-                "options": {"temperature": self.temperature},
+                "options": self.gen_options,
             }
         ).encode("utf-8")
         request = urllib.request.Request(

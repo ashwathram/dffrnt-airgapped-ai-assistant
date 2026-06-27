@@ -11,41 +11,55 @@ const mkId = () => 'm' + (++nextId);  // stable per-message id for actions/targe
 let abortController = null;           // in-flight stream, so the Stop button can cancel it
 
 // Turn "[1]" markers into clickable citation chips mapped to sources by index.
-// Operates on already-escaped text so it can be reused as the Markdown inline
-// hook (it then only ever sees non-code text, leaving code spans untouched).
-function citeChips(sources) {
+// data-msg/data-cite let a click scroll to and highlight the matching source
+// card (see focusSource). Operates on already-escaped text so it can be reused
+// as the Markdown inline hook (it then only ever sees non-code text, leaving
+// code spans untouched).
+function citeChips(sources, msgId) {
   return (escaped) => escaped.replace(/\[(\d+)\]/g, (m, n) => {
     const i = parseInt(n, 10);
     if (sources && i >= 1 && i <= sources.length) {
-      return `<span class="cite-chip" title="${esc(sources[i - 1].filename)}">${i}</span>`;
+      return `<span class="cite-chip" data-msg="${msgId}" data-cite="${i}" title="${esc(sources[i - 1].filename)}">${i}</span>`;
     }
     return m;
   });
 }
 
 // User turns: plain escaped text + citation chips (no Markdown).
-function renderContent(text, sources) {
-  return citeChips(sources)(esc(text));
+function renderContent(text, sources, msgId) {
+  return citeChips(sources, msgId)(esc(text));
 }
 
 // Assistant answers: render Markdown to safe HTML, with citation chips applied
 // to the plain-text runs. .md scopes the styling and resets the bubble's
 // pre-wrap (see styles/markdown.css).
-function renderAnswer(text, sources) {
-  return `<div class="md">${renderMarkdown(text, { inline: citeChips(sources) })}</div>`;
+function renderAnswer(text, sources, msgId) {
+  return `<div class="md">${renderMarkdown(text, { inline: citeChips(sources, msgId) })}</div>`;
 }
 
-// Sources panel — collapses to the first 2 with a "+N more / Show less" toggle.
+// Sources panel — the answer's [n] markers tell us which sources were actually
+// cited. Those lead; the rest (retrieved but unused) collapse into a dimmed
+// "other retrieved sources" group so they stay auditable without crowding out
+// the ones the answer relied on.
 function sourcesHtml(m) {
   const sources = m.sources || [];
   if (!sources.length) return '';
-  const visible = m.sourcesExpanded ? sources : sources.slice(0, 2);
-  // Each source links to the stored file (served from data_dir by the backend).
+
+  // Collect the valid citation numbers present in the final answer text.
+  const cited = new Set();
+  (m.content || '').replace(/\[(\d+)\]/g, (_, n) => {
+    const i = parseInt(n, 10);
+    if (i >= 1 && i <= sources.length) cited.add(i);
+    return '';
+  });
+
+  // Each source keeps its original 1-based number, so the answer's [n] still
+  // maps to badge n and the click-to-flash linkage holds; we only regroup them.
   // Title (section heading or filename stem) headlines the card; the filename,
   // page and score sit in the meta line, with a short excerpt of the cited chunk.
-  const row = (s, i) => `
-    <a class="source" href="/api/documents/${encodeURIComponent(s.filename)}/raw" target="_blank" rel="noopener" title="Open ${esc(s.filename)}">
-      <span class="num">${i + 1}</span>
+  const row = (s, n) => `
+    <a class="source" id="src-${m.id}-${n}" href="/api/documents/${encodeURIComponent(s.filename)}/raw" target="_blank" rel="noopener" title="Open ${esc(s.filename)}">
+      <span class="num">${n}</span>
       <span class="body">
         <span class="fn">${esc(s.title || s.filename)}</span>
         <span class="meta">${esc(s.filename)}${s.page ? ' · p. ' + esc(s.page) : ''}${s.score != null ? ' · score ' + s.score : ''}</span>
@@ -53,13 +67,26 @@ function sourcesHtml(m) {
       </span>
       ${svg('externalLink')}
     </a>`;
-  const toggle = sources.length > 2
-    ? `<button class="src-toggle" data-srctoggle="${m.id}">${m.sourcesExpanded ? 'Show less' : '+' + (sources.length - 2) + ' more'}</button>`
+
+  // Pair sources with their number, then split by whether the answer cited them.
+  // If nothing was cited (model omitted markers), show everything as primary so
+  // we never hide the whole list.
+  const numbered = sources.map((s, idx) => [s, idx + 1]);
+  const anyCited = numbered.some(([, n]) => cited.has(n));
+  const primary = anyCited ? numbered.filter(([, n]) => cited.has(n)) : numbered;
+  const secondary = anyCited ? numbered.filter(([, n]) => !cited.has(n)) : [];
+
+  const n2 = secondary.length;
+  const secondaryHtml = n2
+    ? `<button class="src-toggle" data-srctoggle="${m.id}">${m.sourcesExpanded ? 'Hide' : 'Show'} ${n2} other retrieved source${n2 > 1 ? 's' : ''}</button>`
+      + (m.sourcesExpanded ? `<div class="sources-secondary">${secondary.map(([s, n]) => row(s, n)).join('')}</div>` : '')
     : '';
+
   return `
     <div class="sources">
-      <div class="src-head"><span class="lbl">SOURCES</span>${toggle}</div>
-      ${visible.map(row).join('')}
+      <div class="src-head"><span class="lbl">SOURCES</span></div>
+      ${primary.map(([s, n]) => row(s, n)).join('')}
+      ${secondaryHtml}
     </div>`;
 }
 
@@ -113,7 +140,7 @@ function bubbleInner(m) {
   }
   // Answer text (Markdown + citation chips) + a caret while it streams.
   if (m.content) {
-    html += renderAnswer(m.content, m.sources);
+    html += renderAnswer(m.content, m.sources, m.id);
     if (m.streaming) html += '<span class="stream-cursor"></span>';
   }
   if (!m.streaming) html += sourcesHtml(m);
@@ -145,7 +172,7 @@ function messageHtml(m) {
     <div class="msg ${isUser ? 'user' : 'assistant'}">
       ${isUser ? '' : '<div class="avatar">AI</div>'}
       <div class="col">
-        <div class="bubble"${bubbleId}>${isUser ? renderContent(m.content, m.sources) : bubbleInner(m)}</div>
+        <div class="bubble"${bubbleId}>${isUser ? renderContent(m.content, m.sources, m.id) : bubbleInner(m)}</div>
         ${footer}
       </div>
     </div>`;
@@ -171,7 +198,7 @@ export function renderMessages() {
     + (state.busy ? typingHtml : '')
     + '</div>';
   box.querySelectorAll('.cite-chip').forEach((c) => {
-    c.onclick = () => c.classList.toggle('active');
+    c.onclick = () => focusSource(c.dataset.msg, parseInt(c.dataset.cite, 10));
   });
   box.querySelectorAll('[data-msg-action]').forEach((b) => {
     b.onclick = () => onMessageAction(b.dataset.msgAction, b.dataset.id, b);
@@ -183,6 +210,25 @@ export function renderMessages() {
     };
   });
   box.scrollTop = box.scrollHeight;
+}
+
+// Clicking a "[n]" citation chip scrolls to its source card and flashes it.
+// Cited sources lead the panel, so the card is normally already visible; if it
+// happens to sit in the collapsed "other retrieved sources" group, expand that
+// first (which re-renders, so we look the card up afterwards).
+function focusSource(msgId, n) {
+  const m = state.messages.find((x) => x.id === msgId);
+  if (!m || !m.sources || n < 1 || n > m.sources.length) return;
+  if (!document.getElementById(`src-${msgId}-${n}`) && !m.sourcesExpanded) {
+    m.sourcesExpanded = true;
+    renderMessages();
+  }
+  const card = document.getElementById(`src-${msgId}-${n}`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.classList.remove('flash');
+  void card.offsetWidth; // restart the animation if the same card is re-clicked
+  card.classList.add('flash');
 }
 
 // Patch just the streaming bubble between full re-renders (cheap, per token).

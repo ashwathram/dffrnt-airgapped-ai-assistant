@@ -66,21 +66,31 @@
   font-size: 12px; font-family: var(--font-mono); background: rgba(93,39,184,0.12);
   color: var(--accent); border: 1px solid rgba(93,39,184,0.25); cursor: pointer; vertical-align: baseline;
 }
-.cite-chip.active { background: var(--accent); color: #fff; }
+.cite-chip:hover { background: var(--accent); color: #fff; }
 
 /* white-space: normal resets the bubble's pre-wrap so the source template's
    indentation doesn't render as blank lines (keeps the cards compact). */
 .sources { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; white-space: normal; }
 .src-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .sources .lbl { font-size: 11px; color: var(--muted-foreground); font-weight: 500; letter-spacing: 0.06em; }
-.src-toggle { font-size: 11px; color: var(--muted-foreground); transition: color 0.15s; }
+.src-toggle { display: block; padding: 2px 0; font-size: 11px; color: var(--muted-foreground); transition: color 0.15s; }
 .src-toggle:hover { color: var(--foreground); }
+/* Retrieved-but-uncited sources: present for auditing, visually de-emphasized. */
+.sources-secondary { margin-top: 6px; }
+.sources-secondary .source { opacity: 0.6; }
+.sources-secondary .source:hover { opacity: 1; }
+.sources-secondary .num { background: var(--muted); color: var(--muted-foreground); }
 .source {
   display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 8px;
   background: var(--muted); border: 1px solid var(--border); margin-bottom: 6px;
   text-decoration: none; color: inherit; transition: background 0.15s, border-color 0.15s;
 }
 .source:hover { background: rgba(93,39,184,0.06); border-color: rgba(93,39,184,0.3); }
+.source.flash { animation: src-flash 1.6s ease; }
+@keyframes src-flash {
+  0%, 35% { background: rgba(93,39,184,0.18); border-color: var(--accent); box-shadow: 0 0 0 2px rgba(93,39,184,0.3); }
+  100% { background: var(--muted); border-color: var(--border); box-shadow: none; }
+}
 .source .num {
   width: 18px; height: 18px; flex-shrink: 0; border-radius: 4px; font-size: 11px; font-weight: 500;
   font-family: var(--font-mono); background: rgba(93,39,184,0.15); color: var(--accent);

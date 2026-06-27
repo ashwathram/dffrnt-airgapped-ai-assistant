@@ -35,6 +35,11 @@ ollama = OllamaClient(
     settings.llm_timeout,
     settings.embed_query_prefix,
     settings.embed_document_prefix,
+    settings.llm_num_ctx,
+    settings.llm_top_p,
+    settings.llm_top_k,
+    settings.llm_repeat_penalty,
+    settings.llm_num_predict,
 )
 retriever = Retriever(store, ollama, settings)
 rag = RagPipeline(retriever, ollama, settings)
