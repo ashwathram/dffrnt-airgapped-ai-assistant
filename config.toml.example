@@ -13,7 +13,9 @@ gpu = false
 
 # --- Ollama (LLM + embeddings) ---
 ollama_url = "http://localhost:11434"
-llm_model = "qwen3:4b"             # LLM served by Ollama (used everywhere)
+llm_model = "qwen3:4b" # Lite Model
+#llm_model = "qwen3:14b" # Mid-level Model
+#llm_model = "qwen3:30b-a3b" # High-capacity MoE Model
 embed_model = "bge-m3"
 vector_size = 1024                 # MUST match the embed_model's output dimension
 llm_temperature = 0.1

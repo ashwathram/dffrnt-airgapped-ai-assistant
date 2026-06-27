@@ -42,10 +42,44 @@ else
 fi
 [ "$MISSING" -eq 0 ] || { echo "!! Missing prerequisites (see above). Install them and re-run." >&2; exit 1; }
 
+# ---- update handling: stop the old stack, decide the config's fate ----------
+# All no-ops on a fresh install. On an update we stop the running stack before
+# swapping the image, and protect the operator's edited config.toml — the bundle
+# ships a default config.toml that the untar below would otherwise clobber.
+KEEP_CONFIG=0
+if [ -f "$DEST/run.sh" ]; then
+  echo ">> Updating an existing install in $DEST — stopping the running stack first"
+  bash "$DEST/run.sh" stop || true
+fi
+if [ -f "$DEST/config.toml" ]; then
+  ans="${OVERWRITE_CONFIG:-}"               # set OVERWRITE_CONFIG=y|n to skip the prompt
+  if [ -z "$ans" ]; then
+    if [ -t 0 ]; then
+      printf '>> Existing config.toml found. Overwrite it with the bundle default? [y/N] '
+      read -r ans || ans=""
+    else
+      ans="n"                               # non-interactive: keep it (the safe default)
+    fi
+  fi
+  case "$ans" in
+    [yY]|[yY][eE][sS])
+      echo "   overwriting — archiving the current config as config.toml.old"
+      cp -a "$DEST/config.toml" "$DEST/config.toml.old"
+      ;;
+    *)
+      echo "   keeping the existing config.toml"
+      KEEP_CONFIG=1
+      cp -a "$DEST/config.toml" "$DEST/.config.toml.keep"
+      ;;
+  esac
+fi
+
 # ---- unpack -----------------------------------------------------------------
 echo ">> [2/4] Unpacking bundle"
 mkdir -p "$DEST"
 tar -xzf "$BUNDLE" -C "$DEST" --strip-components=1
+# Restore the preserved config over the bundle's default (kept across the update).
+[ "$KEEP_CONFIG" -eq 1 ] && mv -f "$DEST/.config.toml.keep" "$DEST/config.toml"
 # shellcheck source=/dev/null
 . "$DEST/bundle.conf"   # TARGET_SYSTEM, MODELS, APP_IMAGE
 

@@ -38,6 +38,13 @@ QDRANT_URL="$(cfg qdrant_url http://localhost:6333)";  QDRANT_PORT="${QDRANT_URL
 ENVIRONMENT="$(cfg environment aws)"
 GPU="0"; { [ "$(cfg gpu false)" = "true" ] || [ "$ENVIRONMENT" = "local-cuda" ]; } && GPU="1"
 
+# Models the runtime needs: those frozen into the bundle at package time, PLUS
+# whatever the live config.toml points at now. Without the latter, editing
+# llm_model/embed_model and restarting would run against a model Ollama never
+# pulled. Union + de-dupe, preserving order and dropping blanks.
+MODELS="$(printf '%s\n' $MODELS "$(cfg llm_model '')" "$(cfg embed_model '')" \
+          | awk 'NF && !seen[$0]++' | paste -sd' ' -)"
+
 export API_PORT OLLAMA_PORT QDRANT_PORT
 export HOST_CONFIG="$CONFIG"           # mounted into the API container by compose
 
@@ -65,14 +72,17 @@ wait_for() {  # wait_for <label> <url> <max_seconds>
 }
 
 ensure_models() {
+  local cached
+  cached="$(docker exec ollama ollama list 2>/dev/null || true)"
   for m in $MODELS; do
-    if docker exec ollama ollama list 2>/dev/null | grep -q "$m"; then
+    # Match the tag literally; Ollama lists an untagged name as "<name>:latest".
+    if printf '%s\n' "$cached" | grep -Fq "$m"; then
       continue
     fi
     if [ "$TARGET_SYSTEM" = offline ]; then
       echo "!! Model '$m' missing from the cached store" >&2
     else
-      echo ">> Pulling model: $m"
+      echo ">> Pulling model: $m (not in local cache)"
       docker exec ollama ollama pull "$m"
     fi
   done
