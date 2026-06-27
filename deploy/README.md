@@ -10,6 +10,11 @@ deploy/build_offline.sh
 # -> dist/offline-bundle.tar.gz
 ```
 
+Pull whichever `llm_model` your `config.toml` names: `qwen3:4b` is the lightweight
+default; `qwen3:30b-a3b` is the high-capacity MoE option. The embedding model is
+`bge-m3` (1024-dim). `build_offline.sh` vendors whatever is in your local Ollama
+model store, so make sure the model named in the bundle's `config.toml` is pulled.
+
 The bundle contains: Python wheels (`wheelhouse/`), the app wheel, the Qdrant +
 Ollama images (`images/`), the Ollama model store (`ollama_models/`), a
 `docker-compose.yml`, and a starter `config.toml`.

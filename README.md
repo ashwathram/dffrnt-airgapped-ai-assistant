@@ -11,16 +11,24 @@ This project delivers a **private, air-gapped AI assistant** that serves as DFFR
 
 The system runs **completely offline** on dedicated hardware. Embeddings and text generation are served by a local **Ollama** instance; vectors are stored in a local **Qdrant** instance. No data leaves the machine.
 
+**Models** (served locally by Ollama):
+
+- **Embeddings:** `bge-m3` — 1024-dimensional vectors, cosine similarity (no task prefixes).
+- **LLM:** the `qwen3` family — `qwen3:4b` (lightweight, the offline-bundle default) or `qwen3:30b-a3b` (high-capacity MoE, used in development). The model is set by `llm_model` in `config.toml`; nothing else needs to change.
+
 ---
 
 ## Key Features
 
 - Fully air-gapped deployment (no internet required after setup)
 - Retrieval-Augmented Generation (RAG) for accurate, source-grounded answers
-- Single conversational web UI with a document library and upload flow
-- Document ingestion for **PDF, DOCX, PPTX, XLSX, CSV, TXT, Markdown**
-- One ingestion pipeline shared by the web upload and the batch CLI
-- Source attribution and prompt-injection-resistant system prompt
+- Single conversational web UI: streaming answers, an optional reasoning trace, a document library, and an upload flow
+- Inline **`[n]` citations** that are clickable — clicking one scrolls to and highlights the cited source; cited sources are listed first, with retrieved-but-unused ones collapsed into a dimmed group below
+- Tag-based **scoping** to focus retrieval on a chosen subset of documents, plus saved conversations
+- Document ingestion for **PDF, DOCX, PPTX, XLSX, CSV, TXT, Markdown**, with one pipeline shared by the web upload and the batch CLI
+- Source attribution and a prompt-injection-resistant system prompt that refuses when the documents don't support an answer
+- Generation tuned for RAG: an explicit `num_ctx` so long prompts are never silently truncated, plus a relevance cut (`score_margin`) that drops weak chunks before they reach the prompt
+- A reproducible **evaluation harness** ([eval/](eval/)) for tuning retrieval and scoring answer quality
 - Standard-library-only LLM client (no heavy ML frameworks to ship)
 
 ---
@@ -41,16 +49,23 @@ Question ──▶ retrieve (embed ▶ search ▶ assemble) ──▶ RAG (promp
 | Shared payload contract | [schema.py](dffrnt_assistant/schema.py) |
 | LLM management (Ollama, stdlib only) | [ollama.py](dffrnt_assistant/ollama.py) |
 | Document ingestion | [ingest/](dffrnt_assistant/ingest/) (`loaders`, `chunker`, `tags`, `metadata`, `pipeline`) |
-| Retrieval & query assembly | [retrieval/](dffrnt_assistant/retrieval/) (`store`, `retriever`) |
+| Retrieval & query assembly | [retrieval/](dffrnt_assistant/retrieval/) (`store`, `retriever`, `conversation_store`, `tag_store`) |
 | RAG | [rag/](dffrnt_assistant/rag/) (`prompt`, `pipeline`) |
-| Presentation (HTTP + UI) | [api/](dffrnt_assistant/api/) (`app`, `services`, `audit`) + [ui/index.html](dffrnt_assistant/ui/index.html) |
+| Presentation (HTTP + UI) | [api/](dffrnt_assistant/api/) (`app`, `services`, `audit`) + [ui/](dffrnt_assistant/ui/) (`index.html` + `js/`, `styles/`) |
 | Batch ingestion CLI | [cli.py](dffrnt_assistant/cli.py) |
+| Evaluation harness | [eval/](eval/) (`rag_eval`, `answer_eval`, `prompt_size`, `sample_queries`) |
 
 ---
 
 ## Configuration
 
-Every tunable (hosts/ports, models, `top_k`, chunk size/overlap, distance metric, collection name, etc.) lives in one place. Set values via a `config.toml` file or environment variables — env wins over the file, which wins over built-in defaults.
+Every tunable lives in one place — [config.py](dffrnt_assistant/config.py) defines the schema and defaults. Set values via a `config.toml` file or environment variables — env wins over the file, which wins over built-in defaults.
+
+Notable groups:
+
+- **Models:** `llm_model`, `embed_model`, `vector_size` (must match the embedding model's output dimension).
+- **Generation:** `llm_temperature`, and the Ollama options `llm_num_ctx` (context window — set above Ollama's 4096 default so retrieved documents + history aren't truncated), `llm_top_p`, `llm_top_k`, `llm_repeat_penalty`, `llm_num_predict`.
+- **Retrieval:** `top_k`, `score_margin` (relative cut: drop hits scoring this far below the best hit), `distance`, chunk size/overlap/strategy.
 
 ```bash
 cp config.toml.example config.toml   # then edit
@@ -58,7 +73,7 @@ cp config.toml.example config.toml   # then edit
 API_PORT=9000 TOP_K=8 dffrnt-api
 ```
 
-See [config.toml.example](config.toml.example) for the full list.
+See [config.toml.example](config.toml.example) for the full list. Retrieval and generation defaults were tuned with the evaluation harness (below).
 
 ---
 
@@ -82,6 +97,21 @@ Both entrypoints read the same configuration and write to the same Qdrant collec
 uv run pytest                 # fast unit tests (no services needed)
 uv run pytest -m integration  # end-to-end; needs a running server + Qdrant + Ollama
 ```
+
+---
+
+## Evaluation
+
+A reproducible harness ([eval/](eval/)) measures retrieval and answer quality against sample queries grounded in the ingested corpus. It runs against the live Qdrant + Ollama stack.
+
+```bash
+python -m eval.rag_eval        # sweep top_k / score_margin; reports P@1, recall, kept-chunk counts
+python -m eval.prompt_size     # estimate RAG prompt token sizes (to size num_ctx)
+python -m eval.answer_eval     # score generated answers: correctness, citation, refusal accuracy
+python -m eval.answer_eval --temps 0.1,0.7   # compare generation settings on the same queries
+```
+
+`answer_eval` includes out-of-corpus negative controls that the assistant must refuse, directly testing the anti-hallucination guard. Sample queries and their grounded checks live in [eval/sample_queries.py](eval/sample_queries.py).
 
 ---
 
