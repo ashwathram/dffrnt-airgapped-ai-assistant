@@ -7,7 +7,7 @@ HTTP or ML client dependency. Replaces langchain-ollama / sentence-transformers.
 import json
 import urllib.error
 import urllib.request
-from typing import Iterator, List, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 
 class OllamaClient:
@@ -99,19 +99,21 @@ class OllamaClient:
         return self.embed_texts([self.query_prefix + text])[0]
 
     # -- Generation --------------------------------------------------------
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, options_override: Optional[Dict] = None) -> str:
         out = self._post(
             "/api/generate",
             {
                 "model": self.llm_model,
                 "prompt": prompt,
                 "stream": False,
-                "options": self.gen_options,
+                "options": {**self.gen_options, **(options_override or {})},
             },
         )
         return out.get("response", "")
 
-    def generate_stream(self, prompt: str) -> Iterator[Tuple[str, str]]:
+    def generate_stream(
+        self, prompt: str, options_override: Optional[Dict] = None
+    ) -> Iterator[Tuple[str, str]]:
         """Yield ``(channel, text)`` pairs as Ollama produces them.
 
         ``channel`` is "thinking" for a reasoning model's chain-of-thought
@@ -125,7 +127,7 @@ class OllamaClient:
                 "model": self.llm_model,
                 "prompt": prompt,
                 "stream": True,
-                "options": self.gen_options,
+                "options": {**self.gen_options, **(options_override or {})},
             }
         ).encode("utf-8")
         request = urllib.request.Request(

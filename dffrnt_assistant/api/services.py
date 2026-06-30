@@ -42,7 +42,14 @@ class AssistantService:
 
     # -- Query -------------------------------------------------------------
     def query(
-        self, question: str, history: Optional[List[dict]] = None, tags: Optional[List[str]] = None
+        self,
+        question: str,
+        history: Optional[List[dict]] = None,
+        tags: Optional[List[str]] = None,
+        mode: str = "default",
+        grounding_preference: str = "auto",
+        selected_resume_filename: str = "",
+        selected_rfp_filename: str = "",
     ) -> dict:
         question = (question or "").strip()
         if not question:
@@ -52,7 +59,21 @@ class AssistantService:
 
         history = history or []
         tag_filter = [t for t in (tags or []) if t]
-        result = self.rag.answer(question, history, tag_filter)
+        mode = (mode or "default").strip().lower()
+        grounding_preference = (grounding_preference or "auto").strip().lower()
+        if mode not in {"default", "resume"}:
+            raise UserError(400, "Unsupported chat mode")
+        if grounding_preference not in {"auto", "chat", "documents"}:
+            raise UserError(400, "Unsupported grounding preference")
+        result = self.rag.answer(
+            question,
+            history,
+            tag_filter,
+            mode,
+            grounding_preference,
+            (selected_resume_filename or "").strip(),
+            (selected_rfp_filename or "").strip(),
+        )
         self.audit.write(
             "QUERY",
             {
@@ -61,12 +82,23 @@ class AssistantService:
                 "sources_count": len(result["sources"]),
                 "history_turns": len(history),
                 "tag_filter": tag_filter,
+                "mode": mode,
+                "grounding_preference": grounding_preference,
+                "selected_resume_filename": (selected_resume_filename or "").strip(),
+                "selected_rfp_filename": (selected_rfp_filename or "").strip(),
             },
         )
         return result
 
     def query_stream(
-        self, question: str, history: Optional[List[dict]] = None, tags: Optional[List[str]] = None
+        self,
+        question: str,
+        history: Optional[List[dict]] = None,
+        tags: Optional[List[str]] = None,
+        mode: str = "default",
+        grounding_preference: str = "auto",
+        selected_resume_filename: str = "",
+        selected_rfp_filename: str = "",
     ):
         """Like ``query`` but streams ``(kind, payload)`` events.
 
@@ -81,11 +113,27 @@ class AssistantService:
             raise UserError(400, "Question too long — max 2000 characters")
         history = history or []
         tag_filter = [t for t in (tags or []) if t]
+        mode = (mode or "default").strip().lower()
+        grounding_preference = (grounding_preference or "auto").strip().lower()
+        if mode not in {"default", "resume"}:
+            raise UserError(400, "Unsupported chat mode")
+        if grounding_preference not in {"auto", "chat", "documents"}:
+            raise UserError(400, "Unsupported grounding preference")
+        selected_resume_filename = (selected_resume_filename or "").strip()
+        selected_rfp_filename = (selected_rfp_filename or "").strip()
 
         def events():
             sources_count = 0
             answer_length = 0
-            for kind, payload in self.rag.answer_stream(question, history, tag_filter):
+            for kind, payload in self.rag.answer_stream(
+                question,
+                history,
+                tag_filter,
+                mode,
+                grounding_preference,
+                selected_resume_filename,
+                selected_rfp_filename,
+            ):
                 if kind == "sources":
                     sources_count = len(payload)
                 elif kind == "token":
@@ -101,6 +149,10 @@ class AssistantService:
                     "history_turns": len(history),
                     "tag_filter": tag_filter,
                     "streamed": True,
+                    "mode": mode,
+                    "grounding_preference": grounding_preference,
+                    "selected_resume_filename": selected_resume_filename,
+                    "selected_rfp_filename": selected_rfp_filename,
                 },
             )
 
@@ -494,6 +546,8 @@ class ConversationService:
                 "title": c.get("title", "Untitled"),
                 "updated_at": c.get("updated_at", 0),
                 "pinned": bool(c.get("pinned", False)),
+                "mode": c.get("mode", "default"),
+                "grounding_preference": c.get("grounding_preference", "auto"),
             }
             for c in self.store.list()
         ]
@@ -506,8 +560,18 @@ class ConversationService:
             raise UserError(404, "Conversation not found")
         return convo
 
-    def create(self, title: str, messages: Optional[list]) -> dict:
+    def create(
+        self,
+        title: str,
+        messages: Optional[list],
+        mode: str = "default",
+        grounding_preference: str = "auto",
+        selected_resume_filename: str = "",
+        selected_rfp_filename: str = "",
+    ) -> dict:
         now = time.time()
+        mode = (mode or "default").strip().lower()
+        grounding_preference = (grounding_preference or "auto").strip().lower()
         convo = {
             "id": str(uuid.uuid4()),
             "title": (title or "").strip()[:80] or "New conversation",
@@ -515,6 +579,14 @@ class ConversationService:
             "created_at": now,
             "updated_at": now,
             "pinned": False,
+            "mode": mode if mode in {"default", "resume"} else "default",
+            "grounding_preference": (
+                grounding_preference
+                if grounding_preference in {"auto", "chat", "documents"}
+                else "auto"
+            ),
+            "selected_resume_filename": (selected_resume_filename or "").strip(),
+            "selected_rfp_filename": (selected_rfp_filename or "").strip(),
         }
         self.store.save(convo)
         return convo
@@ -525,6 +597,10 @@ class ConversationService:
         title: Optional[str] = None,
         messages: Optional[list] = None,
         pinned: Optional[bool] = None,
+        mode: Optional[str] = None,
+        grounding_preference: Optional[str] = None,
+        selected_resume_filename: Optional[str] = None,
+        selected_rfp_filename: Optional[str] = None,
     ) -> dict:
         convo = self.store.get(conversation_id)
         if convo is None:
@@ -537,6 +613,18 @@ class ConversationService:
             convo["messages"] = messages
         if pinned is not None:
             convo["pinned"] = bool(pinned)
+        if mode is not None:
+            cleaned_mode = mode.strip().lower()
+            if cleaned_mode in {"default", "resume"}:
+                convo["mode"] = cleaned_mode
+        if grounding_preference is not None:
+            cleaned_pref = grounding_preference.strip().lower()
+            if cleaned_pref in {"auto", "chat", "documents"}:
+                convo["grounding_preference"] = cleaned_pref
+        if selected_resume_filename is not None:
+            convo["selected_resume_filename"] = selected_resume_filename.strip()
+        if selected_rfp_filename is not None:
+            convo["selected_rfp_filename"] = selected_rfp_filename.strip()
         convo["updated_at"] = time.time()
         self.store.save(convo)
         return convo

@@ -77,12 +77,17 @@ class QueryRequest(BaseModel):
     question: str
     conversation_history: List[ConversationTurn] = []
     tags: List[str] = []  # restrict retrieval to documents carrying any of these tags
+    mode: str = "default"
+    grounding_preference: str = "auto"
+    selected_resume_filename: str = ""
+    selected_rfp_filename: str = ""
 
 
 class QueryResponse(BaseModel):
     answer: str
     sources: list
     question: str
+    meta: dict = {}
 
 
 class TagTypeRequest(BaseModel):
@@ -107,12 +112,20 @@ class DocDescriptionRequest(BaseModel):
 class ConversationCreate(BaseModel):
     title: str = ""
     messages: list = []
+    mode: str = "default"
+    grounding_preference: str = "auto"
+    selected_resume_filename: str = ""
+    selected_rfp_filename: str = ""
 
 
 class ConversationUpdate(BaseModel):
     title: Optional[str] = None
     messages: Optional[list] = None
     pinned: Optional[bool] = None
+    mode: Optional[str] = None
+    grounding_preference: Optional[str] = None
+    selected_resume_filename: Optional[str] = None
+    selected_rfp_filename: Optional[str] = None
 
 
 def _handle(call):
@@ -136,7 +149,17 @@ def health():
 @app.post("/api/query", response_model=QueryResponse)
 def query_endpoint(request: QueryRequest):
     history = [turn.model_dump() for turn in request.conversation_history]
-    return _handle(lambda: service.query(request.question, history, request.tags))
+    return _handle(
+        lambda: service.query(
+            request.question,
+            history,
+            request.tags,
+            request.mode,
+            request.grounding_preference,
+            request.selected_resume_filename,
+            request.selected_rfp_filename,
+        )
+    )
 
 
 @app.post("/api/query/stream")
@@ -150,15 +173,27 @@ def query_stream_endpoint(request: QueryRequest):
     """
     history = [turn.model_dump() for turn in request.conversation_history]
     # Validation errors surface here (before streaming) as a normal HTTP error.
-    events = _handle(lambda: service.query_stream(request.question, history, request.tags))
+    events = _handle(
+        lambda: service.query_stream(
+            request.question,
+            history,
+            request.tags,
+            request.mode,
+            request.grounding_preference,
+            request.selected_resume_filename,
+            request.selected_rfp_filename,
+        )
+    )
 
-    line_type = {"sources": "sources", "thinking": "thinking", "token": "token"}
+    line_type = {"meta": "meta", "sources": "sources", "thinking": "thinking", "token": "token"}
 
     def ndjson():
         try:
             for kind, payload in events:
                 if kind == "sources":
                     yield json.dumps({"type": "sources", "sources": payload}) + "\n"
+                elif kind == "meta":
+                    yield json.dumps({"type": "meta", "meta": payload}) + "\n"
                 else:
                     yield json.dumps({"type": line_type[kind], "text": payload}) + "\n"
             yield json.dumps({"type": "done"}) + "\n"
@@ -257,7 +292,16 @@ def list_conversations():
 
 @app.post("/api/conversations")
 def create_conversation(body: ConversationCreate):
-    return _handle(lambda: conversation_service.create(body.title, body.messages))
+    return _handle(
+        lambda: conversation_service.create(
+            body.title,
+            body.messages,
+            body.mode,
+            body.grounding_preference,
+            body.selected_resume_filename,
+            body.selected_rfp_filename,
+        )
+    )
 
 
 @app.delete("/api/conversations")
@@ -274,7 +318,14 @@ def get_conversation(conversation_id: str):
 def update_conversation(conversation_id: str, body: ConversationUpdate):
     return _handle(
         lambda: conversation_service.update(
-            conversation_id, body.title, body.messages, body.pinned
+            conversation_id,
+            body.title,
+            body.messages,
+            body.pinned,
+            body.mode,
+            body.grounding_preference,
+            body.selected_resume_filename,
+            body.selected_rfp_filename,
         )
     )
 

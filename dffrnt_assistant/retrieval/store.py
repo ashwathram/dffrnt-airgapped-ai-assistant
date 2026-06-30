@@ -1,6 +1,6 @@
 """The one Qdrant wrapper. Single collection, single payload schema."""
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -58,15 +58,22 @@ class VectorStore:
             self.client.upsert(collection_name=self.collection_name, points=batch)
 
     def search(
-        self, query_vector: List[float], top_k: int, tag_filter: List[str] = None
+        self,
+        query_vector: List[float],
+        top_k: int,
+        tag_filter: List[str] = None,
+        filename_filter: Optional[List[str]] = None,
     ) -> List[Dict]:
         """Top-k nearest chunks, optionally restricted to those carrying any of
         the given tags (so the assistant searches only the scoped documents)."""
-        query_filter = None
+        must = []
         if tag_filter:
-            query_filter = Filter(
-                must=[FieldCondition(key="tags", match=MatchAny(any=list(tag_filter)))]
+            must.append(FieldCondition(key="tags", match=MatchAny(any=list(tag_filter))))
+        if filename_filter:
+            must.append(
+                FieldCondition(key="filename", match=MatchAny(any=list(filename_filter)))
             )
+        query_filter = Filter(must=must) if must else None
         results = self.client.query_points(
             collection_name=self.collection_name,
             query=query_vector,
@@ -126,6 +133,18 @@ class VectorStore:
         """Return every stored payload (used to build the document library view)."""
         points, _ = self.client.scroll(
             collection_name=self.collection_name, limit=limit, with_payload=True
+        )
+        return [p.payload for p in points]
+
+    def payloads_by_filename(self, filename: str, limit: int = 1000) -> List[Dict]:
+        """Return every stored payload for a single document."""
+        points, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="filename", match=MatchValue(value=filename))]
+            ),
+            limit=limit,
+            with_payload=True,
         )
         return [p.payload for p in points]
 

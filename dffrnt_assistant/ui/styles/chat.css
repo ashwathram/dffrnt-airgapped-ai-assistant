@@ -71,6 +71,12 @@
 /* white-space: normal resets the bubble's pre-wrap so the source template's
    indentation doesn't render as blank lines (keeps the cards compact). */
 .sources { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; white-space: normal; }
+.provenance { margin-top: 12px; }
+.prov-chip {
+  display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px;
+  background: rgba(93,39,184,0.08); border: 1px solid rgba(93,39,184,0.22); color: var(--accent);
+  font-size: 11px; font-weight: 500;
+}
 .src-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .sources .lbl { font-size: 11px; color: var(--muted-foreground); font-weight: 500; letter-spacing: 0.06em; }
 .src-toggle { display: block; padding: 2px 0; font-size: 11px; color: var(--muted-foreground); transition: color 0.15s; }
@@ -147,8 +153,33 @@
 .send-btn.ready { background: var(--primary); color: var(--primary-foreground); }
 .disclaimer { text-align: center; font-size: 11px; color: var(--muted-foreground); margin-top: 8px; }
 
-/* Thinking toggle pill (sits above the composer, right-aligned) */
-.composer-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+/* Composer toggles (sit above the composer, right-aligned) */
+.composer-tools { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 8px; }
+.rfp-selectors {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.rfp-selectors.hidden { display: none; }
+.rfp-selector {
+  display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--card);
+}
+.rfp-selector-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.rfp-selector select {
+  min-width: 200px; max-width: 260px; border: none; background: transparent; outline: none;
+  color: var(--foreground); font-size: 12px; font-family: inherit;
+}
+.rfp-selector select:disabled { color: var(--muted-foreground); }
+.rfp-mode-toggle {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 8px;
+  font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: transparent;
+  color: var(--muted-foreground); transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.rfp-mode-toggle:hover { background: var(--muted); }
+.rfp-mode-toggle.on { background: rgba(93,39,184,0.08); border-color: rgba(93,39,184,0.3); color: var(--accent); }
+.rfp-mode-toggle .icon { font-size: 13px; }
 .think-toggle {
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 8px;
   font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: transparent;
@@ -195,3 +226,10 @@
 .trace-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); flex-shrink: 0; margin-top: 6px; }
 .trace-line.current .trace-dot { background: var(--accent); }
 .trace-text { min-width: 0; font-family: var(--font-mono); word-break: break-word; }
+
+@media (max-width: 900px) {
+  .composer-tools { justify-content: stretch; flex-wrap: wrap; }
+  .rfp-selectors { width: 100%; }
+  .rfp-selector { flex: 1 1 100%; }
+  .rfp-selector select { min-width: 0; width: 100%; max-width: none; }
+}

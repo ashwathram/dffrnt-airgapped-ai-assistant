@@ -3,12 +3,64 @@ import { $, esc, nowTime } from './util.js';
 import { svg } from './icons.js';
 import { state, SUGGESTIONS } from './state.js';
 import { renderMarkdown } from './markdown.js';
-import { queryStream, createConversation, updateConversation, getConversation } from './api.js';
+import {
+  queryStream, createConversation, updateConversation, getConversation, listDocuments,
+} from './api.js';
 import { loadConversations, renderSidebar } from './sidebar.js';
 
 let nextId = 0;
 const mkId = () => 'm' + (++nextId);  // stable per-message id for actions/targeting
 let abortController = null;           // in-flight stream, so the Stop button can cancel it
+
+function composerPlaceholder() {
+  return state.resumeMode
+    ? 'Ask to tailor the selected resume to the selected uploaded RFP…'
+    : 'Ask anything about your documents…';
+}
+
+function provenanceLabel(meta = {}) {
+  if (meta.source_mode === 'documents' && meta.mode === 'resume') return 'Tailored only from selected uploaded files';
+  if (meta.source_mode === 'documents') return 'Tailored only from uploaded files';
+  if (meta.source_mode === 'mixed') return 'Tailored from uploaded files';
+  return 'Needs uploaded RFP and resume files';
+}
+
+function docsByKind(kind) {
+  const needle = kind.toLowerCase();
+  return (state.documents || []).filter((d) => {
+    const tags = (d.tags || []).map((tag) => tag.toLowerCase());
+    const haystack = [d.filename, d.description || ''].join(' ').toLowerCase();
+    return tags.includes(needle) || haystack.includes(needle);
+  });
+}
+
+function syncSelectedFile(key, options) {
+  const current = state[key];
+  if (current && options.some((doc) => doc.filename === current)) return;
+  state[key] = options.length === 1 ? options[0].filename : '';
+}
+
+function renderRfpSelectors() {
+  const wrap = $('rfpSelectors');
+  const resumeSelect = $('resumeSelect');
+  const rfpSelect = $('rfpSelect');
+  if (!wrap || !resumeSelect || !rfpSelect) return;
+
+  const resumeDocs = docsByKind('resume');
+  const rfpDocs = docsByKind('rfp');
+  syncSelectedFile('selectedResumeFilename', resumeDocs);
+  syncSelectedFile('selectedRfpFilename', rfpDocs);
+
+  wrap.classList.toggle('hidden', !state.resumeMode);
+  resumeSelect.innerHTML = '<option value="">Select resume</option>'
+    + resumeDocs.map((d) => `<option value="${esc(d.filename)}">${esc(d.filename)}</option>`).join('');
+  rfpSelect.innerHTML = '<option value="">Select RFP</option>'
+    + rfpDocs.map((d) => `<option value="${esc(d.filename)}">${esc(d.filename)}</option>`).join('');
+  resumeSelect.value = state.selectedResumeFilename || '';
+  rfpSelect.value = state.selectedRfpFilename || '';
+  resumeSelect.disabled = !state.resumeMode;
+  rfpSelect.disabled = !state.resumeMode;
+}
 
 // Turn "[1]" markers into clickable citation chips mapped to sources by index.
 // data-msg/data-cite let a click scroll to and highlight the matching source
@@ -35,6 +87,11 @@ function renderContent(text, sources, msgId) {
 // pre-wrap (see styles/markdown.css).
 function renderAnswer(text, sources, msgId) {
   return `<div class="md">${renderMarkdown(text, { inline: citeChips(sources, msgId) })}</div>`;
+}
+
+function provenanceHtml(m) {
+  if (!m.meta || m.meta.mode !== 'resume') return '';
+  return `<div class="provenance"><span class="prov-chip">${esc(provenanceLabel(m.meta))}</span></div>`;
 }
 
 // Sources panel — the answer's [n] markers tell us which sources were actually
@@ -143,8 +200,37 @@ function bubbleInner(m) {
     html += renderAnswer(m.content, m.sources, m.id);
     if (m.streaming) html += '<span class="stream-cursor"></span>';
   }
-  if (!m.streaming) html += sourcesHtml(m);
+  if (!m.streaming) {
+    html += provenanceHtml(m);
+    html += sourcesHtml(m);
+  }
   return html;
+}
+
+function renderRfpModeToggle() {
+  const btn = $('rfpModeToggle');
+  const txt = $('rfpModeText');
+  if (!btn || !txt) return;
+  txt.textContent = state.resumeMode ? 'Tailor resume to RFP mode' : 'Not tailored to RFP mode';
+  btn.classList.toggle('on', state.resumeMode);
+}
+
+function syncComposerModeUi() {
+  const composer = $('composer');
+  if (composer) composer.placeholder = composerPlaceholder();
+  renderRfpModeToggle();
+  renderRfpSelectors();
+}
+
+function setResumeMode(on) {
+  state.resumeMode = !!on;
+  state.resumeGroundingPreference = 'documents';
+  syncComposerModeUi();
+}
+
+function setGroundingPreference(value) {
+  state.resumeGroundingPreference = 'documents';
+  syncComposerModeUi();
 }
 
 // Hover action row under a finished assistant message.
@@ -210,6 +296,7 @@ export function renderMessages() {
     };
   });
   box.scrollTop = box.scrollHeight;
+  syncComposerModeUi();
 }
 
 // Clicking a "[n]" citation chip scrolls to its source card and flashes it.
@@ -257,14 +344,32 @@ export async function sendMessage(text) {
 async function persist() {
   const msgs = state.messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => ({ role: m.role, content: m.content, sources: m.sources || [], ts: m.ts || '' }));
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+      sources: m.sources || [],
+      ts: m.ts || '',
+    }));
   if (!msgs.length) return;
   if (!state.conversationId) {
     const title = (state.messages.find((m) => m.role === 'user') || {}).content || 'New conversation';
-    const { ok, data } = await createConversation({ title: title.slice(0, 80), messages: msgs });
+    const { ok, data } = await createConversation({
+      title: title.slice(0, 80),
+      messages: msgs,
+      mode: state.resumeMode ? 'resume' : 'default',
+      grounding_preference: state.resumeGroundingPreference,
+      selected_resume_filename: state.selectedResumeFilename,
+      selected_rfp_filename: state.selectedRfpFilename,
+    });
     if (ok) state.conversationId = data.id;
   } else {
-    await updateConversation(state.conversationId, { messages: msgs });
+    await updateConversation(state.conversationId, {
+      messages: msgs,
+      mode: state.resumeMode ? 'resume' : 'default',
+      grounding_preference: state.resumeGroundingPreference,
+      selected_resume_filename: state.selectedResumeFilename,
+      selected_rfp_filename: state.selectedRfpFilename,
+    });
   }
   loadConversations();
 }
@@ -277,13 +382,23 @@ export async function loadConversation(id) {
   if (!ok) { clearChat(); return; }
   state.conversationId = id;
   state.busy = false;
+  state.resumeMode = (data.mode || 'default') === 'resume';
+  state.resumeGroundingPreference = 'documents';
+  state.selectedResumeFilename = data.selected_resume_filename || '';
+  state.selectedRfpFilename = data.selected_rfp_filename || '';
   state.messages = (data.messages || []).map((m) => ({
-    id: mkId(), role: m.role, content: m.content, sources: m.sources || [], ts: m.ts || '', feedback: null,
+    id: mkId(),
+    role: m.role,
+    content: m.content,
+    sources: m.sources || [],
+    ts: m.ts || '',
+    feedback: null,
   }));
   renderMessages();
   refreshSendBtn();
   renderSidebar();
   $('topbarTitle').textContent = data.title || 'Conversation';
+  syncComposerModeUi();
 }
 
 // Answer the most recent user turn. Used for both a fresh send and Regenerate,
@@ -294,12 +409,30 @@ async function runQuery() {
   if (!last || last.role !== 'user') return;
   const question = last.content;
   const history = turns.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
+  if (state.resumeMode && (!state.selectedResumeFilename || !state.selectedRfpFilename)) {
+    state.messages.push({
+      id: mkId(),
+      role: 'notice',
+      content: 'Select one uploaded resume and one uploaded RFP before using RFP tailoring mode.',
+    });
+    renderMessages();
+    return;
+  }
 
   state.busy = true; // guard concurrent sends + show the typing indicator + Stop button
   renderMessages();
   refreshSendBtn();
 
-  const assistant = { id: mkId(), role: 'assistant', content: '', thinking: '', sources: [], streaming: true, feedback: null };
+  const assistant = {
+    id: mkId(),
+    role: 'assistant',
+    content: '',
+    thinking: '',
+    sources: [],
+    streaming: true,
+    feedback: null,
+    meta: null,
+  };
   let started = false;
   // Add the assistant bubble on the first thinking/answer token, replacing the
   // standalone typing indicator.
@@ -314,8 +447,19 @@ async function runQuery() {
 
   abortController = new AbortController();
   try {
-    for await (const ev of queryStream(question, history, abortController.signal, state.chatScope)) {
-      if (ev.type === 'sources') {
+    for await (const ev of queryStream(
+      question,
+      history,
+      abortController.signal,
+      state.chatScope,
+      state.resumeMode ? 'resume' : 'default',
+      state.resumeGroundingPreference,
+      state.selectedResumeFilename,
+      state.selectedRfpFilename,
+    )) {
+      if (ev.type === 'meta') {
+        assistant.meta = ev.meta || null;
+      } else if (ev.type === 'sources') {
         assistant.sources = ev.sources || [];
       } else if (ev.type === 'thinking') {
         assistant.thinking += ev.text;
@@ -415,14 +559,22 @@ export function clearChat() {
   state.messages = [];
   state.busy = false;
   state.conversationId = null;
+  state.resumeMode = false;
+  state.resumeGroundingPreference = 'documents';
+  state.selectedResumeFilename = '';
+  state.selectedRfpFilename = '';
   renderMessages();
   renderSidebar();
   refreshSendBtn();
   $('topbarTitle').textContent = 'New conversation';
+  syncComposerModeUi();
 }
 
 export function initComposer() {
   const composer = $('composer');
+  const rfpToggle = $('rfpModeToggle');
+  const resumeSelect = $('resumeSelect');
+  const rfpSelect = $('rfpSelect');
   const sync = () => {
     composer.style.height = 'auto';
     composer.style.height = Math.min(composer.scrollHeight, 160) + 'px';
@@ -436,6 +588,23 @@ export function initComposer() {
   composer.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!state.busy) submit(); }
   });
+  rfpToggle.onclick = () => setResumeMode(!state.resumeMode);
+  resumeSelect.onchange = () => {
+    state.selectedResumeFilename = resumeSelect.value || '';
+    persist();
+  };
+  rfpSelect.onchange = () => {
+    state.selectedRfpFilename = rfpSelect.value || '';
+    persist();
+  };
   $('sendBtn').onclick = () => { if (state.busy) stopStreaming(); else submit(); };
+  syncComposerModeUi();
   sync();
+}
+
+export async function refreshChatDocuments() {
+  const { ok, data } = await listDocuments();
+  if (!ok) return;
+  state.documents = data.documents || [];
+  renderRfpSelectors();
 }

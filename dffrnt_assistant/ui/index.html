@@ -73,6 +73,24 @@
         <div class="messages scroll-thin" id="messages"></div>
         <div class="composer-wrap">
           <div class="composer-tools">
+            <button class="rfp-mode-toggle" id="rfpModeToggle" title="Toggle RFP tailoring mode">
+              <span data-icon="fileText" class="icon"></span>
+              <span class="tt-text" id="rfpModeText">Not tailored to RFP mode</span>
+            </button>
+            <div class="rfp-selectors hidden" id="rfpSelectors">
+              <label class="rfp-selector">
+                <span class="rfp-selector-label">Resume</span>
+                <select id="resumeSelect">
+                  <option value="">Select resume</option>
+                </select>
+              </label>
+              <label class="rfp-selector">
+                <span class="rfp-selector-label">RFP</span>
+                <select id="rfpSelect">
+                  <option value="">Select RFP</option>
+                </select>
+              </label>
+            </div>
             <button class="think-toggle" id="thinkingToggle" title="Toggle thinking">
               <span data-icon="brain" class="icon"></span>
               <span class="tt-text" id="thinkingText">Thinking on</span>

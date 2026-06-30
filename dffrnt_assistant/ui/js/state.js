@@ -18,6 +18,11 @@ export const state = {
   // Saved conversations: id of the open one + light list for the sidebar.
   conversationId: null,
   conversations: [],
+  // Resume mode is a narrower RFP tailoring workflow backed by uploaded docs.
+  resumeMode: false,
+  resumeGroundingPreference: 'documents',
+  selectedResumeFilename: '',
+  selectedRfpFilename: '',
 };
 
 export const SUGGESTIONS = [
