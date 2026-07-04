@@ -12,8 +12,15 @@
 .scope-docs { font-size: 12px; color: var(--muted-foreground); margin-right: 8px; }
 .scope-chev { font-size: 14px; }
 .scope-body { display: flex; flex-direction: column; gap: 10px; padding: 2px 32px 14px; }
+.scope-hint { font-size: 12px; color: var(--muted-foreground); line-height: 1.5; margin-bottom: 2px; }
 .scope-group { display: flex; flex-direction: column; gap: 5px; }
-.scope-gname { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; }
+/* Type header doubles as a "select all tags of this type" toggle. */
+.scope-gname {
+  align-self: flex-start; padding: 2px 10px; border-radius: 999px; border: 1px solid;
+  background: transparent; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  cursor: pointer; transition: opacity 0.15s;
+}
+.scope-gname:hover { opacity: 0.85; }
 .scope-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .scope-chip { padding: 3px 11px; border-radius: 999px; font-size: 12px; font-weight: 500; border: 1px solid; background: transparent; transition: opacity 0.15s; }
 .scope-chip:hover { opacity: 0.85; }
@@ -30,14 +37,6 @@
 }
 .empty h2 { font-size: 20px; font-weight: 500; margin-bottom: 4px; text-align: center; }
 .empty p { font-size: 14px; color: var(--muted-foreground); max-width: 24rem; text-align: center; }
-.suggestions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; max-width: 32rem; }
-.suggestion {
-  display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 12px;
-  font-size: 14px; text-align: left; background: var(--card); border: 1px solid var(--border);
-  color: var(--foreground); transition: background 0.15s;
-}
-.suggestion:hover { background: var(--muted); }
-.suggestion .icon { color: var(--accent); font-size: 14px; }
 
 .msg { display: flex; gap: 12px; }
 .msg.user { flex-direction: row-reverse; }

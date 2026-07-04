@@ -8,10 +8,11 @@ import { state } from './state.js';
 import {
   listDocuments, deleteDocument, getTags, updateDocTags, updateDocDescription,
 } from './api.js';
+import { confirmDialog } from './confirm.js';
 
 let docs = [];            // documents from the server (each has a `tags` array)
 let activeFilter = [];    // tag names the list is filtered by (AND)
-let searchQuery = '';     // free-text filter on name / description / uploader
+let searchQuery = '';     // free-text filter on name / description
 let editing = null;       // { filename, selected:[...] } while editing a doc's tags
 let editingDesc = null;   // { filename, value } while editing a doc's description
 let menuOpen = null;      // filename whose row "⋯" menu is open
@@ -225,7 +226,6 @@ function docRowHtml(d) {
       <td class="c-tags">${tagsCell(d)}</td>
       <td class="c-up">
         <div class="up-date">${esc(up)}</div>
-        ${d.uploaded_by ? `<div class="up-by">${esc(d.uploaded_by)}</div>` : ''}
         <div class="up-stored">${esc(fmtStored(d.stored_bytes))}</div>
       </td>
       <td class="c-actions">
@@ -250,8 +250,7 @@ function renderList() {
   const shown = docs.filter((d) =>
     (!q
       || d.filename.toLowerCase().includes(q)
-      || (d.description || '').toLowerCase().includes(q)
-      || (d.uploaded_by || '').toLowerCase().includes(q))
+      || (d.description || '').toLowerCase().includes(q))
     && activeFilter.every((t) => (d.tags || []).includes(t)));
   if (!shown.length) {
     list.innerHTML = '<p class="empty-docs">No documents match your search or filters.</p>';
@@ -331,7 +330,12 @@ async function saveDesc(filename) {
 }
 
 async function onDelete(filename) {
-  if (!confirm(`Delete '${filename}' from the knowledge base?\nThis cannot be undone.`)) return;
+  const ok0 = await confirmDialog({
+    title: 'Delete document?',
+    message: `'${filename}' will be removed from the knowledge base. This cannot be undone.`,
+    confirmText: 'Delete',
+  });
+  if (!ok0) return;
   const { ok, data } = await deleteDocument(filename);
   if (ok) loadDocuments();
   else alert('Delete failed: ' + (data.detail || 'Unknown error'));

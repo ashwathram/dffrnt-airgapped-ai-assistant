@@ -9,7 +9,7 @@
   padding: 16px; background: rgba(9, 26, 41, 0.5);
 }
 .modal {
-  width: 100%; max-width: 640px; max-height: 85vh; display: flex; flex-direction: column;
+  width: 100%; max-width: 640px; max-height: 90vh; display: flex; flex-direction: column;
   background: var(--card); border-radius: 16px; box-shadow: 0 20px 60px rgba(9, 26, 41, 0.3); overflow: hidden;
 }
 .modal-head {
@@ -24,6 +24,20 @@
 .modal-foot { padding: 16px 24px; border-top: 1px solid var(--border); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 .btn-sm { padding: 6px 14px; font-size: 13px; }
+
+/* Confirm dialog (compact modal variant) */
+.confirm-modal { max-width: 420px; }
+.confirm-body { display: flex; gap: 14px; padding: 24px 24px 8px; }
+.confirm-icon {
+  flex-shrink: 0; width: 40px; height: 40px; border-radius: 10px; display: flex;
+  align-items: center; justify-content: center; background: var(--muted); color: var(--muted-foreground); font-size: 20px;
+}
+.confirm-icon.danger { background: rgba(231,35,0,0.1); color: var(--destructive); }
+.confirm-text h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.confirm-text p { font-size: 13px; color: var(--muted-foreground); line-height: 1.5; }
+.confirm-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px 24px; }
+.btn-danger { background: var(--destructive); color: #fff; }
+.btn-danger:hover { filter: brightness(0.95); }
 
 /* Tag type cards */
 .tt-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
@@ -61,8 +75,10 @@
 .tt-newform { border: 2px dashed var(--border); }
 .tt-formtitle { font-size: 14px; font-weight: 500; }
 .tt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.tt-actions { display: flex; gap: 8px; }
-.tt-colorrow { display: flex; align-items: center; gap: 10px; }
+.tt-actions { display: flex; gap: 8px; margin-top: 6px; }
+.tt-colorrow { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+/* Extra breathing room between the color swatches and the Create/Cancel row. */
+.tt-newform .tt-actions, .tt-edit .tt-actions { margin-top: 14px; }
 .tt-collabel { font-size: 12px; color: var(--muted-foreground); }
 
 .swatch-row { display: flex; gap: 6px; flex-wrap: wrap; }

@@ -44,14 +44,60 @@ export function listDocuments() {
   return asJson(fetch('/api/documents'));
 }
 
-export function uploadFile(file, uploadedBy, tags, description, force) {
+export function uploadFile(file, tags, description, force) {
   const fd = new FormData();
   fd.append('file', file);
-  fd.append('uploaded_by', uploadedBy);
   fd.append('tags', tags);
   fd.append('description', description || '');
   fd.append('force', force ? 'true' : 'false');
   return asJson(fetch('/api/upload', { method: 'POST', body: fd }));
+}
+
+// Streaming upload: reports real progress via XHR. `onEvent` receives
+//   { stage:'transfer', loaded, total }                 while bytes upload
+//   { stage:'received' | 'parsing' | 'chunking' | 'storing' }
+//   { stage:'embedding', done, total }                  per embed batch
+// Resolves { ok, data } where data is the final result (done), the duplicate
+// descriptor, or { detail } on error — matching uploadFile's shape.
+export function uploadFileStream(file, tags, description, force, onEvent) {
+  return new Promise((resolve) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('tags', tags);
+    fd.append('description', description || '');
+    fd.append('force', force ? 'true' : 'false');
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload/stream');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onEvent({ stage: 'transfer', loaded: e.loaded, total: e.total });
+    };
+
+    // Parse newline-delimited JSON incrementally out of the growing responseText.
+    let offset = 0;
+    let last = null;
+    const drain = () => {
+      const text = xhr.responseText;
+      let nl;
+      while ((nl = text.indexOf('\n', offset)) >= 0) {
+        const line = text.slice(offset, nl).trim();
+        offset = nl + 1;
+        if (!line) continue;
+        try { const ev = JSON.parse(line); last = ev; onEvent(ev); } catch (_) { /* partial */ }
+      }
+    };
+    xhr.onprogress = drain;
+    xhr.onload = () => {
+      drain();
+      if (last && last.stage === 'done') resolve({ ok: true, data: last.result });
+      else if (last && last.stage === 'duplicate') {
+        const d = { ...last }; delete d.stage; resolve({ ok: true, data: d });
+      } else if (last && last.stage === 'error') resolve({ ok: false, data: { detail: last.detail } });
+      else resolve({ ok: false, data: { detail: 'Upload failed' } });
+    };
+    xhr.onerror = () => resolve({ ok: false, data: { detail: 'Network error during upload' } });
+    xhr.send(fd);
+  });
 }
 
 export function deleteDocument(filename) {

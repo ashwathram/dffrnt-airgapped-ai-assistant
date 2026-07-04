@@ -7,6 +7,7 @@ import { state } from './state.js';
 import {
   listConversations, updateConversation, deleteConversation, clearConversations,
 } from './api.js';
+import { confirmDialog } from './confirm.js';
 
 let onSelect = () => {};
 let search = '';
@@ -161,7 +162,12 @@ async function commitRename(id, value) {
 
 async function remove(id) {
   menuOpenId = null;
-  if (!confirm('Delete this conversation? This cannot be undone.')) { renderSidebar(); return; }
+  const ok = await confirmDialog({
+    title: 'Delete conversation?',
+    message: 'This conversation will be permanently removed. This cannot be undone.',
+    confirmText: 'Delete',
+  });
+  if (!ok) { renderSidebar(); return; }
   await deleteConversation(id);
   if (state.conversationId === id) onSelect(null); // clear the open chat
   loadConversations();
@@ -180,7 +186,12 @@ export function initSidebar(opts = {}) {
   $('chatSearch').oninput = (e) => { search = e.target.value; renderSidebar(); };
   $('clearHistoryBtn').onclick = async () => {
     if (!state.conversations.length) return;
-    if (!confirm('Delete ALL saved conversations? This cannot be undone.')) return;
+    const ok = await confirmDialog({
+      title: 'Clear all conversations?',
+      message: 'Every saved conversation will be permanently deleted. This cannot be undone.',
+      confirmText: 'Delete all',
+    });
+    if (!ok) return;
     await clearConversations();
     onSelect(null);
     loadConversations();

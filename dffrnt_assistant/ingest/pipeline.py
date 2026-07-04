@@ -16,7 +16,7 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".txt", ".md"
 
 _METADATA_KEYS = (
     "document_type", "department", "client_project", "tags", "tag_paths",
-    "description", "uploaded_by", "content_hash",
+    "description", "content_hash",
 )
 
 
@@ -39,7 +39,6 @@ def build_payload(chunk: dict, document: dict, meta: Optional[dict] = None) -> d
         "tags": [],
         "tag_paths": [],
         "description": "",
-        "uploaded_by": "",
         "content_hash": "",
     }
     if meta:
@@ -49,24 +48,51 @@ def build_payload(chunk: dict, document: dict, meta: Optional[dict] = None) -> d
     return payload
 
 
-def ingest_file(path, store, embedder, settings, meta: Optional[dict] = None) -> int:
-    """Load, chunk, embed and store a single file. Returns the chunk count.
+EMBED_BATCH = 64  # embed in bounded batches so progress can be reported per batch
+
+
+def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = None):
+    """Load, chunk, embed and store a single file, yielding progress events.
+
+    Yields dicts keyed by ``stage``:
+        {"stage": "parsing"}
+        {"stage": "chunking"}
+        {"stage": "embedding", "done": i, "total": n}   (once per embed batch)
+        {"stage": "storing"}
+        {"stage": "stored", "chunks": n}                 (terminal)
+
+    Embedding progress is real: texts are embedded in batches of EMBED_BATCH and
+    an event is emitted after each, so the caller can drive a progress bar that
+    tracks the slow (embedding) stage rather than guessing.
 
     Idempotent: existing chunks for the same filename are removed first, so
     re-ingesting an updated document never leaves stale chunks behind.
     """
     path = Path(path)
+    yield {"stage": "parsing"}
     document = load_file(str(path))
+
+    yield {"stage": "chunking"}
     chunks = chunk_file(
         document,
         strategy=settings.chunk_strategy,
         chunk_size=settings.chunk_size,
         overlap=settings.chunk_overlap,
     )
-    if not chunks:
-        return 0
+    total = len(chunks)
+    if not total:
+        yield {"stage": "stored", "chunks": 0}
+        return
 
-    vectors = embedder.embed_documents([chunk["text"] for chunk in chunks])
+    texts = [chunk["text"] for chunk in chunks]
+    vectors: list = []
+    yield {"stage": "embedding", "done": 0, "total": total}
+    for start in range(0, total, EMBED_BATCH):
+        # Slicing to EMBED_BATCH bounds each call, so the embedder's own batching
+        # is a no-op here; we call it plainly for embedder-implementation parity.
+        vectors.extend(embedder.embed_documents(texts[start : start + EMBED_BATCH]))
+        yield {"stage": "embedding", "done": min(start + EMBED_BATCH, total), "total": total}
+
     points = [
         {
             "id": str(uuid.uuid5(uuid.NAMESPACE_URL, chunk["chunk_id"])),
@@ -76,6 +102,20 @@ def ingest_file(path, store, embedder, settings, meta: Optional[dict] = None) ->
         for chunk, vector in zip(chunks, vectors)
     ]
 
+    yield {"stage": "storing"}
     store.delete_by_filename(document.get("filename") or path.name)
     store.upsert(points)
-    return len(points)
+    yield {"stage": "stored", "chunks": len(points)}
+
+
+def ingest_file(path, store, embedder, settings, meta: Optional[dict] = None) -> int:
+    """Load, chunk, embed and store a single file. Returns the chunk count.
+
+    Thin wrapper over :func:`ingest_file_stream` for callers that only need the
+    final count (the CLI scan and the non-streaming upload path).
+    """
+    count = 0
+    for event in ingest_file_stream(path, store, embedder, settings, meta):
+        if event.get("stage") == "stored":
+            count = event["chunks"]
+    return count

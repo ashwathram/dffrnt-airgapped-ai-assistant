@@ -99,7 +99,7 @@
               <p id="libSubtitle">Documents available to the assistant's knowledge base.</p>
             </div>
             <div class="lib-actions">
-              <button class="btn btn-ghost" id="manageTagsBtn"><span data-icon="tag" class="icon"></span> Manage Tags</button>
+              <button class="btn btn-ghost" id="manageTagsBtn"><span data-icon="settings" class="icon"></span> Manage Tags</button>
               <button class="btn btn-primary" id="uploadOpenBtn"><span data-icon="upload" class="icon"></span> Upload</button>
             </div>
           </div>
@@ -127,8 +127,24 @@
     </div>
     <div class="modal-body" id="tagModalBody"></div>
     <div class="modal-foot">
-      <button class="btn btn-ghost" id="tagImportBtn"><span data-icon="upload" class="icon"></span> Import from documents</button>
       <button class="btn btn-primary" id="tagModalDone">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm dialog (reusable; replaces the browser's native confirm) -->
+<div class="modal-overlay hidden" id="confirmModal">
+  <div class="modal confirm-modal">
+    <div class="confirm-body">
+      <div class="confirm-icon" id="confirmIcon"><span data-icon="alert" class="icon"></span></div>
+      <div class="confirm-text">
+        <h3 id="confirmTitle">Are you sure?</h3>
+        <p id="confirmMessage"></p>
+      </div>
+    </div>
+    <div class="confirm-foot">
+      <button class="btn btn-ghost" id="confirmCancel">Cancel</button>
+      <button class="btn btn-primary" id="confirmOk">Confirm</button>
     </div>
   </div>
 </div>
@@ -144,7 +160,7 @@
     <div class="modal-foot">
       <span class="up-summary" id="upSummary"></span>
       <div class="up-footbtns">
-        <button class="btn btn-ghost" id="uploadCloseBtn">Close</button>
+        <button class="btn btn-ghost" id="uploadCloseBtn">Cancel</button>
         <button class="btn btn-primary" id="uploadStartBtn">Upload</button>
       </div>
     </div>

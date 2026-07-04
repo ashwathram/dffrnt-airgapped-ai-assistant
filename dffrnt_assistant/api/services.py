@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from ..ingest.pipeline import SUPPORTED_EXTENSIONS, ingest_file
+from ..ingest.pipeline import SUPPORTED_EXTENSIONS, ingest_file, ingest_file_stream
 from ..ingest.tags import normalize_tag_payload
 
 
@@ -112,10 +112,17 @@ class AssistantService:
         self.audit.write("INGESTION", {"file": path.name, "chunks": chunks})
         return chunks
 
-    def upload(
-        self, filename: str, content: bytes, uploaded_by: str, tags: str,
-        description: str = "", force: bool = False,
-    ) -> dict:
+    def _prepare_upload(
+        self, filename: str, content: bytes, tags: str,
+        description: str, force: bool,
+    ):
+        """Validate, dedup-check, persist the bytes and build the ingest meta.
+
+        Returns ``("duplicate", dup_dict)`` when the caller should stop and
+        report a duplicate, or ``("ready", ctx)`` where ``ctx`` carries the
+        saved path, meta and display fields the ingest + result share. Raises
+        :class:`UserError` for unsupported types.
+        """
         ext = Path(filename).suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
             allowed = ", ".join(sorted(e[1:].upper() for e in SUPPORTED_EXTENSIONS))
@@ -134,7 +141,7 @@ class AssistantService:
                 and self.store.has_document(filename)
                 and hashlib.sha256(save_path.read_bytes()).hexdigest() == content_hash
             ):
-                return {
+                return "duplicate", {
                     "duplicate": True, "kind": "name", "success": False,
                     "filename": filename, "existing": filename,
                     "warning": (
@@ -144,7 +151,7 @@ class AssistantService:
                 }
             content_dup = self.store.find_by_content_hash(content_hash)
             if content_dup and content_dup != filename:
-                return {
+                return "duplicate", {
                     "duplicate": True, "kind": "content", "success": False,
                     "filename": filename, "existing": content_dup,
                     "warning": (
@@ -157,12 +164,12 @@ class AssistantService:
 
         tag_items = [t.strip() for t in tags.split(",") if t.strip()]
         leaf_tags, tag_paths = normalize_tag_payload(tag_items)
-        # uploaded_by/description/content_hash are stored on every chunk (like
-        # tags) so the library can show them, dedup can match later uploads, and
-        # they survive re-reads of the vector store.
+        # description/content_hash are stored on every chunk (like tags) so the
+        # library can show them, dedup can match later uploads, and they survive
+        # re-reads of the vector store.
         description = (description or "").strip()
         meta = {
-            "uploaded_by": uploaded_by, "description": description,
+            "description": description,
             "content_hash": content_hash,
         }
         if leaf_tags:
@@ -179,34 +186,87 @@ class AssistantService:
                 "file_type": file_type,
                 "file_size": file_size,
                 "upload_date": upload_date,
-                "uploaded_by": uploaded_by,
                 "description": description,
                 "tags": leaf_tags,
             },
         )
+        return "ready", {
+            "save_path": save_path, "meta": meta, "filename": filename,
+            "file_type": file_type, "file_size": file_size, "upload_date": upload_date,
+            "description": description, "leaf_tags": leaf_tags,
+        }
 
+    def _upload_result(self, ctx: dict, chunks: int) -> dict:
+        return {
+            "success": True,
+            "duplicate": False,
+            "message": f"'{ctx['filename']}' uploaded and ingested successfully.",
+            "filename": ctx["filename"],
+            "file_type": ctx["file_type"],
+            "file_size": _human_size(ctx["file_size"]),
+            "upload_date": ctx["upload_date"],
+            "description": ctx["description"],
+            "tags": ctx["leaf_tags"],
+            "chunks": chunks,
+        }
+
+    def upload(
+        self, filename: str, content: bytes, tags: str,
+        description: str = "", force: bool = False,
+    ) -> dict:
+        kind, data = self._prepare_upload(filename, content, tags, description, force)
+        if kind == "duplicate":
+            return data
         try:
-            chunks = self._ingest(save_path, meta)
+            chunks = self._ingest(data["save_path"], data["meta"])
         except Exception as exc:
             raise UserError(
                 500,
                 f"'{filename}' was saved but could not be ingested. Reason: {exc}. "
                 f"Please check the file is not corrupted or password-protected.",
             )
+        return self._upload_result(data, chunks)
 
-        return {
-            "success": True,
-            "duplicate": False,
-            "message": f"'{filename}' uploaded and ingested successfully.",
-            "filename": filename,
-            "file_type": file_type,
-            "file_size": _human_size(file_size),
-            "upload_date": upload_date,
-            "uploaded_by": uploaded_by,
-            "description": description,
-            "tags": leaf_tags,
-            "chunks": chunks,
-        }
+    def upload_stream(
+        self, filename: str, content: bytes, tags: str,
+        description: str = "", force: bool = False,
+    ):
+        """Upload + ingest, yielding progress events (see ingest_file_stream).
+
+        Emits ``{"stage": ...}`` dicts the caller can serialise as ndjson:
+        ``received`` (bytes persisted), ``parsing`` / ``chunking`` /
+        ``embedding`` (with done/total) / ``storing`` from ingestion, then a
+        terminal ``done`` (carrying the full result) — or ``duplicate`` /
+        ``error``. Lets the UI show a bar tied to the real (embedding) stage.
+        """
+        try:
+            kind, data = self._prepare_upload(filename, content, tags, description, force)
+        except UserError as exc:
+            yield {"stage": "error", "detail": exc.detail}
+            return
+        if kind == "duplicate":
+            yield {"stage": "duplicate", **data}
+            return
+
+        yield {"stage": "received", "size": data["file_size"]}
+        chunks = 0
+        try:
+            for event in ingest_file_stream(data["save_path"], self.store, self.embedder, self.settings, data["meta"]):
+                if event.get("stage") == "stored":
+                    chunks = event["chunks"]
+                else:
+                    yield event
+        except Exception as exc:
+            yield {
+                "stage": "error",
+                "detail": (
+                    f"'{filename}' was saved but could not be ingested. Reason: {exc}. "
+                    f"Please check the file is not corrupted or password-protected."
+                ),
+            }
+            return
+        self.audit.write("INGESTION", {"file": data["save_path"].name, "chunks": chunks})
+        yield {"stage": "done", "result": self._upload_result(data, chunks)}
 
     # -- Library -----------------------------------------------------------
     def list_documents(self) -> dict:
@@ -233,7 +293,6 @@ class AssistantService:
                     "file_path": str(self.data_dir / filename),
                     "file_size": "Unknown",
                     "upload_date": "Unknown",
-                    "uploaded_by": payload.get("uploaded_by") or "",
                     "description": payload.get("description") or "",
                     "tags": [],
                 },

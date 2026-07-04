@@ -26,12 +26,16 @@ export function renderScope() {
   const groups = state.tagTypes.map((tt) => {
     const tags = state.tags.filter((t) => t.typeId === tt.id);
     if (!tags.length) return '';
+    // A type header is "on" when every one of its tags is in scope; clicking it
+    // selects all of them at once (or clears them if already all selected).
+    const allOn = tags.every((t) => state.chatScope.includes(t.name));
     const chips = tags.map((t) => {
       const on = state.chatScope.includes(t.name);
       const style = on ? `background:${tt.color};color:#fff;border-color:${tt.color}` : `color:${tt.color};border-color:${tt.color}55`;
       return `<button class="scope-chip${on ? ' on' : ''}" data-scope="tag" data-tag="${esc(t.name)}" style="${style}">${esc(t.name)}</button>`;
     }).join('');
-    return `<div class="scope-group"><span class="scope-gname" style="color:${tt.color}">${esc(tt.name)}</span><div class="scope-chips">${chips}</div></div>`;
+    const headStyle = allOn ? `background:${tt.color};color:#fff;border-color:${tt.color}` : `color:${tt.color};border-color:${tt.color}55`;
+    return `<div class="scope-group"><button class="scope-gname${allOn ? ' on' : ''}" data-scope="type" data-type="${esc(tt.id)}" style="${headStyle}" title="Select all ${esc(tt.name)} tags">${esc(tt.name)}</button><div class="scope-chips">${chips}</div></div>`;
   }).join('');
 
   el.innerHTML = `
@@ -44,6 +48,9 @@ export function renderScope() {
       <span class="scope-chev">${svg(open ? 'chevronUp' : 'chevronDown')}</span>
     </button>
     ${open ? `<div class="scope-body">
+      <p class="scope-hint">${n
+        ? `The AI assistant will search only documents tagged with the selected tag${n > 1 ? 's' : ''}.`
+        : `No tags selected. The AI assistant will search across all ${(state.documents || []).length} documents in the database. Select tags below to narrow the search scope.`}</p>
       ${groups}
       ${n ? '<button class="scope-clear" data-scope="clear">Clear</button>' : ''}
     </div>` : ''}`;
@@ -56,6 +63,13 @@ export function renderScope() {
         const name = b.dataset.tag;
         state.chatScope = state.chatScope.includes(name)
           ? state.chatScope.filter((x) => x !== name) : [...state.chatScope, name];
+      } else if (a === 'type') {
+        // Toggle every tag under this type: select all, or clear all if already all on.
+        const names = state.tags.filter((t) => t.typeId === b.dataset.type).map((t) => t.name);
+        const allOn = names.every((nm) => state.chatScope.includes(nm));
+        state.chatScope = allOn
+          ? state.chatScope.filter((nm) => !names.includes(nm))
+          : [...new Set([...state.chatScope, ...names])];
       } else if (a === 'clear') state.chatScope = [];
       renderScope();
     };

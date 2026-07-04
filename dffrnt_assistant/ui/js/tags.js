@@ -6,8 +6,9 @@ import { $, esc } from './util.js';
 import { svg } from './icons.js';
 import { state } from './state.js';
 import {
-  getTags, addTagType, updateTagType, deleteTagType, addTag, deleteTag, importTags,
+  getTags, addTagType, updateTagType, deleteTagType, addTag, deleteTag,
 } from './api.js';
+import { confirmDialog } from './confirm.js';
 
 const PRESET_COLORS = [
   '#5D27B8', '#E72300', '#091A29', '#0a7c4a',
@@ -102,7 +103,7 @@ function newTypeHtml() {
       </div>
       <div class="tt-colorrow"><span class="tt-collabel">Color</span>${colorSwatches('newTypeColors', PRESET_COLORS[0])}</div>
       <div class="tt-actions">
-        <button class="btn btn-primary btn-sm" data-action="create-type">Create type</button>
+        <button class="btn btn-primary btn-sm" data-action="create-type" disabled>Create type</button>
         <button class="btn btn-ghost btn-sm" data-action="cancel-new-type">Cancel</button>
       </div>
     </div>`;
@@ -139,7 +140,11 @@ function onClick(e) {
     return;
   }
   if (action === 'delete-type') {
-    if (confirm('Delete this tag type and all its tags?')) mutate(deleteTagType(id));
+    confirmDialog({
+      title: 'Delete tag type?',
+      message: 'This tag type and all of its tags will be permanently removed.',
+      confirmText: 'Delete',
+    }).then((ok) => { if (ok) mutate(deleteTagType(id)); });
     return;
   }
   if (action === 'add-tag') {
@@ -168,6 +173,13 @@ function onKeydown(e) {
   }
 }
 
+// The "Create type" button stays disabled until a type name is entered.
+function onInput(e) {
+  if (e.target.id !== 'newTypeName') return;
+  const btn = $('tagModalBody').querySelector('[data-action="create-type"]');
+  if (btn) btn.disabled = !e.target.value.trim();
+}
+
 async function openModal() {
   ui.expanded = {}; ui.editingTypeId = null; ui.showNewType = false;
   const { ok, data } = await getTags();
@@ -180,22 +192,14 @@ function closeModal() {
   $('tagModal').classList.add('hidden');
 }
 
-async function importFromDocuments() {
-  const { ok, data } = await importTags();
-  if (!ok) { alert(data.detail || 'Import failed.'); return; }
-  apply(data);
-  render();
-  alert(`Imported ${data.imported} tag(s) into "${data.type}".`);
-}
-
 export function initTags() {
   $('manageTagsBtn').onclick = openModal;
   $('tagModalClose').onclick = closeModal;
   $('tagModalDone').onclick = closeModal;
-  $('tagImportBtn').onclick = importFromDocuments;
   // Click on the dimmed backdrop (but not the dialog) closes the modal.
   $('tagModal').onclick = (e) => { if (e.target.id === 'tagModal') closeModal(); };
   const body = $('tagModalBody');
   body.addEventListener('click', onClick);
   body.addEventListener('keydown', onKeydown);
+  body.addEventListener('input', onInput);
 }

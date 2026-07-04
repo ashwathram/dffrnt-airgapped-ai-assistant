@@ -22,6 +22,7 @@ import { initUpload } from './upload.js';
 import { initSettings } from './settings.js';
 import { initTags } from './tags.js';
 import { initScope, renderScope } from './scope.js';
+import { initConfirm } from './confirm.js';
 
 function setView(view) {
   state.view = view;
@@ -48,6 +49,7 @@ initLibrary();
 initUpload();
 initSettings();
 initTags();
+initConfirm();
 initScope();
 
 $('navNewChat').onclick = newChat;

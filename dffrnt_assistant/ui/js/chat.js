@@ -1,7 +1,7 @@
 // Chat view: empty state, message rendering, sending, and the composer.
 import { $, esc, nowTime } from './util.js';
 import { svg } from './icons.js';
-import { state, SUGGESTIONS } from './state.js';
+import { state } from './state.js';
 import { renderMarkdown } from './markdown.js';
 import { queryStream, createConversation, updateConversation, getConversation } from './api.js';
 import { loadConversations, renderSidebar } from './sidebar.js';
@@ -98,9 +98,6 @@ function emptyStateHtml() {
         <h2>How can I help you today?</h2>
         <p>Ask questions about your documents. Use the tag filter above to focus on specific document sets.</p>
       </div>
-      <div class="suggestions">
-        ${SUGGESTIONS.map((s, i) => `<button class="suggestion" data-suggest="${i}">${svg(s.icon)}${esc(s.text)}</button>`).join('')}
-      </div>
     </div>`;
 }
 
@@ -188,9 +185,6 @@ export function renderMessages() {
   const box = $('messages');
   if (!state.messages.length && !state.busy) {
     box.innerHTML = emptyStateHtml();
-    box.querySelectorAll('[data-suggest]').forEach((b) => {
-      b.onclick = () => sendMessage(SUGGESTIONS[+b.dataset.suggest].text);
-    });
     return;
   }
   box.innerHTML = '<div class="messages-inner">'

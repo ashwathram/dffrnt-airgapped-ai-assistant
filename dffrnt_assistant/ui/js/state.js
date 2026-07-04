@@ -19,10 +19,3 @@ export const state = {
   conversationId: null,
   conversations: [],
 };
-
-export const SUGGESTIONS = [
-  { icon: 'trendingUp', text: 'Compare Q3 vs Q2 performance' },
-  { icon: 'users', text: 'Summarize customer feedback themes' },
-  { icon: 'scale', text: 'Key points from legal documents' },
-  { icon: 'fileText', text: "What's on the 2026 roadmap?" },
-];

@@ -171,15 +171,36 @@ def query_stream_endpoint(request: QueryRequest):
 @app.post("/api/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    uploaded_by: str = Form(default="admin"),
     tags: str = Form(default=""),
     description: str = Form(default=""),
     force: bool = Form(default=False),
 ):
     content = await file.read()
     return _handle(
-        lambda: service.upload(file.filename, content, uploaded_by, tags, description, force)
+        lambda: service.upload(file.filename, content, tags, description, force)
     )
+
+
+@app.post("/api/upload/stream")
+async def upload_file_stream(
+    file: UploadFile = File(...),
+    tags: str = Form(default=""),
+    description: str = Form(default=""),
+    force: bool = Form(default=False),
+):
+    """Upload + ingest, streaming newline-delimited JSON progress events so the
+    client can show a bar tied to the real stages (parsing / chunking /
+    embedding / storing), ending with a ``done`` event carrying the result."""
+    content = await file.read()
+
+    def ndjson():
+        try:
+            for event in service.upload_stream(file.filename, content, tags, description, force):
+                yield json.dumps(event) + "\n"
+        except Exception as exc:  # unexpected failure mid-stream
+            yield json.dumps({"stage": "error", "detail": str(exc)}) + "\n"
+
+    return StreamingResponse(ndjson(), media_type="application/x-ndjson")
 
 
 @app.get("/api/documents")

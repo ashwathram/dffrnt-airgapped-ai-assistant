@@ -23,7 +23,6 @@ PAYLOAD_FIELDS = (
     "tags",
     "tag_paths",
     "description",
-    "uploaded_by",
     "content_hash",
 )
 
