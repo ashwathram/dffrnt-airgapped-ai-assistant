@@ -1,128 +1,213 @@
-"""Sample queries for RAG hyperparameter tuning, grounded in the live KB.
+"""Evaluation queries grounded in the synthetic corpus (eval/gen_corpus.py).
 
-Each case names the document(s) that should answer it (``expected``, used by
-eval/rag_eval.py) and, where the corpus gives solid ground truth, answer-quality
-checks (``checks``, used by eval/answer_eval.py):
+Every fact in ``must_include`` appears verbatim in exactly one corpus document
+(or a deliberately controlled set of them), so correctness scoring is
+unambiguous — the corpus was written for these checks, not the other way round.
 
-  must_include : list of groups; every group must be satisfied and a group is
-                 satisfied when the answer contains ANY of its (case-insensitive)
-                 substrings. Facts here were read off the actual chunk text, not
-                 the model's output. Some thematic queries use loose topical
-                 groups on purpose — the goal is regression/▵-detection between
-                 generation settings, not a perfect grader.
-  cite         : answer should carry at least one [n] citation (default True).
+Case fields:
+  query        : the user question
+  expected     : filename(s) that should be retrieved (used by eval/rag_eval.py)
+  task         : resume-hr | proposal-corr | knowledge-base  (reporting axis)
+  checks       : must_include — list of groups; every group must be satisfied,
+                 a group is satisfied by ANY of its case-insensitive substrings.
+                 informational — record behaviour but exclude from correctness.
+  tags         : optional tag filter, exercises the tag-scoped retrieval path.
+  expect_refusal : the correct behaviour is the canonical refusal sentence
+                 (used for tag-isolation cases where the answer is out of scope).
 
-NEGATIVE_CASES are clearly outside this KB; a faithful assistant must refuse with
-the canonical sentence (see REFUSAL_PHRASE), never fabricate. These test the
-anti-hallucination guard directly.
+NEGATIVE_CASES are outside the corpus; a faithful assistant must refuse with the
+canonical sentence, never fabricate.
 """
 
 # Canonical refusal substring (from the system prompt's mandated sentence).
 REFUSAL_PHRASE = "do not contain enough information"
 
 CASES = [
+    # ------------------------------------------------------------------
+    # Task 1 — resumes / HR extraction and aggregation
+    # ------------------------------------------------------------------
     {
-        "query": "What was the Adecco Group's revenue in 2025?",
-        "expected": {"the-adecco-group-annual-report-2025.pdf"},
-        "note": "annual-report figure lookup",
-        "checks": {"must_include": [["23,082", "23082", "23.1 billion", "23.08"]]},
-    },
-    {
-        "query": "How many people does the Adecco Group employ and where does it operate?",
-        "expected": {"the-adecco-group-annual-report-2025.pdf"},
-        "note": "annual-report headcount / footprint",
-        # The report carries several valid headcount framings (169,000 colleagues,
-        # 34,000 FTE company-based, …) — verified in the corpus. Accept any
-        # documented figure rather than pin one, plus the operating footprint.
+        "query": "What is Amara Okafor's work experience?",
+        "expected": {"resume-amara-okafor.docx"},
+        "task": "resume-hr",
+        "note": "single-resume experience extraction",
         "checks": {"must_include": [
-            ["169,000", "34,000", "company-based", "colleagues", "fte"],
-            ["countries", "62", "60"],
+            ["lumen digital"], ["craft&pixel", "craft & pixel"], ["nps"],
         ]},
     },
     {
-        "query": "What are the main priorities CEOs have for AI according to the C-suite study?",
-        "expected": {"2026-ceo-study-rewiring-the-c-suite-report.pdf"},
-        "note": "CEO study thematic (loose topical)",
+        "query": "Summarize Ben Tremblay's experience as a UI developer.",
+        "expected": {"resume-ben-tremblay.docx"},
+        "task": "resume-hr",
+        "note": "single-resume summary",
         "checks": {"must_include": [
-            ["AI", "artificial intelligence"],
-            ["c-suite", "flywheel", "agent", "initiative", "priorit", "transformation"],
+            ["nova interfaces"], ["hydro-qu", "hydro qu"], ["react"],
         ]},
     },
     {
-        "query": "Summarize Kartoza's technical proposal for the challenge fund.",
-        "expected": {"challengefund3-technicalproposal-kartoza.pdf"},
+        "query": "What did Chloe Nguyen achieve at MapleSoft Insights?",
+        "expected": {"resume-chloe-nguyen.pdf"},
+        "task": "resume-hr",
+        "note": "single-resume achievement (PDF loader)",
+        "checks": {"must_include": [
+            ["88%", "88 %", "from 62"], ["usability", "task success"],
+        ]},
+    },
+    {
+        "query": "Which candidates are proficient in Figma?",
+        "expected": {"resume-amara-okafor.docx", "resume-diego-ramirez.txt"},
+        "task": "resume-hr",
+        "note": "multi-resume aggregation (Figma = Okafor + Ramirez only)",
+        "checks": {"must_include": [["okafor", "amara"], ["ramirez", "diego"]]},
+    },
+    {
+        "query": "What hourly rates do our contract candidates charge, and who is the most expensive?",
+        "expected": {
+            "contractor-roster.xlsx", "resume-amara-okafor.docx",
+            "resume-ben-tremblay.docx", "resume-chloe-nguyen.pdf",
+            "resume-diego-ramirez.txt", "resume-elena-petrova.docx",
+        },
+        "task": "resume-hr",
+        "note": "rate roll-up across resumes/roster (max = Petrova $105)",
+        "checks": {"must_include": [["105"], ["petrova", "elena"]]},
+    },
+    {
+        "query": "Who has experience with government or public-sector service design?",
+        "expected": {"resume-elena-petrova.docx"},
+        "task": "resume-hr",
+        "note": "semantic match on experience domain",
+        "checks": {"must_include": [["petrova", "elena"], ["permit", "govconnect"]]},
+    },
+    {
+        "query": "Is Elena Petrova's hourly rate within our approved senior contractor band?",
+        "expected": {"resume-elena-petrova.docx", "policy-contractor-onboarding.md",
+                     "contractor-roster.xlsx"},
+        "task": "resume-hr",
+        "note": "cross-document reasoning (rate $105 vs senior band $90–120)",
+        "checks": {"must_include": [["105"], ["120"]]},
+    },
+    # ------------------------------------------------------------------
+    # Task 2 — proposals and correspondence
+    # ------------------------------------------------------------------
+    {
+        "query": "What are the budget and timeline for the Aurora Health patient portal proposal?",
+        "expected": {"proposal-aurora-patient-portal.docx"},
+        "task": "proposal-corr",
+        "note": "proposal fact lookup",
+        "checks": {"must_include": [["240,000", "240000", "$240"], ["16 week", "16-week"]]},
+    },
+    {
+        "query": "Summarize the Aurora Health patient portal proposal.",
+        "expected": {"proposal-aurora-patient-portal.docx"},
+        "task": "proposal-corr",
         "note": "proposal summary",
         "checks": {"must_include": [
-            ["kartoza"],
-            ["red cross", "climate centre", "climate"],
+            ["aurora"], ["portal"], ["design system", "prototype", "accessibility"],
         ]},
     },
     {
-        "query": "Which geospatial or GIS technologies does the Kartoza proposal rely on?",
-        "expected": {"challengefund3-technicalproposal-kartoza.pdf"},
-        "note": "proposal technical detail",
+        "query": "What deliverables does the Borealis rebrand proposal include?",
+        "expected": {"proposal-borealis-rebrand.md"},
+        "task": "proposal-corr",
+        "note": "proposal deliverables list",
+        "checks": {"must_include": [["logo"], ["style guide"], ["template"]]},
+    },
+    {
+        "query": "Did Aurora Health ask to change the project timeline, and what was agreed?",
+        "expected": {"correspondence-aurora-timeline.txt"},
+        "task": "proposal-corr",
+        "note": "correspondence outcome (12 weeks @ $258k agreed 2026-03-14)",
         "checks": {"must_include": [
-            ["foss", "open source", "open-source", "gis", "geospatial", "qgis", "postgis"],
+            ["12 week", "12-week"], ["258,000", "258000", "$258", "18,000", "18000"],
         ]},
     },
+    # ------------------------------------------------------------------
+    # Task 3 — internal knowledge base
+    # ------------------------------------------------------------------
     {
-        "query": "What is the candidate's work experience as a software engineer?",
-        "expected": {"Resume-Sample-1-Software-Engineer.pdf"},
-        "note": "resume experience",
-        "checks": {"must_include": [
-            ["software engineer", "application development", "automation", "web application"],
-        ]},
+        "query": "What are the approved hourly rate bands for contractors?",
+        "expected": {"policy-contractor-onboarding.md"},
+        "task": "knowledge-base",
+        "note": "policy numeric bands",
+        "checks": {"must_include": [["60"], ["90"], ["120"]]},
     },
     {
-        "query": "Which programming languages and tools does the software engineer candidate know?",
-        "expected": {"Resume-Sample-1-Software-Engineer.pdf"},
-        "note": "resume skills",
-        "checks": {"must_include": [["c#", "c++", "visual basic", "cuda"]]},
+        "query": "How quickly must contractor screening be completed, and what is required?",
+        "expected": {"policy-contractor-onboarding.md"},
+        "task": "knowledge-base",
+        "note": "policy process detail",
+        "checks": {"must_include": [["10 business days"], ["nda"]]},
     },
     {
-        "query": "What does the McKinsey report recommend for digital transformation?",
-        "expected": {"dmava_mckinseyco.pdf"},
-        "note": "McKinsey thematic (loose topical)",
-        "checks": {"must_include": [
-            ["mckinsey", "leadership", "transformation", "capability", "design", "coach"],
-        ]},
+        "query": "What professional development budget do employees get each year?",
+        "expected": {"policy-benefits-summary.docx"},
+        "task": "knowledge-base",
+        "note": "benefits figure lookup",
+        "checks": {"must_include": [["1,800", "1800"]]},
     },
     {
-        "query": "Which product category and region had the highest sales in the Superstore data?",
-        "expected": {"Sample - Superstore.csv"},
-        "note": "tabular aggregation — beyond chunk-RAG; informational only",
-        # No must_include: correctly aggregating over 4,787 row-chunks is outside
-        # what retrieval-augmented generation can do here. We only record whether
-        # it answered/refused/cited, and exclude it from the correctness rate.
+        "query": "Does the AI assistant send any client data to the cloud?",
+        "expected": {"faq-security-airgap.txt"},
+        "task": "knowledge-base",
+        "note": "security FAQ (executive interrogation)",
+        "checks": {"must_include": [["on-prem", "locally", "air-gap", "airgap", "no internet"]]},
+    },
+    {
+        "query": "When was DFFRNT founded and how many employees does it have?",
+        "expected": {"capabilities-overview.pptx"},
+        "task": "knowledge-base",
+        "note": "company facts (PPTX loader)",
+        "checks": {"must_include": [["2015"], ["38"]]},
+    },
+    # ------------------------------------------------------------------
+    # Known-limit probe: tabular aggregation over the CSV
+    # ------------------------------------------------------------------
+    {
+        "query": "How many total hours were logged on Aurora Discovery in Q1 2026?",
+        "expected": {"project-hours-q1-2026.csv"},
+        "task": "knowledge-base",
+        "note": "tabular aggregation (sum 112+118+121+96=447) — informational",
         "checks": {"informational": True},
     },
+]
+
+# Tag-scoped cases: the same retrieval path with a tags filter, as the UI sends.
+# The last case is an isolation probe: the true answer lives OUTSIDE the scoped
+# tag, so the assistant must refuse rather than leak or fabricate.
+TAG_CASES = [
     {
-        "query": "Show me the structure of a problem, solution and impact case study.",
-        "expected": {
-            "IC-Problem-Solution-Impact-Case-Study-Template-for-Powerpoint-Example_Powerpoint.pptx",
-            "IC-One-Page-Case-Study-Template-for-Microsoft-Word-Example_WORD.docx",
-            "IC-Data-Driven-Case-Study-Template-Example.xlsx",
-            "IC-Data-Driven-Case-Study-Template-Example_WORD.docx",
-            "PHE-case-study-ppt.Final_.pptx",
-        },
-        "note": "case-study template (loose topical)",
-        "checks": {"must_include": [
-            ["problem", "solution", "impact", "case study", "result", "outcome"],
-        ]},
+        "query": "Which candidate holds a PhD?",
+        "tags": ["Resume"],
+        "expected": {"resume-chloe-nguyen.pdf"},
+        "task": "resume-hr",
+        "note": "tag-scoped resume search",
+        "checks": {"must_include": [["nguyen", "chloe"]]},
     },
     {
-        "query": "What measurable impact and results does the PHE case study report?",
-        "expected": {"PHE-case-study-ppt.Final_.pptx"},
-        "note": "case-study outcome (loose topical)",
-        "checks": {"must_include": [
-            ["case study", "practice", "health", "reflection", "revalidation", "impact"],
-        ]},
+        "query": "What is the base vacation allowance?",
+        "tags": ["Policy"],
+        "expected": {"policy-benefits-summary.docx"},
+        "task": "knowledge-base",
+        "note": "tag-scoped policy lookup",
+        "checks": {"must_include": [["4 weeks", "four weeks"]]},
+    },
+    {
+        "query": "What hourly rate does Amara Okafor charge?",
+        "tags": ["Proposal"],
+        "expected": set(),
+        "task": "resume-hr",
+        "note": "tag isolation — answer exists only outside the scoped tag",
+        "expect_refusal": True,
+        "checks": {},
     },
 ]
 
 # Clearly outside the corpus — a faithful assistant must refuse, not fabricate.
 NEGATIVE_CASES = [
     {"query": "What is the capital of Australia?", "note": "general knowledge, not in KB"},
-    {"query": "What were Apple's iPhone unit sales in Q4 2024?", "note": "external company, not in KB"},
+    {"query": "What was the Adecco Group's revenue in 2025?",
+     "note": "was in the OLD corpus, absent now — stale-memory fabrication probe"},
+    {"query": "What is DFFRNT's current share price?",
+     "note": "plausible-sounding internal fact that no document contains"},
     {"query": "Summarize the plot of the film Inception.", "note": "pop culture, not in KB"},
 ]

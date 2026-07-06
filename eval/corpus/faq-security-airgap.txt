@@ -1,0 +1,13 @@
+DFFRNT AI ASSISTANT — SECURITY & DEPLOYMENT FAQ
+
+Q: Where does client data live?
+A: All client documents stay on DFFRNT's on-premises server. Nothing is sent to any cloud service.
+
+Q: Does the assistant call external AI APIs?
+A: No. The language model and the embedding model both run locally on the same air-gapped machine. The deployment has no internet access.
+
+Q: How long are documents retained?
+A: Uploaded documents and their derived index are retained for 7 years, in line with the client-records retention schedule.
+
+Q: Who do I contact about a suspected security incident?
+A: Email security@dffrnt.example within 24 hours of discovery. The on-call security lead triages all reports.

@@ -20,7 +20,7 @@ from dffrnt_assistant.config import load_settings
 from dffrnt_assistant.ollama import OllamaClient
 from dffrnt_assistant.retrieval.store import VectorStore
 
-from eval.sample_queries import CASES
+from eval.sample_queries import CASES, TAG_CASES
 
 CANDIDATE_POOL = 15                      # fetch this many, then simulate smaller top_k
 TOP_K_GRID = [5, 8, 10, 12]
@@ -28,11 +28,15 @@ MARGIN_GRID = [0.0, 0.05, 0.08, 0.10, 0.12, 0.15, 0.20]
 
 
 def fetch_candidates(store, embedder, settings) -> List[Dict]:
-    """For each case, the ranked (filename, score) list from one live search."""
+    """For each case, the ranked (filename, score) list from one live search.
+
+    Tag-scoped cases run with their tag filter, exactly as the UI would send
+    them; the isolation probe (empty ``expected``) is excluded — retrieval rank
+    metrics are undefined when no document is supposed to match."""
     rows = []
-    for case in CASES:
+    for case in list(CASES) + [c for c in TAG_CASES if c["expected"]]:
         vec = embedder.embed_query(case["query"])
-        hits = store.search(vec, CANDIDATE_POOL, None)
+        hits = store.search(vec, CANDIDATE_POOL, case.get("tags"))
         ranked = [(h["payload"].get("filename"), h["score"]) for h in hits]
         rows.append({**case, "ranked": ranked})
     return rows

@@ -1,0 +1,20 @@
+Subject: RE: Patient portal engagement — timeline question
+
+From: Dr. Priya Sharma (Aurora Health) | 2026-03-10
+To: Sofia Marchetti (DFFRNT)
+
+Sofia — our board wants the redesigned portal live before the summer clinic surge. Is there any way to compress the engagement from 16 weeks down to 12 weeks?
+
+---
+
+From: Sofia Marchetti (DFFRNT) | 2026-03-12
+To: Dr. Priya Sharma (Aurora Health)
+
+Priya — yes, with two changes. We can overlap the validation phase with design sprints 6 through 8, and we would add a second UX researcher so usability rounds run in parallel. The additional researcher adds $18,000, bringing the revised total to $258,000. Scope and deliverables are unchanged.
+
+---
+
+From: Dr. Priya Sharma (Aurora Health) | 2026-03-14
+To: Sofia Marchetti (DFFRNT)
+
+Approved — please proceed with the 12-week plan at $258,000. Our team will be ready for kickoff on 2026-04-01.
