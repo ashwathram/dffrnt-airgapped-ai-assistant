@@ -78,6 +78,7 @@ def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = N
         strategy=settings.chunk_strategy,
         chunk_size=settings.chunk_size,
         overlap=settings.chunk_overlap,
+        chunk_floor=getattr(settings, "chunk_floor", 0) or 0,
     )
     total = len(chunks)
     if not total:

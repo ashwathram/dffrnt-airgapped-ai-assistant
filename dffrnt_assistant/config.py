@@ -71,6 +71,10 @@ class Settings:
     chunk_strategy: str = "recursive"  # fixed | sentence | paragraph | recursive
     chunk_size: int = 512
     chunk_overlap: int = 64
+    # Minimum size for recursive-packed chunks. When > 0, tiny adjacent pieces
+    # are merged forward so headings / names / single-line fragments do not get
+    # stored as useless standalone chunks.
+    chunk_floor: int = 128
 
     # -- Retrieval / prompting --------------------------------------------
     history_turns: int = 6

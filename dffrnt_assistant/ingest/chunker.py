@@ -48,11 +48,15 @@ def _regex_segments(text: str, pattern: str) -> List[Dict]:
     return segments
 
 
-def _pack_segments(segments: Sequence[Dict], chunk_size: int, overlap: int) -> List[Dict]:
+def _pack_segments(
+    segments: Sequence[Dict], chunk_size: int, overlap: int, min_chars: int = 0
+) -> List[Dict]:
     if chunk_size <= 0:
         raise ValueError("chunk_size must be > 0")
     if overlap < 0:
         raise ValueError("overlap must be >= 0")
+    if min_chars < 0:
+        raise ValueError("min_chars must be >= 0")
     if not segments:
         return []
 
@@ -65,7 +69,7 @@ def _pack_segments(segments: Sequence[Dict], chunk_size: int, overlap: int) -> L
 
         while index < len(segments):
             candidate = "".join(item["text"] for item in current + [segments[index]])
-            if len(candidate) > chunk_size and current:
+            if len(candidate) > chunk_size and len("".join(item["text"] for item in current)) >= max(min_chars, 1):
                 break
             current.append(segments[index])
             index += 1
@@ -121,18 +125,20 @@ def _split_to_atomic(text: str, chunk_size: int, overlap: int) -> List[Dict]:
     return atomic
 
 
-def chunk_recursive(text: str, chunk_size: int = 1200, overlap: int = 150) -> List[Dict]:
+def chunk_recursive(
+    text: str, chunk_size: int = 1200, overlap: int = 150, min_chars: int = 0
+) -> List[Dict]:
     """Recursively split by paragraph, sentence, then fixed size, packing small
     adjacent segments together up to chunk_size (so prose with many short
     paragraphs does not explode into one chunk per line)."""
     atomic = _split_to_atomic(text, chunk_size, overlap)
     if not atomic:
         return chunk_text(text, chunk_size=chunk_size, overlap=overlap)
-    return _pack_segments(atomic, chunk_size=chunk_size, overlap=1)
+    return _pack_segments(atomic, chunk_size=chunk_size, overlap=1, min_chars=min_chars)
 
 
 def chunk_by_strategy(
-    text: str, strategy: str = "recursive", chunk_size: int = 1200, overlap: int = 150
+    text: str, strategy: str = "recursive", chunk_size: int = 1200, overlap: int = 150, min_chars: int = 0
 ) -> List[Dict]:
     strategy = strategy.lower().strip()
     if strategy == "fixed":
@@ -142,12 +148,12 @@ def chunk_by_strategy(
     if strategy == "paragraph":
         return chunk_paragraphs(text, chunk_size=chunk_size, overlap=1)
     if strategy == "recursive":
-        return chunk_recursive(text, chunk_size=chunk_size, overlap=overlap)
+        return chunk_recursive(text, chunk_size=chunk_size, overlap=overlap, min_chars=min_chars)
     raise ValueError(f"Unsupported chunking strategy: {strategy}")
 
 
 def chunk_file(
-    file_record: dict, strategy: str = "recursive", chunk_size: int = 512, overlap: int = 64
+    file_record: dict, strategy: str = "recursive", chunk_size: int = 512, overlap: int = 64, chunk_floor: int = 0
 ) -> List[Dict]:
     """Chunk a ``Document`` (from ``loaders.load_file``) into metadata-rich chunks.
 
@@ -177,7 +183,7 @@ def chunk_file(
         section_start = section.get("char_start", 0)
 
         relative_chunks = chunk_by_strategy(
-            section_text, strategy=strategy, chunk_size=chunk_size, overlap=overlap
+            section_text, strategy=strategy, chunk_size=chunk_size, overlap=overlap, min_chars=chunk_floor
         )
 
         for chunk_index, relative in enumerate(relative_chunks, start=1):
@@ -196,5 +202,28 @@ def chunk_file(
                     "section_heading": heading,
                 }
             )
+
+    if chunk_floor > 0 and len(all_chunks) > 1:
+        merged: List[Dict] = []
+        buffer = dict(all_chunks[0])
+        for nxt in all_chunks[1:]:
+            if len(buffer.get("text") or "") < chunk_floor:
+                buffer["text"] = f'{buffer.get("text") or ""}\n\n{nxt.get("text") or ""}'.strip()
+                buffer["char_end"] = nxt.get("char_end")
+                buffer["slide_index"] = buffer.get("slide_index") or nxt.get("slide_index")
+                buffer["page_number"] = buffer.get("page_number") or nxt.get("page_number")
+                if not buffer.get("section_heading") and nxt.get("section_heading"):
+                    buffer["section_heading"] = nxt.get("section_heading")
+                continue
+            merged.append(buffer)
+            buffer = dict(nxt)
+        merged.append(buffer)
+
+        renamed: List[Dict] = []
+        for chunk_index, chunk in enumerate(merged, start=1):
+            updated = dict(chunk)
+            updated["chunk_id"] = f"{filename}::merged::chunk_{chunk_index}"
+            renamed.append(updated)
+        all_chunks = renamed
 
     return all_chunks
