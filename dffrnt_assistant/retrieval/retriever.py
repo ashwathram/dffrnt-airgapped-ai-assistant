@@ -30,7 +30,7 @@ class Retriever:
         query_vector = self.embedder.embed_query(question)
         embed_ms = (time.perf_counter() - t0) * 1000
         hits = []
-        summary_hits = 0
+        summary_hits: List[Dict] = []
         summary_ms = 0.0
         chunk_ms = 0.0
         candidate_files: List[str] = []
