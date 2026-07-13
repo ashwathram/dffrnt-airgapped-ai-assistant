@@ -56,6 +56,7 @@ class Settings:
     # -- Qdrant vector store ----------------------------------------------
     qdrant_url: str = "http://localhost:6333"
     collection_name: str = "dffrnt_documents"
+    summary_collection_name: str = "dffrnt_document_summaries"
     tags_collection_name: str = "dffrnt_tags"  # tag taxonomy (managed, not vectors)
     conversations_collection_name: str = "dffrnt_conversations"  # saved chats
     distance: str = "cosine"           # cosine | dot | euclid

@@ -10,13 +10,14 @@ from typing import Optional
 
 from .chunker import chunk_file
 from .loaders import load_file
+from .summary import generate_document_summary
 
 # Single source of truth for what the system accepts (API validation + CLI scan).
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".txt", ".md"}
 
 _METADATA_KEYS = (
     "document_type", "department", "client_project", "tags", "tag_paths",
-    "description", "content_hash",
+    "description", "content_hash", "document_summary", "summary_kind",
 )
 
 
@@ -40,6 +41,8 @@ def build_payload(chunk: dict, document: dict, meta: Optional[dict] = None) -> d
         "tag_paths": [],
         "description": "",
         "content_hash": "",
+        "document_summary": "",
+        "summary_kind": "chunk",
     }
     if meta:
         for key in _METADATA_KEYS:
@@ -51,7 +54,33 @@ def build_payload(chunk: dict, document: dict, meta: Optional[dict] = None) -> d
 EMBED_BATCH = 64  # embed in bounded batches so progress can be reported per batch
 
 
-def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = None):
+def _summary_point(document: dict, summary: str, vector: list, meta: Optional[dict] = None) -> dict:
+    payload = build_payload(
+        {
+            "text": summary,
+            "chunk_id": f"{document.get('filename')}::summary",
+            "filename": document.get("filename"),
+            "file_type": document.get("file_type"),
+            "source_file": document.get("source_file"),
+            "page_number": None,
+            "slide_index": None,
+            "section_heading": "document_summary",
+            "char_start": 0,
+            "char_end": len(summary),
+        },
+        document,
+        meta,
+    )
+    payload["summary_kind"] = "document_summary"
+    payload["document_summary"] = summary
+    return {
+        "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{document.get('filename')}::summary")),
+        "vector": vector,
+        "payload": payload,
+    }
+
+
+def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = None, summary_store=None):
     """Load, chunk, embed and store a single file, yielding progress events.
 
     Yields dicts keyed by ``stage``:
@@ -71,6 +100,18 @@ def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = N
     path = Path(path)
     yield {"stage": "parsing"}
     document = load_file(str(path))
+
+    summary = ""
+    summary_point = None
+    if summary_store is not None:
+        yield {"stage": "summarizing"}
+        summary = generate_document_summary(document, embedder)
+        summary_vector = (
+            embedder.embed_documents([summary])[0]
+            if summary
+            else embedder.embed_documents([document.get("filename") or path.name])[0]
+        )
+        summary_point = _summary_point(document, summary, summary_vector, meta)
 
     yield {"stage": "chunking"}
     chunks = chunk_file(
@@ -105,18 +146,22 @@ def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = N
 
     yield {"stage": "storing"}
     store.delete_by_filename(document.get("filename") or path.name)
+    if summary_store is not None:
+        summary_store.delete_by_filename(document.get("filename") or path.name)
     store.upsert(points)
+    if summary_point is not None:
+        summary_store.upsert([summary_point])
     yield {"stage": "stored", "chunks": len(points)}
 
 
-def ingest_file(path, store, embedder, settings, meta: Optional[dict] = None) -> int:
+def ingest_file(path, store, embedder, settings, meta: Optional[dict] = None, summary_store=None) -> int:
     """Load, chunk, embed and store a single file. Returns the chunk count.
 
     Thin wrapper over :func:`ingest_file_stream` for callers that only need the
     final count (the CLI scan and the non-streaming upload path).
     """
     count = 0
-    for event in ingest_file_stream(path, store, embedder, settings, meta):
+    for event in ingest_file_stream(path, store, embedder, settings, meta, summary_store=summary_store):
         if event.get("stage") == "stored":
             count = event["chunks"]
     return count

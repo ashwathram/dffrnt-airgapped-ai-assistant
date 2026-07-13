@@ -43,6 +43,8 @@ def test_build_payload_applies_metadata():
     assert payload["department"] == "R&D"
     assert payload["text"] == "t"
     assert payload["page_number"] == 1
+    assert payload["summary_kind"] == "chunk"
+    assert payload["document_summary"] == ""
 
 
 def test_ingest_file_deletes_then_upserts(tmp_path):

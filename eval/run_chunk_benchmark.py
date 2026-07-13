@@ -30,6 +30,7 @@ from dffrnt_assistant.config import Settings, load_settings
 from dffrnt_assistant.ingest.chunker import chunk_file
 from dffrnt_assistant.ingest.loaders import load_file
 from dffrnt_assistant.ingest.pipeline import build_payload
+from dffrnt_assistant.ingest.summary import generate_document_summary
 from dffrnt_assistant.ollama import OllamaClient
 from dffrnt_assistant.rag.pipeline import RagPipeline
 from dffrnt_assistant.retrieval.retriever import Retriever
@@ -80,11 +81,19 @@ def _build_embedder(settings: Settings, temperature: float | None = None, top_p:
 def _ingest_corpus(settings: Settings, collection_name: str, chunk_floor: int) -> VectorStore:
     store = VectorStore(settings.qdrant_url, collection_name, settings.vector_size, settings.distance)
     store.recreate_collection()
+    summary_store = VectorStore(
+        settings.qdrant_url,
+        settings.summary_collection_name,
+        settings.vector_size,
+        settings.distance,
+    )
+    summary_store.recreate_collection()
     embedder = _build_embedder(settings)
     total_chunks = 0
     for filename, (_, description) in UPLOADS.items():
         path = CORPUS_DIR / filename
         document = load_file(str(path))
+        summary = generate_document_summary(document, embedder)
         chunks = chunk_file(
             document,
             strategy=settings.chunk_strategy,
@@ -111,6 +120,33 @@ def _ingest_corpus(settings: Settings, collection_name: str, chunk_floor: int) -
             for chunk, vector in zip(chunks, vectors)
         ]
         store.upsert(points)
+        summary_text = summary or document.get("document_title") or filename
+        summary_store.upsert([
+            {
+                "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{filename}::summary")),
+                "vector": embedder.embed_documents([summary_text])[0],
+                "payload": build_payload(
+                    {
+                        "text": summary_text,
+                        "chunk_id": f"{filename}::summary",
+                        "filename": filename,
+                        "file_type": document.get("file_type"),
+                        "source_file": document.get("source_file"),
+                        "page_number": None,
+                        "slide_index": None,
+                        "section_heading": "document_summary",
+                        "char_start": 0,
+                        "char_end": len(summary_text),
+                    },
+                    document,
+                    {
+                        "description": description,
+                        "document_summary": summary_text,
+                        "summary_kind": "document_summary",
+                    },
+                ),
+            }
+        ])
         total_chunks += len(points)
     print(f"  ingested {len(UPLOADS)} docs / {total_chunks} chunks into {collection_name}")
     return store
@@ -152,7 +188,13 @@ def _retrieval_metrics(rows: List[Dict]) -> Dict:
 def _build_pipeline(settings: Settings) -> RagPipeline:
     store = VectorStore(settings.qdrant_url, settings.collection_name, settings.vector_size, settings.distance)
     llm = _build_embedder(settings)
-    retriever = Retriever(store, llm, settings)
+    summary_store = VectorStore(
+        settings.qdrant_url,
+        settings.summary_collection_name,
+        settings.vector_size,
+        settings.distance,
+    )
+    retriever = Retriever(store, llm, settings, summary_store=summary_store)
     return RagPipeline(retriever, llm, settings)
 
 

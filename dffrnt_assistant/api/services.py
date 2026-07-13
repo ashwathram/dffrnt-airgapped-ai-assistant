@@ -31,9 +31,10 @@ def _human_size(num_bytes: int) -> str:
 
 
 class AssistantService:
-    def __init__(self, settings, store, embedder, rag, audit):
+    def __init__(self, settings, store, summary_store, embedder, rag, audit):
         self.settings = settings
         self.store = store
+        self.summary_store = summary_store
         self.embedder = embedder
         self.rag = rag
         self.audit = audit
@@ -108,7 +109,14 @@ class AssistantService:
 
     # -- Ingestion ---------------------------------------------------------
     def _ingest(self, path: Path, meta: Optional[dict] = None) -> int:
-        chunks = ingest_file(path, self.store, self.embedder, self.settings, meta)
+        chunks = ingest_file(
+            path,
+            self.store,
+            self.embedder,
+            self.settings,
+            meta,
+            summary_store=self.summary_store,
+        )
         self.audit.write("INGESTION", {"file": path.name, "chunks": chunks})
         return chunks
 
@@ -251,7 +259,14 @@ class AssistantService:
         yield {"stage": "received", "size": data["file_size"]}
         chunks = 0
         try:
-            for event in ingest_file_stream(data["save_path"], self.store, self.embedder, self.settings, data["meta"]):
+            for event in ingest_file_stream(
+                data["save_path"],
+                self.store,
+                self.embedder,
+                self.settings,
+                data["meta"],
+                summary_store=self.summary_store,
+            ):
                 if event.get("stage") == "stored":
                     chunks = event["chunks"]
                 else:
@@ -361,6 +376,7 @@ class AssistantService:
     # -- Deletion ----------------------------------------------------------
     def delete(self, filename: str) -> dict:
         self.store.delete_by_filename(filename)
+        self.summary_store.delete_by_filename(filename)
         path = self.data_dir / filename
         if path.exists():
             path.unlink()
@@ -385,6 +401,9 @@ class AssistantService:
         self.store.set_payload_by_filename(
             filename, {"tags": leaf_tags, "tag_paths": tag_paths}
         )
+        self.summary_store.set_payload_by_filename(
+            filename, {"tags": leaf_tags, "tag_paths": tag_paths}
+        )
         self.audit.write("TAG_UPDATE", {"filename": filename, "tags": leaf_tags})
         return {"filename": filename, "tags": leaf_tags}
 
@@ -395,6 +414,7 @@ class AssistantService:
             raise UserError(404, f"Document not found: {filename}")
         desc = (description or "").strip()
         self.store.set_payload_by_filename(filename, {"description": desc})
+        self.summary_store.set_payload_by_filename(filename, {"description": desc})
         self.audit.write("DESCRIPTION_UPDATE", {"filename": filename})
         return {"filename": filename, "description": desc}
 
