@@ -58,15 +58,20 @@ class VectorStore:
             self.client.upsert(collection_name=self.collection_name, points=batch)
 
     def search(
-        self, query_vector: List[float], top_k: int, tag_filter: List[str] = None
+        self,
+        query_vector: List[float],
+        top_k: int,
+        tag_filter: List[str] = None,
+        filenames: List[str] = None,
     ) -> List[Dict]:
         """Top-k nearest chunks, optionally restricted to those carrying any of
         the given tags (so the assistant searches only the scoped documents)."""
-        query_filter = None
+        must = []
         if tag_filter:
-            query_filter = Filter(
-                must=[FieldCondition(key="tags", match=MatchAny(any=list(tag_filter)))]
-            )
+            must.append(FieldCondition(key="tags", match=MatchAny(any=list(tag_filter))))
+        if filenames:
+            must.append(FieldCondition(key="filename", match=MatchAny(any=list(filenames))))
+        query_filter = Filter(must=must) if must else None
         results = self.client.query_points(
             collection_name=self.collection_name,
             query=query_vector,

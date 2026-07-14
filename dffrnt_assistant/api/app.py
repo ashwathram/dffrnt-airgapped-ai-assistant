@@ -27,6 +27,13 @@ store = VectorStore(
     settings.qdrant_url, settings.collection_name, settings.vector_size, settings.distance
 )
 store.ensure_collection()
+summary_store = VectorStore(
+    settings.qdrant_url,
+    settings.summary_collection_name,
+    settings.vector_size,
+    settings.distance,
+)
+summary_store.ensure_collection()
 ollama = OllamaClient(
     settings.ollama_url,
     settings.llm_model,
@@ -41,10 +48,10 @@ ollama = OllamaClient(
     settings.llm_repeat_penalty,
     settings.llm_num_predict,
 )
-retriever = Retriever(store, ollama, settings)
-rag = RagPipeline(retriever, ollama, settings)
 audit = AuditLog(settings.audit_log_path)
-service = AssistantService(settings, store, ollama, rag, audit)
+retriever = Retriever(store, ollama, settings, summary_store=summary_store, audit=audit)
+rag = RagPipeline(retriever, ollama, settings, audit=audit)
+service = AssistantService(settings, store, summary_store, ollama, rag, audit)
 
 tag_store = TagStore(settings.qdrant_url, settings.tags_collection_name)
 tag_store.ensure_collection()

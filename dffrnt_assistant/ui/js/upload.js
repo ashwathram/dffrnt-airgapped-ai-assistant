@@ -266,6 +266,7 @@ function stageInfo(ev) {
     }
     case 'received': return { pct: 22, text: 'Uploaded — preparing…' };
     case 'parsing': return { pct: 26, text: 'Reading document…' };
+    case 'summarizing': return { pct: 29, text: 'Summarizing document…' };
     case 'chunking': return { pct: 32, text: 'Splitting into chunks…' };
     case 'embedding': {
       const p = ev.total ? ev.done / ev.total : 0;

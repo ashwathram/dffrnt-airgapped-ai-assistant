@@ -24,6 +24,8 @@ PAYLOAD_FIELDS = (
     "tag_paths",
     "description",
     "content_hash",
+    "document_summary",
+    "summary_kind",
 )
 
 # Longest excerpt (characters) sent with a citation before it is truncated.
