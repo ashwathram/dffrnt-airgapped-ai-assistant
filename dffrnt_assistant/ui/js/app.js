@@ -15,7 +15,7 @@
 import { $ } from './util.js';
 import { hydrateIcons } from './icons.js';
 import { state } from './state.js';
-import { renderMessages, initComposer, clearChat, loadConversation } from './chat.js';
+import { renderMessages, initComposer, clearChat, loadConversation, initWorkflowToggles } from './chat.js';
 import { initSidebar } from './sidebar.js';
 import { loadDocuments, initLibrary } from './library.js';
 import { initUpload } from './upload.js';
@@ -28,6 +28,7 @@ function setView(view) {
   state.view = view;
   $('chatPanel').classList.toggle('hidden', view !== 'chat');
   $('libraryPanel').classList.toggle('hidden', view !== 'library');
+  $('chatWorkflowToggles').classList.toggle('hidden', view !== 'chat');
   $('navLibrary').classList.toggle('active', view === 'library');
   $('topbarTitle').textContent = view === 'library'
     ? 'Document Library'
@@ -51,6 +52,7 @@ initSettings();
 initTags();
 initConfirm();
 initScope();
+initWorkflowToggles({ renderScope });
 
 $('navNewChat').onclick = newChat;
 $('navLibrary').onclick = () => setView('library');

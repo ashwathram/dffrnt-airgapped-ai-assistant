@@ -36,7 +36,7 @@ def _excerpt(payload: dict) -> str:
     """A compact, whitespace-collapsed snippet of a chunk for citation cards."""
     text = " ".join((payload.get("text") or "").split())
     if len(text) > _EXCERPT_LIMIT:
-        text = text[:_EXCERPT_LIMIT].rstrip() + "…"
+        text = text[:_EXCERPT_LIMIT].rstrip() + "..."
     return text
 
 

@@ -41,9 +41,17 @@ class AssistantService:
         self.data_dir = Path(settings.data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
+    def _normalize_mode(self, mode: Optional[str]) -> str:
+        mode = (mode or "chat").strip().lower()
+        return mode if mode in {"chat", "rfp"} else "chat"
+
     # -- Query -------------------------------------------------------------
     def query(
-        self, question: str, history: Optional[List[dict]] = None, tags: Optional[List[str]] = None
+        self,
+        question: str,
+        history: Optional[List[dict]] = None,
+        tags: Optional[List[str]] = None,
+        mode: Optional[str] = None,
     ) -> dict:
         question = (question or "").strip()
         if not question:
@@ -53,7 +61,23 @@ class AssistantService:
 
         history = history or []
         tag_filter = [t for t in (tags or []) if t]
-        result = self.rag.answer(question, history, tag_filter)
+        mode = self._normalize_mode(mode)
+        self.audit.write(
+            "RFP_DEBUG",
+            {
+                "stage": "service.query",
+                "mode": mode,
+                "question": question,
+                "selected_tags": tag_filter,
+                "payload": {
+                    "question": question,
+                    "conversation_history_turns": len(history),
+                    "tags": tag_filter,
+                    "mode": mode,
+                },
+            },
+        )
+        result = self.rag.answer(question, history, tag_filter, mode=mode)
         self.audit.write(
             "QUERY",
             {
@@ -62,12 +86,17 @@ class AssistantService:
                 "sources_count": len(result["sources"]),
                 "history_turns": len(history),
                 "tag_filter": tag_filter,
+                "mode": mode,
             },
         )
         return result
 
     def query_stream(
-        self, question: str, history: Optional[List[dict]] = None, tags: Optional[List[str]] = None
+        self,
+        question: str,
+        history: Optional[List[dict]] = None,
+        tags: Optional[List[str]] = None,
+        mode: Optional[str] = None,
     ):
         """Like ``query`` but streams ``(kind, payload)`` events.
 
@@ -79,14 +108,30 @@ class AssistantService:
         if not question:
             raise UserError(400, "Question cannot be empty")
         if len(question) > 2000:
-            raise UserError(400, "Question too long — max 2000 characters")
+            raise UserError(400, "Question too long ? max 2000 characters")
         history = history or []
         tag_filter = [t for t in (tags or []) if t]
+        mode = self._normalize_mode(mode)
+        self.audit.write(
+            "RFP_DEBUG",
+            {
+                "stage": "service.query_stream",
+                "mode": mode,
+                "question": question,
+                "selected_tags": tag_filter,
+                "payload": {
+                    "question": question,
+                    "conversation_history_turns": len(history),
+                    "tags": tag_filter,
+                    "mode": mode,
+                },
+            },
+        )
 
         def events():
             sources_count = 0
             answer_length = 0
-            for kind, payload in self.rag.answer_stream(question, history, tag_filter):
+            for kind, payload in self.rag.answer_stream(question, history, tag_filter, mode=mode):
                 if kind == "sources":
                     sources_count = len(payload)
                 elif kind == "token":
@@ -101,6 +146,7 @@ class AssistantService:
                     "answer_length": answer_length,
                     "history_turns": len(history),
                     "tag_filter": tag_filter,
+                    "mode": mode,
                     "streamed": True,
                 },
             )
@@ -304,6 +350,7 @@ class AssistantService:
                         payload.get("file_type")
                         or (filename.rsplit(".", 1)[-1] if "." in filename else "")
                     ).upper(),
+                    "document_type": payload.get("document_type") or "",
                     "chunk_count": 0,
                     "file_path": str(self.data_dir / filename),
                     "file_size": "Unknown",
@@ -564,6 +611,10 @@ class ConversationService:
     def __init__(self, conversation_store):
         self.store = conversation_store
 
+    def _normalize_mode(self, mode: Optional[str]) -> str:
+        mode = (mode or "chat").strip().lower()
+        return mode if mode in {"chat", "rfp"} else "chat"
+
     def list(self) -> dict:
         """Light list for the sidebar (no message bodies), pinned first then
         most-recently-updated."""
@@ -585,12 +636,13 @@ class ConversationService:
             raise UserError(404, "Conversation not found")
         return convo
 
-    def create(self, title: str, messages: Optional[list]) -> dict:
+    def create(self, title: str, messages: Optional[list], mode: Optional[str] = None) -> dict:
         now = time.time()
         convo = {
             "id": str(uuid.uuid4()),
             "title": (title or "").strip()[:80] or "New conversation",
             "messages": messages or [],
+            "mode": self._normalize_mode(mode),
             "created_at": now,
             "updated_at": now,
             "pinned": False,
@@ -603,6 +655,7 @@ class ConversationService:
         conversation_id: str,
         title: Optional[str] = None,
         messages: Optional[list] = None,
+        mode: Optional[str] = None,
         pinned: Optional[bool] = None,
     ) -> dict:
         convo = self.store.get(conversation_id)
@@ -614,6 +667,8 @@ class ConversationService:
                 convo["title"] = cleaned
         if messages is not None:
             convo["messages"] = messages
+        if mode is not None:
+            convo["mode"] = self._normalize_mode(mode)
         if pinned is not None:
             convo["pinned"] = bool(pinned)
         convo["updated_at"] = time.time()

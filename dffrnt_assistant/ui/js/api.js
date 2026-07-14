@@ -10,11 +10,11 @@ async function asJson(promise) {
 // Stream an answer as an async iterator of events from /api/query/stream.
 // Yields { type:'sources', sources } then many { type:'token', text },
 // then { type:'done' }, or { type:'error', detail } on failure.
-export async function* queryStream(question, history, signal, tags) {
+export async function* queryStream(question, history, signal, tags, mode) {
   const r = await fetch('/api/query/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, conversation_history: history, tags: tags || [] }),
+    body: JSON.stringify({ question, conversation_history: history, tags: tags || [], mode: mode || 'chat' }),
     signal,
   });
   if (!r.ok || !r.body) {

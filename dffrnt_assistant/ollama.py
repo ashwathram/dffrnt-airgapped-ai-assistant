@@ -10,6 +10,30 @@ import urllib.request
 from typing import Iterator, List, Tuple
 
 
+def _looks_repetitive(text: str) -> bool:
+    """Heuristic guard for runaway local-model repetition.
+
+    Small local models sometimes loop the same sentence/paragraph when prompts
+    get long. We stop the stream once the trailing output clearly repeats
+    instead of growing meaningfully.
+    """
+    if len(text) < 500:
+        return False
+    tail = " ".join(text.split())
+    if len(tail) < 300:
+        return False
+
+    for size in (120, 180, 240):
+        if len(tail) < size * 3:
+            continue
+        a = tail[-size:]
+        b = tail[-2 * size : -size]
+        c = tail[-3 * size : -2 * size]
+        if a == b == c:
+            return True
+    return False
+
+
 class OllamaClient:
     def __init__(
         self,
@@ -134,6 +158,7 @@ class OllamaClient:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+        answer_so_far = ""
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
             for line in response:
                 line = line.strip()
@@ -145,6 +170,9 @@ class OllamaClient:
                     yield ("thinking", thinking)
                 token = chunk.get("response", "")
                 if token:
+                    answer_so_far += token
                     yield ("answer", token)
+                    if _looks_repetitive(answer_so_far):
+                        break
                 if chunk.get("done"):
                     break

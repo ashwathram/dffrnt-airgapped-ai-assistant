@@ -5,12 +5,42 @@ import { $, esc } from './util.js';
 import { svg } from './icons.js';
 import { state } from './state.js';
 import { getTags, listDocuments } from './api.js';
+import { renderMessages, sendMessage, syncWorkflowToggles } from './chat.js';
 
 let open = false;
+
+function looksLikeRfpTag(value) {
+  const lower = String(value || '').toLowerCase();
+  return lower.includes('rfp') || lower.includes('request for proposal');
+}
+
+function looksLikeRfpDoc(doc) {
+  const documentType = String(doc?.document_type || '').toLowerCase();
+  if (documentType === 'rfp' || documentType === 'request_for_proposal' || documentType === 'request for proposal') {
+    return true;
+  }
+  return (doc?.tags || []).some((tag) => looksLikeRfpTag(tag));
+}
+
+function tagRoles() {
+  const roles = new Map();
+  for (const tag of state.tags || []) roles.set(tag.name, { hasRfp: false, hasResume: false });
+  for (const doc of state.documents || []) {
+    const isRfp = looksLikeRfpDoc(doc);
+    for (const tagName of doc.tags || []) {
+      if (!roles.has(tagName)) continue;
+      const role = roles.get(tagName);
+      if (isRfp) role.hasRfp = true;
+      else role.hasResume = true;
+    }
+  }
+  return roles;
+}
 
 // Documents matching the current scope (OR semantics, mirroring retrieval).
 function docsInScope() {
   const docs = state.documents || [];
+  if (state.pendingAction && !state.chatScope.length) return 0;
   if (!state.chatScope.length) return docs.length;
   return docs.filter((d) => state.chatScope.some((t) => (d.tags || []).includes(t))).length;
 }
@@ -22,6 +52,28 @@ export function renderScope() {
   state.chatScope = state.chatScope.filter((n) => state.tags.some((t) => t.name === n));
   const n = state.chatScope.length;
   const inScope = docsInScope();
+  const pendingAction = state.pendingAction;
+  const roles = tagRoles();
+  if (pendingAction) {
+    let keptRfpTag = null;
+    state.chatScope = state.chatScope.filter((name) => {
+      const role = roles.get(name);
+      if (!role || (!role.hasRfp && !role.hasResume)) return false;
+      if (!role.hasRfp) return true;
+      if (!keptRfpTag) {
+        keptRfpTag = name;
+        return true;
+      }
+      return keptRfpTag === name;
+    });
+  }
+  const selectedRfpTag = state.chatScope.find((name) => roles.get(name)?.hasRfp) || null;
+  const selectedDocs = !state.chatScope.length
+    ? (pendingAction ? [] : (state.documents || []))
+    : (state.documents || []).filter((d) => state.chatScope.some((t) => (d.tags || []).includes(t)));
+  const rfpCount = selectedDocs.filter((d) => looksLikeRfpDoc(d)).length;
+  const resumeCount = Math.max(0, selectedDocs.length - rfpCount);
+  const readyForRfp = rfpCount === 1 && resumeCount >= 1;
 
   const groups = state.tagTypes.map((tt) => {
     const tags = state.tags.filter((t) => t.typeId === tt.id);
@@ -31,26 +83,50 @@ export function renderScope() {
     const allOn = tags.every((t) => state.chatScope.includes(t.name));
     const chips = tags.map((t) => {
       const on = state.chatScope.includes(t.name);
-      const style = on ? `background:${tt.color};color:#fff;border-color:${tt.color}` : `color:${tt.color};border-color:${tt.color}55`;
-      return `<button class="scope-chip${on ? ' on' : ''}" data-scope="tag" data-tag="${esc(t.name)}" style="${style}">${esc(t.name)}</button>`;
+      const role = roles.get(t.name) || { hasRfp: false, hasResume: false };
+      const eligible = !pendingAction || role.hasRfp || role.hasResume;
+      const blockedByRfpLimit = !!pendingAction && role.hasRfp && !!selectedRfpTag && selectedRfpTag !== t.name;
+      const disabled = !eligible || blockedByRfpLimit;
+      const style = disabled
+        ? 'color:var(--muted-foreground);border-color:rgba(9,26,41,0.10);background:rgba(9,26,41,0.03)'
+        : (on ? `background:${tt.color};color:#fff;border-color:${tt.color}` : `color:${tt.color};border-color:${tt.color}55`);
+      return `<button class="scope-chip${on ? ' on' : ''}${disabled ? ' disabled' : ''}" ${disabled ? 'disabled' : ''} data-scope="tag" data-tag="${esc(t.name)}" style="${style}">${esc(t.name)}</button>`;
     }).join('');
-    const headStyle = allOn ? `background:${tt.color};color:#fff;border-color:${tt.color}` : `color:${tt.color};border-color:${tt.color}55`;
-    return `<div class="scope-group"><button class="scope-gname${allOn ? ' on' : ''}" data-scope="type" data-type="${esc(tt.id)}" style="${headStyle}" title="Select all ${esc(tt.name)} tags">${esc(tt.name)}</button><div class="scope-chips">${chips}</div></div>`;
+    const headStyle = pendingAction
+      ? 'color:var(--muted-foreground);border-color:rgba(9,26,41,0.10);background:rgba(9,26,41,0.03)'
+      : (allOn ? `background:${tt.color};color:#fff;border-color:${tt.color}` : `color:${tt.color};border-color:${tt.color}55`);
+    return `<div class="scope-group"><button class="scope-gname${allOn ? ' on' : ''}${pendingAction ? ' disabled' : ''}" ${pendingAction ? 'disabled' : `data-scope="type" data-type="${esc(tt.id)}"`} style="${headStyle}" title="${pendingAction ? 'Bulk select is disabled in workflow mode' : `Select all ${esc(tt.name)} tags`}">${esc(tt.name)}</button><div class="scope-chips">${chips}</div></div>`;
   }).join('');
 
   el.innerHTML = `
     <button class="scope-head" data-scope="toggle">
       ${svg('tag')}
-      <span class="scope-label">${n ? `Searching ${n} tag${n > 1 ? 's' : ''}` : 'Search scope: all documents'}</span>
+      <span class="scope-label">${n ? `Search scope: ${n} tag${n > 1 ? 's' : ''} selected` : 'Search scope: all documents'}</span>
       ${n ? `<span class="scope-count">${n}</span>` : ''}
       <span class="scope-spacer"></span>
       <span class="scope-docs">${inScope} doc${inScope === 1 ? '' : 's'} in scope</span>
       <span class="scope-chev">${svg(open ? 'chevronUp' : 'chevronDown')}</span>
     </button>
     ${open ? `<div class="scope-body">
-      <p class="scope-hint">${n
-        ? `The AI assistant will search only documents tagged with the selected tag${n > 1 ? 's' : ''}.`
-        : `No tags selected. The AI assistant will search across all ${(state.documents || []).length} documents in the database. Select tags below to narrow the search scope.`}</p>
+      <p class="scope-hint">${pendingAction === 'rfp'
+        ? 'RFP fit check is selected. Select 1 RFP tag and 1 or more resume tags. Unrelated tags are disabled in this workflow.'
+        : (n
+          ? `The AI assistant will search only documents tagged with the selected tag${n > 1 ? 's' : ''}. Use the suggested action below the welcome message if you want to compare selected resumes to an RFP.`
+          : `No tags selected. The AI assistant will search across all ${(state.documents || []).length} documents in the database. Select tags below to narrow the search scope. Use the suggested action below the welcome message for RFP comparison.`)}</p>
+      ${pendingAction ? `<div class="scope-workflow">
+        <div class="scope-workflow-status">
+          <span class="status-pill${rfpCount === 1 ? ' ok' : ''}">RFP: ${rfpCount}</span>
+          <span class="status-pill${resumeCount >= 1 ? ' ok' : ''}">Resumes: ${resumeCount}</span>
+        </div>
+        <div class="scope-workflow-actions">
+          <button class="guide-btn primary${readyForRfp ? '' : ' disabled'}"
+            data-scope-start="${esc(pendingAction)}"
+            ${readyForRfp ? '' : 'disabled'}>
+            Start RFP fit check
+          </button>
+          <button class="guide-btn secondary" data-scope-cancel="1">Cancel</button>
+        </div>
+      </div>` : ''}
       ${groups}
       ${n ? '<button class="scope-clear" data-scope="clear">Clear</button>' : ''}
     </div>` : ''}`;
@@ -61,8 +137,15 @@ export function renderScope() {
       if (a === 'toggle') open = !open;
       else if (a === 'tag') {
         const name = b.dataset.tag;
-        state.chatScope = state.chatScope.includes(name)
-          ? state.chatScope.filter((x) => x !== name) : [...state.chatScope, name];
+        const role = roles.get(name) || { hasRfp: false, hasResume: false };
+        const on = state.chatScope.includes(name);
+        if (on) {
+          state.chatScope = state.chatScope.filter((x) => x !== name);
+        } else if (pendingAction && role.hasRfp) {
+          state.chatScope = [...state.chatScope.filter((x) => !roles.get(x)?.hasRfp), name];
+        } else {
+          state.chatScope = [...state.chatScope, name];
+        }
       } else if (a === 'type') {
         // Toggle every tag under this type: select all, or clear all if already all on.
         const names = state.tags.filter((t) => t.typeId === b.dataset.type).map((t) => t.name);
@@ -72,6 +155,24 @@ export function renderScope() {
           : [...new Set([...state.chatScope, ...names])];
       } else if (a === 'clear') state.chatScope = [];
       renderScope();
+      syncWorkflowToggles();
+      if (!state.messages.length && !state.busy) renderMessages();
+    };
+  });
+  el.querySelectorAll('[data-scope-start]').forEach((b) => {
+    b.onclick = () => {
+      const mode = 'rfp';
+      const question = 'Check selected resumes against selected RFP';
+      renderScope();
+      sendMessage(question, mode);
+    };
+  });
+  el.querySelectorAll('[data-scope-cancel]').forEach((b) => {
+    b.onclick = () => {
+      state.pendingAction = null;
+      syncWorkflowToggles();
+      renderScope();
+      if (!state.messages.length && !state.busy) renderMessages();
     };
   });
 }

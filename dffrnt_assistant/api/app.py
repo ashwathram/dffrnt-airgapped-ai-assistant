@@ -84,6 +84,7 @@ class QueryRequest(BaseModel):
     question: str
     conversation_history: List[ConversationTurn] = []
     tags: List[str] = []  # restrict retrieval to documents carrying any of these tags
+    mode: str = "chat"
 
 
 class QueryResponse(BaseModel):
@@ -114,11 +115,13 @@ class DocDescriptionRequest(BaseModel):
 class ConversationCreate(BaseModel):
     title: str = ""
     messages: list = []
+    mode: str = "chat"
 
 
 class ConversationUpdate(BaseModel):
     title: Optional[str] = None
     messages: Optional[list] = None
+    mode: Optional[str] = None
     pinned: Optional[bool] = None
 
 
@@ -143,7 +146,7 @@ def health():
 @app.post("/api/query", response_model=QueryResponse)
 def query_endpoint(request: QueryRequest):
     history = [turn.model_dump() for turn in request.conversation_history]
-    return _handle(lambda: service.query(request.question, history, request.tags))
+    return _handle(lambda: service.query(request.question, history, request.tags, request.mode))
 
 
 @app.post("/api/query/stream")
@@ -157,7 +160,7 @@ def query_stream_endpoint(request: QueryRequest):
     """
     history = [turn.model_dump() for turn in request.conversation_history]
     # Validation errors surface here (before streaming) as a normal HTTP error.
-    events = _handle(lambda: service.query_stream(request.question, history, request.tags))
+    events = _handle(lambda: service.query_stream(request.question, history, request.tags, request.mode))
 
     line_type = {"sources": "sources", "thinking": "thinking", "token": "token"}
 
@@ -285,7 +288,7 @@ def list_conversations():
 
 @app.post("/api/conversations")
 def create_conversation(body: ConversationCreate):
-    return _handle(lambda: conversation_service.create(body.title, body.messages))
+    return _handle(lambda: conversation_service.create(body.title, body.messages, body.mode))
 
 
 @app.delete("/api/conversations")
@@ -302,7 +305,7 @@ def get_conversation(conversation_id: str):
 def update_conversation(conversation_id: str, body: ConversationUpdate):
     return _handle(
         lambda: conversation_service.update(
-            conversation_id, body.title, body.messages, body.pinned
+            conversation_id, body.title, body.messages, body.mode, body.pinned
         )
     )
 

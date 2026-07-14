@@ -80,6 +80,7 @@ class Settings:
     # -- Retrieval / prompting --------------------------------------------
     history_turns: int = 6
     system_prompt: str = ""            # blank -> default in rag/prompt.py
+    rfp_system_prompt: str = ""        # blank -> default in rag/prompt.py
 
     # -- API / paths -------------------------------------------------------
     api_host: str = "0.0.0.0"

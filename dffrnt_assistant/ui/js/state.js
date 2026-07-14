@@ -7,12 +7,17 @@ export const state = {
   collapsed: false,  // sidebar collapsed
   // Show the model's reasoning in a block (on) vs just a "Thinking…" label (off).
   showThinking: localStorage.getItem('showThinking') === '1',
+  // The visible UI stays as one general chat. Special workflows are routed
+  // per-message from suggested actions rather than a persistent mode toggle.
+  queryMode: 'chat',
   // Tag taxonomy (loaded from /api/tags). tagTypes: {id,name,color,description?}
   // tags: {id,name,typeId}.
   tagTypes: [],
   tags: [],
   // Chat retrieval scope: tag names the next query is restricted to (empty = all).
   chatScope: [],
+  // Guided one-shot workflow selected from the welcome cards.
+  pendingAction: null, // null | 'rfp'
   // Documents (with their tags) — used for the "N docs in scope" count.
   documents: [],
   // Saved conversations: id of the open one + light list for the sidebar.

@@ -7,6 +7,12 @@
   background: var(--card); border-bottom: 1px solid var(--border);
 }
 .topbar .title { font-size: 14px; color: var(--muted-foreground); }
+.topbar-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
 .content { flex: 1; min-height: 0; }
 
 /* Sidebar */
