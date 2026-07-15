@@ -152,8 +152,10 @@ function tagSection(selected, scope, scopeKey) {
     return `
       <div class="up-tgroup">
         <button class="up-tgname" data-up="tgroup" data-type="${esc(tt.id)}">
-          <span class="up-tgdot" style="background:${tt.color}"></span>
-          <span style="color:${tt.color}">${esc(tt.name)}</span>
+          <span class="up-tgname-label">
+            <span class="up-tgdot" style="background:${tt.color}"></span>
+            <span style="color:${tt.color}">${esc(tt.name)}</span>
+          </span>
           ${svg(collapsed ? 'chevronRight' : 'chevronDown')}
         </button>
         ${collapsed ? '' : `<div class="up-tags">${chips}</div>`}
@@ -369,7 +371,7 @@ function render() {
     <div class="dropzone" id="upDrop">
       ${svg('upload')}
       <strong>Drop files or folders here</strong>
-      <span>PDF, DOCX, PPTX, XLSX, CSV, TXT, MD · Max ${MAX_MB} MB per file</span>
+      <span>PDF, DOCX, PPTX, XLSX, CSV, TXT, MD</span>
       <div class="dz-btns">
         <button class="dz-btn dz-btn-files" data-up="browse-files">${svg('file')} Browse files</button>
         <button class="dz-btn dz-btn-folder" data-up="browse-folder">${svg('folder')} Browse folder</button>
@@ -386,9 +388,9 @@ function render() {
   drop.ondragover = (ev) => { ev.preventDefault(); drop.classList.add('drag'); };
   drop.ondragleave = () => drop.classList.remove('drag');
   drop.ondrop = (ev) => { ev.preventDefault(); drop.classList.remove('drag'); addFiles(ev.dataTransfer.files); };
-  // Clicking the zone itself acts like "Browse files"; clicks on the browse
-  // buttons are handled separately (guard against double-opening the dialog).
-  drop.onclick = (ev) => { if (!ev.target.closest('[data-up]')) $('upInput').click(); };
+  // Only the "Browse files" / "Browse folder" buttons open a file dialog
+  // (handled by the delegated body click listener) — the zone itself has no
+  // click handler, so there's no chance of two dialogs opening on one click.
   refreshFoot();
 }
 

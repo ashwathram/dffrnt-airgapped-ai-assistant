@@ -40,6 +40,8 @@ collection_name = "dffrnt_documents"
 distance = "cosine"                # cosine | dot | euclid
 top_k = 8                          # candidates fetched per query
 score_margin = 0.08                # drop hits scoring this far below the best hit (0 = off)
+aggregate_group_limit = 24         # aggregate queries: best chunk(s) from each of top N docs (0 = off)
+aggregate_group_size = 1           # chunks kept per document in grouped search
 
 # --- Chunking ---
 chunk_strategy = "recursive"       # fixed | sentence | paragraph | recursive

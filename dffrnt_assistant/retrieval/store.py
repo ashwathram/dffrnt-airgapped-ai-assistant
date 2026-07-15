@@ -81,6 +81,52 @@ class VectorStore:
         ).points
         return [{"payload": r.payload, "score": r.score} for r in results]
 
+    def search_grouped(
+        self,
+        query_vector: List[float],
+        limit: int,
+        group_size: int = 1,
+        tag_filter: List[str] = None,
+    ) -> List[Dict]:
+        """Best ``group_size`` chunks from each of the top ``limit`` documents.
+
+        Groups by filename, so aggregate queries ("rates of all candidates") get
+        evidence from every relevant document instead of whatever global top-k
+        similarity happens to include."""
+        must = []
+        if tag_filter:
+            must.append(FieldCondition(key="tags", match=MatchAny(any=list(tag_filter))))
+        result = self.client.query_points_groups(
+            collection_name=self.collection_name,
+            query=query_vector,
+            group_by="filename",
+            limit=limit,
+            group_size=group_size,
+            with_payload=True,
+            query_filter=Filter(must=must) if must else None,
+        )
+        return [
+            {"payload": point.payload, "score": point.score}
+            for group in result.groups
+            for point in group.hits
+        ]
+
+    def payloads_by_filenames(self, filenames: List[str], limit: int = 0) -> List[Dict]:
+        """Payloads for the given filenames (e.g. summary points for documents
+        already retrieved, or every chunk of a document for text reconstruction
+        when ``limit`` is raised)."""
+        if not filenames:
+            return []
+        points, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="filename", match=MatchAny(any=list(filenames)))]
+            ),
+            limit=limit or max(len(filenames) * 2, 16),
+            with_payload=True,
+        )
+        return [p.payload for p in points]
+
     def find_by_content_hash(self, content_hash: str) -> str | None:
         """Filename of an existing document with this content hash, if any.
 

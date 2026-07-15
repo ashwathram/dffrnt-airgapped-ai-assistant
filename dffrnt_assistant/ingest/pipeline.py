@@ -4,6 +4,7 @@ Drives the API upload route, so every uploaded document is retrievable by the
 assistant.
 """
 
+import re
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -53,6 +54,59 @@ def build_payload(chunk: dict, document: dict, meta: Optional[dict] = None) -> d
 
 EMBED_BATCH = 64  # embed in bounded batches so progress can be reported per batch
 
+# Chunker fallback headings ("section3") carry no signal — never embed them.
+_PLACEHOLDER_HEADING = re.compile(r"^section\d+$")
+
+
+def _context_line(parts) -> str:
+    """Join non-empty, de-duplicated parts into one ' · ' context line."""
+    cleaned = []
+    for part in parts:
+        part = (part or "").strip()
+        if part and part not in cleaned:
+            cleaned.append(part)
+    return " · ".join(cleaned)
+
+
+def chunk_embed_text(chunk: dict, document: dict) -> str:
+    """The text actually embedded for a chunk: a filename/title/heading context
+    line, then the chunk text. The stored payload keeps the raw text — the
+    prefix only anchors the embedding, so slide bullets, spreadsheet rows and
+    resume fragments carry a topical/lexical anchor into vector space."""
+    heading = chunk.get("section_heading") or ""
+    if _PLACEHOLDER_HEADING.match(heading):
+        heading = ""
+    context = _context_line(
+        [document.get("filename"), document.get("document_title"), heading]
+    )
+    text = chunk.get("text") or ""
+    return f"{context}\n{text}" if context else text
+
+
+def summary_embed_text(document: dict, summary: str, meta: Optional[dict] = None) -> str:
+    """The text embedded for a document's summary point: filename, title and
+    the user-entered description alongside the summary, so lexical anchors
+    (candidate names, project titles) reach the routing signal."""
+    context = _context_line(
+        [
+            document.get("filename"),
+            document.get("document_title"),
+            (meta or {}).get("description"),
+        ]
+    )
+    summary = (summary or "").strip()
+    if context and summary:
+        return f"{context}\n{summary}"
+    return summary or context or (document.get("filename") or "")
+
+
+def build_summary_point(document: dict, embedder, meta: Optional[dict] = None) -> dict:
+    """Generate, embed and package a document-summary point (shared by the
+    upload pipeline and the backfill CLI)."""
+    summary = generate_document_summary(document, embedder)
+    vector = embedder.embed_documents([summary_embed_text(document, summary, meta)])[0]
+    return _summary_point(document, summary, vector, meta)
+
 
 def _summary_point(document: dict, summary: str, vector: list, meta: Optional[dict] = None) -> dict:
     payload = build_payload(
@@ -101,17 +155,10 @@ def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = N
     yield {"stage": "parsing"}
     document = load_file(str(path))
 
-    summary = ""
     summary_point = None
     if summary_store is not None:
         yield {"stage": "summarizing"}
-        summary = generate_document_summary(document, embedder)
-        summary_vector = (
-            embedder.embed_documents([summary])[0]
-            if summary
-            else embedder.embed_documents([document.get("filename") or path.name])[0]
-        )
-        summary_point = _summary_point(document, summary, summary_vector, meta)
+        summary_point = build_summary_point(document, embedder, meta)
 
     yield {"stage": "chunking"}
     chunks = chunk_file(
@@ -126,7 +173,8 @@ def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = N
         yield {"stage": "stored", "chunks": 0}
         return
 
-    texts = [chunk["text"] for chunk in chunks]
+    # Embed with the document/heading context prefix; store the raw chunk text.
+    texts = [chunk_embed_text(chunk, document) for chunk in chunks]
     vectors: list = []
     yield {"stage": "embedding", "done": 0, "total": total}
     for start in range(0, total, EMBED_BATCH):

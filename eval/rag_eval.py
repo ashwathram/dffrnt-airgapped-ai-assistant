@@ -7,6 +7,12 @@ so no re-embedding is needed per config. Reports P@1 (rank-1 correct), recall
 (any expected doc kept after the margin cut), and the average number of chunks
 that survive the cut (prompt size proxy).
 
+The sweep exercises plain chunk search (the signal the top_k/margin math is
+defined over). A second section then A/Bs the *production* retriever — with the
+document-summary routing and aggregate grouping signals — against plain search,
+so any regression from those additive signals is caught here (they must never
+score worse than plain: eval/OPTIMIZATION_PLAN.md §1.3/E1).
+
 Run from the repo root:  python -m eval.rag_eval
 Requires the same services the app uses (Ollama + Qdrant) to be up.
 """
@@ -18,6 +24,7 @@ from typing import Dict, List
 
 from dffrnt_assistant.config import load_settings
 from dffrnt_assistant.ollama import OllamaClient
+from dffrnt_assistant.retrieval.retriever import Retriever
 from dffrnt_assistant.retrieval.store import VectorStore
 
 from eval.sample_queries import CASES, TAG_CASES
@@ -72,6 +79,44 @@ def score_config(rows: List[Dict], top_k: int, margin: float) -> Dict:
         "n": n,
         "avg_kept": statistics.mean(kept_counts) if kept_counts else 0,
     }
+
+
+def routing_ab(settings, store, embedder) -> None:
+    """A/B the production retriever (summary routing + aggregate grouping)
+    against plain chunk search, per query and in aggregate. The production
+    signals are additive, so 'routed' must never rank or recall worse than
+    'plain' — any DIFF that loses a rank is a regression."""
+    summary_store = VectorStore(
+        settings.qdrant_url, settings.summary_collection_name,
+        settings.vector_size, settings.distance,
+    )
+    routed_retriever = Retriever(store, embedder, settings, summary_store=summary_store)
+    plain_retriever = Retriever(store, embedder, settings, summary_store=None)
+    cases = list(CASES) + [c for c in TAG_CASES if c["expected"]]
+
+    def stats(hits, expected):
+        files = [h["payload"].get("filename") for h in hits]
+        rank = next((i + 1 for i, f in enumerate(files) if f in expected), None)
+        return rank, len(hits)
+
+    print("\n=== Production retriever vs plain search (routing + aggregate signals) ===")
+    totals = {"routed": [0, 0, 0], "plain": [0, 0, 0]}  # P@1, recall, kept-sum
+    for case in cases:
+        row = {}
+        for name, retriever in (("routed", routed_retriever), ("plain", plain_retriever)):
+            rank, kept = stats(retriever.retrieve(case["query"], case.get("tags")), case["expected"])
+            row[name] = (rank, kept)
+            totals[name][0] += int(rank == 1)
+            totals[name][1] += int(rank is not None)
+            totals[name][2] += kept
+        (rr, rk), (pr, pk) = row["routed"], row["plain"]
+        flag = "" if (rr, rk) == (pr, pk) else ("   <-- REGRESSION" if (rr or 99) > (pr or 99) else "   <-- diff")
+        fmt = lambda r: f"#{r}" if r else "MISS"
+        print(f"  routed {fmt(rr):>5}/{rk:<2}  plain {fmt(pr):>5}/{pk:<2}  {case['note']}{flag}")
+    n = len(cases)
+    for name in ("routed", "plain"):
+        p1, recall, kept = totals[name]
+        print(f"  {name:>6}: P@1 {p1}/{n}  recall {recall}/{n}  avg_kept {kept / n:.1f}")
 
 
 def main() -> None:
@@ -131,6 +176,8 @@ def main() -> None:
         f"-> P@1 {best['p_at_1']}/{best['n']}, recall {best['recall']}/{best['n']}, "
         f"avg_kept {best['avg_kept']:.1f}"
     )
+
+    routing_ab(settings, store, embedder)
 
 
 if __name__ == "__main__":

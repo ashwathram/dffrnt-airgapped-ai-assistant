@@ -217,7 +217,7 @@
 .up-status.dup { color: #b8860b; }
 .up-status.muted { color: var(--muted-foreground); }
 .up-err { font-size: 12px; color: var(--destructive); margin-top: 6px; }
-.up-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.up-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 12px; margin-top: 0; border-top: 1px solid var(--border); }
 .up-tag { padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 500; border: 1px solid; background: transparent; transition: opacity 0.15s; }
 .up-tag:hover { opacity: 0.85; }
 .up-dup { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(184,134,11,0.08); display: flex; flex-direction: column; gap: 8px; }
@@ -229,15 +229,19 @@
 .up-newtag .tt-input { flex: 0 1 auto; }
 .up-newtag select.tt-input { cursor: pointer; }
 
-/* Grouped, collapsible tag section (per file / per folder) */
+/* Grouped, collapsible tag section (per file / per folder) — each tag type is
+   its own card pane, rather than an inline list, for clearer delineation. */
 .up-tagsec { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 .up-tagsec-label { font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
 .up-tagsec-label .up-opt { font-weight: 400; }
-.up-tgroup { display: flex; flex-direction: column; gap: 6px; }
+.up-tgroup { border: 1px solid var(--border); border-radius: 10px; background: var(--card); overflow: hidden; }
 .up-tgname {
-  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
-  font-size: 11px; font-weight: 600; letter-spacing: 0.03em; color: var(--foreground);
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  padding: 8px 12px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; color: var(--foreground);
+  background: transparent; transition: background 0.15s;
 }
+.up-tgname:hover { background: var(--muted); }
+.up-tgname-label { display: inline-flex; align-items: center; gap: 6px; }
 .up-tgname .icon { font-size: 12px; color: var(--muted-foreground); }
 .up-tgdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .up-newtag-btn {

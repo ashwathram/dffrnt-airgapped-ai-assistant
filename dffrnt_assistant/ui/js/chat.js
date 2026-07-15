@@ -9,6 +9,8 @@ import { loadConversations, renderSidebar } from './sidebar.js';
 let nextId = 0;
 const mkId = () => 'm' + (++nextId);  // stable per-message id for actions/targeting
 let abortController = null;           // in-flight stream, so the Stop button can cancel it
+let activeRun = null;                 // promise of the in-flight runQuery, so Retry can
+                                      // wait for a clean teardown before starting the next
 
 // Turn "[1]" markers into clickable citation chips mapped to sources by index.
 // data-msg/data-cite let a click scroll to and highlight the matching source
@@ -144,6 +146,22 @@ function bubbleInner(m) {
   return html;
 }
 
+// Controls shown next to the model output *while it generates*: Stop always,
+// and Retry once tokens are flowing (regenerate the same question). Sits under
+// the streaming bubble and under the pre-token typing indicator, so the user
+// never has to reach back to the composer to interrupt.
+function streamActionsHtml(id, withRetry) {
+  const idAttr = id ? ` data-id="${id}"` : '';
+  const retry = withRetry
+    ? `<button class="sa" data-msg-action="retry"${idAttr} title="Stop and regenerate">${svg('refresh')}<span>Retry</span></button>`
+    : '';
+  return `
+    <div class="stream-actions">
+      <button class="sa stop" data-msg-action="stop"${idAttr} title="Stop generating">${svg('square')}<span>Stop</span></button>
+      ${retry}
+    </div>`;
+}
+
 // Hover action row under a finished assistant message.
 function actionRowHtml(m) {
   return `
@@ -164,7 +182,8 @@ function messageHtml(m) {
   const bubbleId = m.streaming ? ' id="streamBubble"' : '';
   let footer = '';
   if (isUser) footer = m.ts ? `<div class="ts">${esc(m.ts)}</div>` : '';
-  else if (!m.streaming) footer = actionRowHtml(m);
+  else if (m.streaming) footer = streamActionsHtml(m.id, true);
+  else footer = actionRowHtml(m);
   return `
     <div class="msg ${isUser ? 'user' : 'assistant'}">
       ${isUser ? '' : '<div class="avatar">AI</div>'}
@@ -175,11 +194,18 @@ function messageHtml(m) {
     </div>`;
 }
 
-const typingHtml = `
+// Pre-token indicator: the model is working but nothing has streamed yet.
+// Carries a Stop control (no Retry — there is nothing to redo yet).
+function typingHtml() {
+  return `
   <div class="msg assistant">
     <div class="avatar">AI</div>
-    <div class="col"><div class="bubble"><span class="typing"><span></span><span></span><span></span></span></div></div>
+    <div class="col">
+      <div class="bubble"><span class="typing"><span></span><span></span><span></span></span></div>
+      ${streamActionsHtml(null, false)}
+    </div>
   </div>`;
+}
 
 export function renderMessages() {
   const box = $('messages');
@@ -189,7 +215,7 @@ export function renderMessages() {
   }
   box.innerHTML = '<div class="messages-inner">'
     + state.messages.map(messageHtml).join('')
-    + (state.busy ? typingHtml : '')
+    + (state.busy ? typingHtml() : '')
     + '</div>';
   box.querySelectorAll('.cite-chip').forEach((c) => {
     c.onclick = () => focusSource(c.dataset.msg, parseInt(c.dataset.cite, 10));
@@ -243,7 +269,15 @@ export async function sendMessage(text) {
   // The conversation title is its first user turn (mirrors persist() below), so
   // the top bar shows that rather than a generic label.
   $('topbarTitle').textContent = (state.messages.find((m) => m.role === 'user') || {}).content || 'Conversation';
-  await runQuery();
+  await startRun();
+}
+
+// Run runQuery, tracking its promise so Retry can await a clean teardown before
+// launching the next one (both share state.messages / the DOM, so they must not
+// overlap).
+function startRun() {
+  activeRun = runQuery();
+  return activeRun;
 }
 
 // Persist the current conversation to the server (create on first turn, then
@@ -306,9 +340,10 @@ async function runQuery() {
     refreshSendBtn();
   };
 
-  abortController = new AbortController();
+  const controller = new AbortController();
+  abortController = controller;
   try {
-    for await (const ev of queryStream(question, history, abortController.signal, state.chatScope)) {
+    for await (const ev of queryStream(question, history, controller.signal, state.chatScope)) {
       if (ev.type === 'sources') {
         assistant.sources = ev.sources || [];
       } else if (ev.type === 'thinking') {
@@ -332,7 +367,9 @@ async function runQuery() {
       state.messages.push({ id: mkId(), role: 'notice', content: 'Could not reach the assistant. Check the server connection.' });
     }
   } finally {
-    abortController = null;
+    // Only clear the shared ref if this run still owns it — a Retry may have
+    // already replaced it with a newer stream's controller.
+    if (abortController === controller) abortController = null;
   }
 
   state.busy = false;
@@ -354,8 +391,27 @@ function stopStreaming() {
   if (abortController) abortController.abort();
 }
 
-// -- Message actions (copy / feedback / regenerate) ------------------------
+// Stop the current generation and immediately answer the same question again.
+// Awaits the aborted run's teardown first (they share state.messages and the
+// DOM, so overlapping them would corrupt both), then drops the partial answer
+// and re-runs.
+async function retryStream() {
+  if (abortController) abortController.abort();
+  if (activeRun) { try { await activeRun; } catch { /* teardown errors are moot */ } }
+  // Discard everything after the last user turn (the just-aborted answer).
+  let i = state.messages.length - 1;
+  while (i >= 0 && state.messages[i].role !== 'user') i -= 1;
+  if (i < 0) return; // nothing to retry
+  state.messages = state.messages.slice(0, i + 1);
+  renderMessages();
+  refreshSendBtn();
+  startRun();
+}
+
+// -- Message actions (copy / feedback / regenerate / stop / retry) ---------
 function onMessageAction(action, id, btn) {
+  if (action === 'stop') { stopStreaming(); return; }
+  if (action === 'retry') { retryStream(); return; }
   const m = state.messages.find((x) => x.id === id);
   if (!m) return;
   if (action === 'copy') { copyText(m.content, btn); return; }
@@ -385,7 +441,7 @@ function regenerate(assistantId) {
   if (idx < 0) return;
   state.messages = state.messages.slice(0, idx); // drop this answer (and anything after)
   renderMessages();
-  runQuery();
+  startRun();
 }
 
 // Toggle the composer button between Send and Stop based on stream state.

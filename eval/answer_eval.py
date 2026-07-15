@@ -9,15 +9,19 @@ queries and scores the *generated answers*, not just retrieval:
   latency       wall-clock seconds per answered query (mean / median / max)
 
 Tag-scoped cases (sample_queries.TAG_CASES) go through the same retrieval path
-the UI uses when the user filters by tags. The pipeline is built in-process so
-generation settings can be overridden per run — pass --temps / --top-ps to
-compare settings on the same queries. Each answer is a full local-LLM
-generation, so one pass takes tens of minutes with a 30B model.
+the UI uses when the user filters by tags. Retrieval is built exactly as
+api/app.py builds it — including the document-summary store (routing) — so the
+harness measures the production path; pass --no-routing to isolate plain chunk
+search. The pipeline is built in-process so generation settings can be
+overridden per run — pass --temps / --top-ps to compare settings on the same
+queries. Each answer is a full local-LLM generation, so one pass takes tens of
+minutes with a 30B model.
 
 Examples:
   python -m eval.answer_eval                     # one pass at the live config
   python -m eval.answer_eval --temps 0.1,0.7     # compare two temperatures
   python -m eval.answer_eval --limit 3           # quick smoke test
+  python -m eval.answer_eval --no-routing        # plain chunk search only
 """
 
 from __future__ import annotations
@@ -57,10 +61,21 @@ def is_refusal(answer: str) -> bool:
     return REFUSAL_PHRASE in answer.lower()
 
 
-def build_pipeline(settings, temperature: float, top_p: float) -> RagPipeline:
+def build_pipeline(settings, temperature: float, top_p: float, routing: bool = True) -> RagPipeline:
+    """Build the pipeline the way api/app.py does. ``routing=True`` (default)
+    includes the document-summary store, matching production retrieval;
+    ``--no-routing`` isolates plain chunk search."""
     store = VectorStore(
         settings.qdrant_url, settings.collection_name, settings.vector_size, settings.distance
     )
+    summary_store = None
+    if routing:
+        summary_store = VectorStore(
+            settings.qdrant_url,
+            settings.summary_collection_name,
+            settings.vector_size,
+            settings.distance,
+        )
     llm = OllamaClient(
         settings.ollama_url, settings.llm_model, settings.embed_model,
         temperature, settings.llm_timeout,
@@ -68,7 +83,7 @@ def build_pipeline(settings, temperature: float, top_p: float) -> RagPipeline:
         settings.llm_num_ctx, top_p, settings.llm_top_k,
         settings.llm_repeat_penalty, settings.llm_num_predict,
     )
-    retriever = Retriever(store, llm, settings)
+    retriever = Retriever(store, llm, settings, summary_store=summary_store)
     return RagPipeline(retriever, llm, settings)
 
 
@@ -185,6 +200,10 @@ def main() -> None:
     ap.add_argument("--limit", type=int, help="only the first N answerable cases (smoke test)")
     ap.add_argument("--no-negatives", action="store_true", help="skip refusal controls")
     ap.add_argument("--no-tags", action="store_true", help="skip tag-scoped cases")
+    ap.add_argument(
+        "--no-routing", action="store_true",
+        help="retrieve without the document-summary store (production uses it)",
+    )
     args = ap.parse_args()
 
     settings = load_settings()
@@ -197,8 +216,10 @@ def main() -> None:
     grid = [(t, p) for t in temps for p in top_ps]
     verbose = len(grid) == 1
 
+    routing = not args.no_routing
     print(f"model={settings.llm_model}  top_k={settings.top_k}  "
-          f"score_margin={settings.score_margin}  num_ctx={settings.llm_num_ctx}")
+          f"score_margin={settings.score_margin}  num_ctx={settings.llm_num_ctx}  "
+          f"routing={'on' if routing else 'off'}")
     print(f"cases={len(cases)} answerable/scoped + {len(negatives)} negative   "
           f"grid={len(grid)} setting(s)\n")
 
@@ -207,7 +228,7 @@ def main() -> None:
         if verbose:
             print(f"--- temperature={temp}  top_p={top_p} ---")
         t0 = time.time()
-        pipeline = build_pipeline(settings, temp, top_p)
+        pipeline = build_pipeline(settings, temp, top_p, routing=routing)
         metrics = run_suite(pipeline, cases, negatives, verbose)
         dt = time.time() - t0
         line = f"temp={temp:<4} top_p={top_p:<4}  {fmt(metrics)}  ({dt:.0f}s)"

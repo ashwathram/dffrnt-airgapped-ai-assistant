@@ -1,11 +1,20 @@
 """Exercises the unified ingestion wiring without Qdrant or Ollama, using fakes."""
 
 from dffrnt_assistant.config import Settings
-from dffrnt_assistant.ingest.pipeline import build_payload, ingest_file
+from dffrnt_assistant.ingest.pipeline import (
+    build_payload,
+    chunk_embed_text,
+    ingest_file,
+    summary_embed_text,
+)
 
 
 class FakeEmbedder:
+    def __init__(self):
+        self.embedded = []
+
     def embed_texts(self, texts):
+        self.embedded.extend(texts)
         return [[0.0] * 8 for _ in texts]
 
     def embed_documents(self, texts):
@@ -63,3 +72,37 @@ def test_ingest_file_deletes_then_upserts(tmp_path):
     assert len(store.points) == count
     assert all({"id", "vector", "payload"} <= set(p) for p in store.points)
     assert store.points[0]["payload"]["filename"] == "doc.txt"
+
+
+def test_chunks_embed_with_context_prefix_but_store_raw_text(tmp_path):
+    path = tmp_path / "doc.txt"
+    path.write_text("Alpha paragraph.\n\nBeta paragraph has several more words in it.")
+
+    settings = Settings()
+    settings.chunk_size = 40
+    settings.chunk_overlap = 8
+    settings.chunk_floor = 0
+
+    store = FakeStore()
+    embedder = FakeEmbedder()
+    ingest_file(path, store, embedder, settings)
+
+    # Every embedded text is prefixed with the filename context line...
+    assert embedder.embedded and all(t.startswith("doc.txt\n") for t in embedder.embedded)
+    # ...but the stored payload text is the raw chunk.
+    assert all(not p["payload"]["text"].startswith("doc.txt") for p in store.points)
+
+
+def test_chunk_embed_text_skips_placeholder_headings_and_dedupes():
+    document = {"filename": "cv.docx", "document_title": "Jane Doe"}
+    chunk = {"text": "body", "section_heading": "section3"}
+    assert chunk_embed_text(chunk, document) == "cv.docx · Jane Doe\nbody"
+    chunk = {"text": "body", "section_heading": "Jane Doe"}
+    assert chunk_embed_text(chunk, document) == "cv.docx · Jane Doe\nbody"
+
+
+def test_summary_embed_text_includes_description():
+    document = {"filename": "cv.docx", "document_title": "Jane Doe"}
+    text = summary_embed_text(document, "A designer.", {"description": "Resume — Jane"})
+    assert text == "cv.docx · Jane Doe · Resume — Jane\nA designer."
+    assert summary_embed_text({"filename": "x.txt"}, "") == "x.txt"

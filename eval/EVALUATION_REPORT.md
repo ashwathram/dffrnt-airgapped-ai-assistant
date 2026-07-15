@@ -13,7 +13,7 @@ correspondence question answering, and (3) internal knowledge-base interrogation
 A 14-document synthetic corpus with fully controlled ground truth (75 chunks,
 all seven supported file formats) was ingested through the production upload
 API, and the system was measured on retrieval precision/recall, grounded answer
-correctness, citation discipline, refusal faithfulness, and latency. At the live
+correctness, citation discipline, refusal faithfulness, and latency. At the livev
 configuration the system achieves **P@1 79% / recall 89%** (retrieval) and
 **58% answer correctness**, with **100% refusal accuracy** on out-of-corpus
 probes. A single configuration change (`score_margin` 0.08 → 0.20), identified

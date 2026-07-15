@@ -67,6 +67,14 @@ class Settings:
     # Tuned on sample queries (eval/rag_eval.py): 0.08 keeps P@1 10/11, recall
     # 11/11 while trimming clearly-weaker chunks (0.12 was inert at top_k=8).
     score_margin: float = 0.08
+    # Aggregate (multi-document) queries: additionally fetch the best chunk(s)
+    # from each of the top `aggregate_group_limit` documents (Qdrant grouped
+    # search by filename), merged additively into the global top-k pool, so
+    # roll-ups ("rates of all candidates") cover every relevant document. The
+    # margin cut still trims documents that match the query weakly. Triggered
+    # by plural/roll-up phrasing or a tag-scoped query. 0 disables.
+    aggregate_group_limit: int = 24
+    aggregate_group_size: int = 1      # chunks kept per document in grouped search
 
     # -- Chunking ----------------------------------------------------------
     chunk_strategy: str = "recursive"  # fixed | sentence | paragraph | recursive
