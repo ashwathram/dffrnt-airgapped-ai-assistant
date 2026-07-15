@@ -6,11 +6,12 @@ from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ..config import load_settings
+from . import export
 from ..ollama import OllamaClient
 from ..rag.pipeline import RagPipeline
 from ..retrieval.retriever import Retriever
@@ -90,6 +91,11 @@ class QueryResponse(BaseModel):
     answer: str
     sources: list
     question: str
+
+
+class ExportRequest(BaseModel):
+    content: str            # the answer's Markdown text
+    title: str = ""         # optional heading printed at the top of the PDF
 
 
 class TagTypeRequest(BaseModel):
@@ -173,6 +179,15 @@ def query_stream_endpoint(request: QueryRequest):
             yield json.dumps({"type": "error", "detail": str(exc)}) + "\n"
 
     return StreamingResponse(ndjson(), media_type="application/x-ndjson")
+
+
+@app.post("/api/export/pdf")
+def export_pdf(request: ExportRequest):
+    """Render an answer's Markdown to a PDF. TXT/MD are done client-side; only
+    PDF needs a server round-trip (the client has no Markdown->PDF renderer).
+    The browser names the download, so no Content-Disposition filename here."""
+    pdf = export.markdown_to_pdf(request.content, request.title)
+    return Response(content=pdf, media_type="application/pdf")
 
 
 @app.post("/api/upload")

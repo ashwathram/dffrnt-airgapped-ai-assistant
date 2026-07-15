@@ -3,14 +3,12 @@ import { $, esc, nowTime } from './util.js';
 import { svg } from './icons.js';
 import { state } from './state.js';
 import { renderMarkdown } from './markdown.js';
-import { queryStream, createConversation, updateConversation, getConversation } from './api.js';
+import { queryStream, exportAnswerPdf, createConversation, updateConversation, getConversation } from './api.js';
 import { loadConversations, renderSidebar } from './sidebar.js';
 
 let nextId = 0;
 const mkId = () => 'm' + (++nextId);  // stable per-message id for actions/targeting
 let abortController = null;           // in-flight stream, so the Stop button can cancel it
-let activeRun = null;                 // promise of the in-flight runQuery, so Retry can
-                                      // wait for a clean teardown before starting the next
 
 // Turn "[1]" markers into clickable citation chips mapped to sources by index.
 // data-msg/data-cite let a click scroll to and highlight the matching source
@@ -146,20 +144,39 @@ function bubbleInner(m) {
   return html;
 }
 
-// Controls shown next to the model output *while it generates*: Stop always,
-// and Retry once tokens are flowing (regenerate the same question). Sits under
-// the streaming bubble and under the pre-token typing indicator, so the user
-// never has to reach back to the composer to interrupt.
-function streamActionsHtml(id, withRetry) {
-  const idAttr = id ? ` data-id="${id}"` : '';
-  const retry = withRetry
-    ? `<button class="sa" data-msg-action="retry"${idAttr} title="Stop and regenerate">${svg('refresh')}<span>Retry</span></button>`
-    : '';
+// The only control shown next to the model output *while it generates*: Stop.
+// Retry is deliberately withheld until generation is complete (see actionRowHtml)
+// so it can't be pressed against a half-formed answer. Sits under the streaming
+// bubble and the pre-token typing indicator, so an in-flight answer can be
+// interrupted without reaching back to the composer.
+function streamActionsHtml() {
   return `
     <div class="stream-actions">
-      <button class="sa stop" data-msg-action="stop"${idAttr} title="Stop generating">${svg('square')}<span>Stop</span></button>
-      ${retry}
+      <button class="sa stop" data-msg-action="stop" title="Stop generating">${svg('square')}<span>Stop</span></button>
     </div>`;
+}
+
+// Formats offered by the "Download As…" menu. Client-only formats (no `server`)
+// build a Blob straight from the answer text the browser already holds after
+// streaming. Server-backed formats (`server: true`) POST the text to a renderer
+// — PDF needs this since the browser has no Markdown->PDF engine.
+const DOWNLOAD_FORMATS = [
+  { id: 'txt', label: 'Plain text (.txt)', ext: 'txt', mime: 'text/plain' },
+  { id: 'md', label: 'Markdown (.md)', ext: 'md', mime: 'text/markdown' },
+  { id: 'pdf', label: 'PDF (.pdf)', ext: 'pdf', server: true },
+];
+
+// Native <details> disclosure, so open/close needs no JS state (mirrors the
+// thinking block). Option clicks are wired via the shared [data-msg-action] hook.
+function downloadMenuHtml(m) {
+  const options = DOWNLOAD_FORMATS.map(
+    (f) => `<button data-msg-action="download" data-id="${m.id}" data-format="${f.id}">${f.label}</button>`
+  ).join('');
+  return `
+    <details class="dl-menu">
+      <summary class="ma" title="Download as…">${svg('download')}</summary>
+      <div class="dl-options">${options}</div>
+    </details>`;
 }
 
 // Hover action row under a finished assistant message.
@@ -167,9 +184,8 @@ function actionRowHtml(m) {
   return `
     <div class="msg-actions">
       <button class="ma" data-msg-action="copy" data-id="${m.id}" title="Copy">${svg('copy')}</button>
-      <button class="ma${m.feedback === 'up' ? ' on' : ''}" data-msg-action="up" data-id="${m.id}" title="Good response">${svg('thumbsUp')}</button>
-      <button class="ma${m.feedback === 'down' ? ' on' : ''}" data-msg-action="down" data-id="${m.id}" title="Bad response">${svg('thumbsDown')}</button>
-      <button class="ma" data-msg-action="regenerate" data-id="${m.id}" title="Regenerate">${svg('refresh')}</button>
+      <button class="ma" data-msg-action="regenerate" data-id="${m.id}" title="Retry">${svg('refresh')}</button>
+      ${downloadMenuHtml(m)}
       ${m.ts ? `<span class="ma-ts">${esc(m.ts)}</span>` : ''}
     </div>`;
 }
@@ -182,7 +198,7 @@ function messageHtml(m) {
   const bubbleId = m.streaming ? ' id="streamBubble"' : '';
   let footer = '';
   if (isUser) footer = m.ts ? `<div class="ts">${esc(m.ts)}</div>` : '';
-  else if (m.streaming) footer = streamActionsHtml(m.id, true);
+  else if (m.streaming) footer = streamActionsHtml();
   else footer = actionRowHtml(m);
   return `
     <div class="msg ${isUser ? 'user' : 'assistant'}">
@@ -202,7 +218,7 @@ function typingHtml() {
     <div class="avatar">AI</div>
     <div class="col">
       <div class="bubble"><span class="typing"><span></span><span></span><span></span></span></div>
-      ${streamActionsHtml(null, false)}
+      ${streamActionsHtml()}
     </div>
   </div>`;
 }
@@ -269,15 +285,7 @@ export async function sendMessage(text) {
   // The conversation title is its first user turn (mirrors persist() below), so
   // the top bar shows that rather than a generic label.
   $('topbarTitle').textContent = (state.messages.find((m) => m.role === 'user') || {}).content || 'Conversation';
-  await startRun();
-}
-
-// Run runQuery, tracking its promise so Retry can await a clean teardown before
-// launching the next one (both share state.messages / the DOM, so they must not
-// overlap).
-function startRun() {
-  activeRun = runQuery();
-  return activeRun;
+  await runQuery();
 }
 
 // Persist the current conversation to the server (create on first turn, then
@@ -306,7 +314,7 @@ export async function loadConversation(id) {
   state.conversationId = id;
   state.busy = false;
   state.messages = (data.messages || []).map((m) => ({
-    id: mkId(), role: m.role, content: m.content, sources: m.sources || [], ts: m.ts || '', feedback: null,
+    id: mkId(), role: m.role, content: m.content, sources: m.sources || [], ts: m.ts || '',
   }));
   renderMessages();
   refreshSendBtn();
@@ -327,7 +335,7 @@ async function runQuery() {
   renderMessages();
   refreshSendBtn();
 
-  const assistant = { id: mkId(), role: 'assistant', content: '', thinking: '', sources: [], streaming: true, feedback: null };
+  const assistant = { id: mkId(), role: 'assistant', content: '', thinking: '', sources: [], streaming: true };
   let started = false;
   // Add the assistant bubble on the first thinking/answer token, replacing the
   // standalone typing indicator.
@@ -391,36 +399,59 @@ function stopStreaming() {
   if (abortController) abortController.abort();
 }
 
-// Stop the current generation and immediately answer the same question again.
-// Awaits the aborted run's teardown first (they share state.messages and the
-// DOM, so overlapping them would corrupt both), then drops the partial answer
-// and re-runs.
-async function retryStream() {
-  if (abortController) abortController.abort();
-  if (activeRun) { try { await activeRun; } catch { /* teardown errors are moot */ } }
-  // Discard everything after the last user turn (the just-aborted answer).
-  let i = state.messages.length - 1;
-  while (i >= 0 && state.messages[i].role !== 'user') i -= 1;
-  if (i < 0) return; // nothing to retry
-  state.messages = state.messages.slice(0, i + 1);
-  renderMessages();
-  refreshSendBtn();
-  startRun();
-}
-
-// -- Message actions (copy / feedback / regenerate / stop / retry) ---------
+// -- Message actions (copy / regenerate / stop / download) -----------------
 function onMessageAction(action, id, btn) {
   if (action === 'stop') { stopStreaming(); return; }
-  if (action === 'retry') { retryStream(); return; }
   const m = state.messages.find((x) => x.id === id);
   if (!m) return;
   if (action === 'copy') { copyText(m.content, btn); return; }
-  if (action === 'up' || action === 'down') {
-    m.feedback = m.feedback === action ? null : action; // local only (no backend)
-    renderMessages();
+  if (action === 'download') {
+    downloadAnswer(m, btn && btn.dataset.format);
+    btn.closest('details')?.removeAttribute('open'); // close the menu after picking
     return;
   }
   if (action === 'regenerate') regenerate(id);
+}
+
+// Save an assistant answer to a local file in the chosen format. The filename is
+// slugged from the question that produced the answer, falling back to "answer".
+async function downloadAnswer(m, formatId) {
+  const fmt = DOWNLOAD_FORMATS.find((f) => f.id === formatId);
+  if (!fmt || !m) return;
+  const name = `${answerFilename(m)}.${fmt.ext}`;
+  if (fmt.server) {
+    // PDF: rendered server-side (the browser has no Markdown->PDF engine).
+    const { ok, blob } = await exportAnswerPdf(m.content || '', $('topbarTitle').textContent);
+    if (!ok) {
+      state.messages.push({ id: mkId(), role: 'notice', content: 'Could not generate the PDF. Check the server connection.' });
+      renderMessages();
+      return;
+    }
+    saveBlob(blob, name);
+  } else {
+    // TXT/MD: the answer text is already in the browser — no backend needed.
+    saveBlob(new Blob([m.content || ''], { type: fmt.mime }), name);
+  }
+}
+
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function answerFilename(m) {
+  const idx = state.messages.indexOf(m);
+  let question = '';
+  for (let i = idx - 1; i >= 0; i -= 1) {
+    if (state.messages[i].role === 'user') { question = state.messages[i].content; break; }
+  }
+  const slug = (question || 'answer')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return slug || 'answer';
 }
 
 async function copyText(text, btn) {
@@ -441,7 +472,7 @@ function regenerate(assistantId) {
   if (idx < 0) return;
   state.messages = state.messages.slice(0, idx); // drop this answer (and anything after)
   renderMessages();
-  startRun();
+  runQuery();
 }
 
 // Toggle the composer button between Send and Stop based on stream state.

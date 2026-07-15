@@ -40,6 +40,18 @@ export async function* queryStream(question, history, signal, tags) {
   if (tail) yield JSON.parse(tail);
 }
 
+// Render an answer's Markdown to a PDF server-side. Returns the PDF as a Blob
+// ({ ok:false } on failure) — unlike the JSON helpers, since the body is binary.
+export async function exportAnswerPdf(content, title) {
+  const r = await fetch('/api/export/pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, title: title || '' }),
+  });
+  if (!r.ok) return { ok: false };
+  return { ok: true, blob: await r.blob() };
+}
+
 export function listDocuments() {
   return asJson(fetch('/api/documents'));
 }

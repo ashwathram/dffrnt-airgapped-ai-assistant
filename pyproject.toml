@@ -15,6 +15,9 @@ dependencies = [
     "python-docx>=1.1.0",
     "python-pptx>=0.6.23",
     "openpyxl>=3.1.0",
+    # Answer export: mistune renders Markdown -> HTML; PyMuPDF (above) renders
+    # that HTML -> PDF via its Story API, so no separate PDF engine is needed.
+    "mistune>=3.3.3",
 ]
 # NOTE: Embeddings and generation are served by Ollama over HTTP using only the
 # Python standard library (urllib), so no LLM/embedding client library is needed.
