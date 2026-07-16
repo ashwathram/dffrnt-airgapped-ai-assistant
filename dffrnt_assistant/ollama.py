@@ -1,8 +1,5 @@
-"""LLM management: a direct Ollama client for embeddings and text generation.
-
-Uses only the standard library (``urllib``), so the air-gapped bundle needs no
-HTTP or ML client dependency. Replaces langchain-ollama / sentence-transformers.
-"""
+"""A direct Ollama client for embeddings and text generation, using only the
+standard library (``urllib``) so the air-gapped bundle ships no ML client."""
 
 import json
 import urllib.error
@@ -11,6 +8,9 @@ from typing import Iterator, List, Tuple
 
 
 class OllamaClient:
+    """Talks to one Ollama server for both roles: embedding texts/queries
+    (``embed_*``) and generating answers (``generate`` / ``generate_stream``)."""
+
     def __init__(
         self,
         base_url: str,
@@ -31,15 +31,10 @@ class OllamaClient:
         self.embed_model = embed_model
         self.temperature = temperature
         self.timeout = timeout
-        # Optional embedding task prefixes ("search_query: "/"search_document: ").
-        # embed_texts stays raw; the query/document helpers apply them.
         self.query_prefix = query_prefix
         self.doc_prefix = doc_prefix
-        # Generation options sent with every /api/generate call. num_ctx is the
-        # important one: Ollama defaults it to 4096, which silently truncates RAG
-        # prompts once the retrieved documents + history grow — dropping context
-        # the answer depends on. The rest are qwen3's recommended sampling knobs.
-        # num_predict -1 = unlimited (no output cap).
+        # num_ctx matters: Ollama defaults it to 4096, which silently truncates
+        # RAG prompts once retrieved documents + history grow (see config.py).
         self.gen_options = {
             "temperature": temperature,
             "num_ctx": num_ctx,
@@ -112,14 +107,10 @@ class OllamaClient:
         return out.get("response", "")
 
     def generate_stream(self, prompt: str) -> Iterator[Tuple[str, str]]:
-        """Yield ``(channel, text)`` pairs as Ollama produces them.
-
-        ``channel`` is "thinking" for a reasoning model's chain-of-thought
-        (Ollama exposes it in a separate ``thinking`` field) or "answer" for the
-        final response text. Ollama's /api/generate with stream=True returns
-        newline-delimited JSON objects; urllib reads them off the socket
-        incrementally, so tokens are yielded as they are generated.
-        """
+        """Yield ``(channel, text)`` pairs as Ollama produces them, where
+        ``channel`` is "thinking" (a reasoning model's chain-of-thought) or
+        "answer". Ollama streams ndjson; urllib reads it off the socket
+        incrementally, so tokens arrive as they are generated."""
         data = json.dumps(
             {
                 "model": self.llm_model,

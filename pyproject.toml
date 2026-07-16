@@ -41,7 +41,8 @@ dffrnt-api = "dffrnt_assistant.api.app:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration and not eval'"
 markers = [
     "integration: requires a live Qdrant + Ollama and a running API server",
+    "eval: retrieval/answer quality suite; requires live Qdrant + Ollama (run: pytest -m eval)",
 ]

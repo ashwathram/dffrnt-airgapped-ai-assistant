@@ -11,13 +11,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ..config import load_settings
-from . import export
 from ..ollama import OllamaClient
-from ..rag.pipeline import RagPipeline
+from ..rag import RagPipeline
+from ..retrieval.doc_store import ConversationStore, TagStore
 from ..retrieval.retriever import Retriever
-from ..retrieval.conversation_store import ConversationStore
 from ..retrieval.store import VectorStore
-from ..retrieval.tag_store import TagStore
+from . import export
 from .audit import AuditLog
 from .services import AssistantService, ConversationService, TagService, UserError
 
@@ -72,7 +71,6 @@ app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
-# Serve the split UI assets (CSS + ES modules) referenced by index.html as /ui/...
 app.mount("/ui", StaticFiles(directory=str(UI_DIR)), name="ui")
 
 
@@ -154,13 +152,8 @@ def query_endpoint(request: QueryRequest):
 
 @app.post("/api/query/stream")
 def query_stream_endpoint(request: QueryRequest):
-    """Stream the answer as newline-delimited JSON (one object per line):
-        {"type": "sources",  "sources": [...]}  sent once, before any token
-        {"type": "thinking", "text": "..."}     reasoning tokens (thinking models)
-        {"type": "token",    "text": "..."}      per generated answer token
-        {"type": "done"}                         end of stream
-        {"type": "error",    "detail": "..."}    mid-stream failure
-    """
+    """Stream the answer as ndjson: one ``sources`` line, then ``thinking`` /
+    ``token`` lines, ending with ``done`` (or ``error`` on mid-stream failure)."""
     history = [turn.model_dump() for turn in request.conversation_history]
     # Validation errors surface here (before streaming) as a normal HTTP error.
     events = _handle(lambda: service.query_stream(request.question, history, request.tags))
@@ -183,9 +176,8 @@ def query_stream_endpoint(request: QueryRequest):
 
 @app.post("/api/export/pdf")
 def export_pdf(request: ExportRequest):
-    """Render an answer's Markdown to a PDF. TXT/MD are done client-side; only
-    PDF needs a server round-trip (the client has no Markdown->PDF renderer).
-    The browser names the download, so no Content-Disposition filename here."""
+    """Render an answer's Markdown to a PDF. TXT/MD exports are client-side;
+    only PDF needs a server round-trip."""
     pdf = export.markdown_to_pdf(request.content, request.title)
     return Response(content=pdf, media_type="application/pdf")
 
@@ -210,9 +202,8 @@ async def upload_file_stream(
     description: str = Form(default=""),
     force: bool = Form(default=False),
 ):
-    """Upload + ingest, streaming newline-delimited JSON progress events so the
-    client can show a bar tied to the real stages (parsing / chunking /
-    embedding / storing), ending with a ``done`` event carrying the result."""
+    """Upload + ingest, streaming ndjson progress events per real stage
+    (parsing / chunking / embedding / storing), ending with ``done``."""
     content = await file.read()
 
     def ndjson():
@@ -252,9 +243,7 @@ def get_document_file(filename: str):
     return FileResponse(str(path))
 
 
-# -- Tag taxonomy (managed in a dedicated Qdrant collection) ----------------
-# Every mutation returns the full updated taxonomy so the UI can replace its
-# state in one step.
+# -- Tag taxonomy: every mutation returns the full updated taxonomy ---------
 @app.get("/api/tags")
 def get_tags():
     return tag_service.get()

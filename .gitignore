@@ -33,6 +33,7 @@ htmlcov/
 
 # Local data and Claude Code settings
 data/
+database/
 .claude/
 
 # Runtime audit logs
@@ -44,7 +45,3 @@ config.toml
 # Offline deployment bundle artifacts
 deploy/**/qdrant_storage/
 deploy/**/ollama_models/
-
-data/
-
-front-end/

@@ -1,20 +1,13 @@
-"""Render an assistant answer (Markdown) to a downloadable PDF.
-
-Kept deliberately small: mistune turns the answer's Markdown into HTML, and
-PyMuPDF's Story API paginates that HTML into a PDF. PyMuPDF is already a
-dependency (PDF ingestion), so PDF export adds no separate rendering engine —
-only mistune, a pure-Python Markdown parser with no transitive dependencies.
-Everything runs locally, which the air-gapped deployment requires.
-"""
+"""Render an assistant answer (Markdown) to a downloadable PDF, fully locally:
+mistune turns Markdown into HTML, and PyMuPDF's Story API (already a dependency
+via PDF ingestion) paginates that HTML into a PDF."""
 
 import io
 
-import fitz  # PyMuPDF (imported as fitz elsewhere in this package)
+import fitz  # PyMuPDF
 import mistune
 
-# Minimal print stylesheet. PyMuPDF's Story supports a subset of CSS; this keeps
-# body text readable and code/quotes visually distinct without leaning on
-# anything it can't parse.
+# Minimal print stylesheet (PyMuPDF's Story supports a subset of CSS).
 _CSS = """
 body { font-family: sans-serif; font-size: 11pt; line-height: 1.5; color: #111; }
 h1 { font-size: 20pt; margin: 0 0 8pt; }

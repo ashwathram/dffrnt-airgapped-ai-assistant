@@ -6,6 +6,9 @@ from pathlib import Path
 
 
 class AuditLog:
+    """Appends timestamped events (uploads, queries, deletions, perf timings)
+    to a JSONL file."""
+
     def __init__(self, path: str):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)

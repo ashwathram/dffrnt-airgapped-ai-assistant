@@ -21,6 +21,9 @@ _DISTANCES = {
 
 
 class VectorStore:
+    """The one Qdrant wrapper for chunk vectors: collection lifecycle, upserts,
+    plain/filtered/grouped similarity search, and payload lookups by filename."""
+
     def __init__(self, url: str, collection_name: str, vector_size: int, distance: str = "cosine"):
         self.client = QdrantClient(url=url)
         self.collection_name = collection_name
@@ -38,11 +41,8 @@ class VectorStore:
         )
 
     def recreate_collection(self) -> None:
-        """Drop and recreate the collection at the current vector_size/distance.
-
-        Destructive: erases all stored vectors. Needed when the embedding model
-        changes output dimension (a collection keeps the size it was created with
-        and would otherwise reject vectors of a different length)."""
+        """Drop and recreate the collection. Destructive — needed when the
+        embedding model changes output dimension."""
         self.client.delete_collection(collection_name=self.collection_name)
         self.client.create_collection(
             collection_name=self.collection_name,
@@ -64,8 +64,7 @@ class VectorStore:
         tag_filter: List[str] = None,
         filenames: List[str] = None,
     ) -> List[Dict]:
-        """Top-k nearest chunks, optionally restricted to those carrying any of
-        the given tags (so the assistant searches only the scoped documents)."""
+        """Top-k nearest chunks, optionally restricted by tags and/or filenames."""
         must = []
         if tag_filter:
             must.append(FieldCondition(key="tags", match=MatchAny(any=list(tag_filter))))
@@ -88,11 +87,9 @@ class VectorStore:
         group_size: int = 1,
         tag_filter: List[str] = None,
     ) -> List[Dict]:
-        """Best ``group_size`` chunks from each of the top ``limit`` documents.
-
-        Groups by filename, so aggregate queries ("rates of all candidates") get
-        evidence from every relevant document instead of whatever global top-k
-        similarity happens to include."""
+        """Best ``group_size`` chunks from each of the top ``limit`` documents
+        (grouped by filename), so aggregate queries get evidence from every
+        relevant document rather than whatever global top-k includes."""
         must = []
         if tag_filter:
             must.append(FieldCondition(key="tags", match=MatchAny(any=list(tag_filter))))
@@ -112,9 +109,8 @@ class VectorStore:
         ]
 
     def payloads_by_filenames(self, filenames: List[str], limit: int = 0) -> List[Dict]:
-        """Payloads for the given filenames (e.g. summary points for documents
-        already retrieved, or every chunk of a document for text reconstruction
-        when ``limit`` is raised)."""
+        """Payloads for the given filenames (raise ``limit`` to fetch every
+        chunk of a document)."""
         if not filenames:
             return []
         points, _ = self.client.scroll(
@@ -128,10 +124,8 @@ class VectorStore:
         return [p.payload for p in points]
 
     def find_by_content_hash(self, content_hash: str) -> str | None:
-        """Filename of an existing document with this content hash, if any.
-
-        Lets the API detect a byte-identical file uploaded under a different
-        name (content duplicate), not just a same-name re-upload."""
+        """Filename of an existing document with this content hash, if any —
+        detects a byte-identical file uploaded under a different name."""
         if not content_hash:
             return None
         points, _ = self.client.scroll(

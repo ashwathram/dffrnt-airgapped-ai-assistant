@@ -1,8 +1,4 @@
-"""The one ingestion pipeline: load -> chunk -> embed -> store.
-
-Drives the API upload route, so every uploaded document is retrievable by the
-assistant.
-"""
+"""The one ingestion pipeline: load -> summarize -> chunk -> embed -> store."""
 
 import re
 import uuid
@@ -11,15 +7,19 @@ from typing import Optional
 
 from .chunker import chunk_file
 from .loaders import load_file
-from .summary import generate_document_summary
 
-# Single source of truth for what the system accepts (API validation + CLI scan).
+# Single source of truth for what the system accepts.
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".csv", ".txt", ".md"}
+
+EMBED_BATCH = 64  # embed in bounded batches so progress can be reported per batch
 
 _METADATA_KEYS = (
     "document_type", "department", "client_project", "tags", "tag_paths",
     "description", "content_hash", "document_summary", "summary_kind",
 )
+
+# Chunker fallback headings ("section3") carry no signal — never embed them.
+_PLACEHOLDER_HEADING = re.compile(r"^section\d+$")
 
 
 def build_payload(chunk: dict, document: dict, meta: Optional[dict] = None) -> dict:
@@ -52,12 +52,6 @@ def build_payload(chunk: dict, document: dict, meta: Optional[dict] = None) -> d
     return payload
 
 
-EMBED_BATCH = 64  # embed in bounded batches so progress can be reported per batch
-
-# Chunker fallback headings ("section3") carry no signal — never embed them.
-_PLACEHOLDER_HEADING = re.compile(r"^section\d+$")
-
-
 def _context_line(parts) -> str:
     """Join non-empty, de-duplicated parts into one ' · ' context line."""
     cleaned = []
@@ -71,8 +65,7 @@ def _context_line(parts) -> str:
 def chunk_embed_text(chunk: dict, document: dict) -> str:
     """The text actually embedded for a chunk: a filename/title/heading context
     line, then the chunk text. The stored payload keeps the raw text — the
-    prefix only anchors the embedding, so slide bullets, spreadsheet rows and
-    resume fragments carry a topical/lexical anchor into vector space."""
+    prefix only anchors the embedding in vector space."""
     heading = chunk.get("section_heading") or ""
     if _PLACEHOLDER_HEADING.match(heading):
         heading = ""
@@ -84,8 +77,8 @@ def chunk_embed_text(chunk: dict, document: dict) -> str:
 
 
 def summary_embed_text(document: dict, summary: str, meta: Optional[dict] = None) -> str:
-    """The text embedded for a document's summary point: filename, title and
-    the user-entered description alongside the summary, so lexical anchors
+    """The text embedded for a document-summary point: filename, title and the
+    user-entered description alongside the summary, so lexical anchors
     (candidate names, project titles) reach the routing signal."""
     context = _context_line(
         [
@@ -100,15 +93,38 @@ def summary_embed_text(document: dict, summary: str, meta: Optional[dict] = None
     return summary or context or (document.get("filename") or "")
 
 
+def build_summary_prompt(document: dict, max_chars: int = 6000) -> str:
+    title = document.get("document_title") or document.get("filename") or "document"
+    text = (document.get("text") or "").strip()[:max_chars]
+    return (
+        "Summarize the uploaded document for retrieval routing.\n"
+        "Return 2-4 short sentences, plain text only.\n"
+        "Focus on the document type, topic, named entities, and what a user might ask about.\n"
+        "Do not invent facts.\n\n"
+        f"Document title: {title}\n\n"
+        f"Document text:\n{text}\n\n"
+        "Summary:"
+    )
+
+
+def generate_document_summary(document: dict, llm) -> str:
+    """A short LLM routing summary for a document; falls back to a leading
+    excerpt if generation fails, so ingestion always continues."""
+    text = (document.get("text") or "").strip()
+    if not text:
+        return ""
+    try:
+        summary = llm.generate(build_summary_prompt(document)).strip()
+    except Exception:
+        summary = ""
+    return summary or " ".join(text.split())[:400].rstrip()
+
+
 def build_summary_point(document: dict, embedder, meta: Optional[dict] = None) -> dict:
     """Generate, embed and package a document-summary point (shared by the
     upload pipeline and the backfill CLI)."""
     summary = generate_document_summary(document, embedder)
     vector = embedder.embed_documents([summary_embed_text(document, summary, meta)])[0]
-    return _summary_point(document, summary, vector, meta)
-
-
-def _summary_point(document: dict, summary: str, vector: list, meta: Optional[dict] = None) -> dict:
     payload = build_payload(
         {
             "text": summary,
@@ -137,18 +153,11 @@ def _summary_point(document: dict, summary: str, vector: list, meta: Optional[di
 def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = None, summary_store=None):
     """Load, chunk, embed and store a single file, yielding progress events.
 
-    Yields dicts keyed by ``stage``:
-        {"stage": "parsing"}
-        {"stage": "chunking"}
-        {"stage": "embedding", "done": i, "total": n}   (once per embed batch)
-        {"stage": "storing"}
-        {"stage": "stored", "chunks": n}                 (terminal)
+    Yields ``{"stage": ...}`` dicts: ``parsing``, ``summarizing`` (when a
+    summary store is given), ``chunking``, ``embedding`` (with done/total, once
+    per batch), ``storing``, then the terminal ``{"stage": "stored", "chunks": n}``.
 
-    Embedding progress is real: texts are embedded in batches of EMBED_BATCH and
-    an event is emitted after each, so the caller can drive a progress bar that
-    tracks the slow (embedding) stage rather than guessing.
-
-    Idempotent: existing chunks for the same filename are removed first, so
+    Idempotent: existing points for the same filename are removed first, so
     re-ingesting an updated document never leaves stale chunks behind.
     """
     path = Path(path)
@@ -173,13 +182,10 @@ def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = N
         yield {"stage": "stored", "chunks": 0}
         return
 
-    # Embed with the document/heading context prefix; store the raw chunk text.
     texts = [chunk_embed_text(chunk, document) for chunk in chunks]
     vectors: list = []
     yield {"stage": "embedding", "done": 0, "total": total}
     for start in range(0, total, EMBED_BATCH):
-        # Slicing to EMBED_BATCH bounds each call, so the embedder's own batching
-        # is a no-op here; we call it plainly for embedder-implementation parity.
         vectors.extend(embedder.embed_documents(texts[start : start + EMBED_BATCH]))
         yield {"stage": "embedding", "done": min(start + EMBED_BATCH, total), "total": total}
 
@@ -203,11 +209,7 @@ def ingest_file_stream(path, store, embedder, settings, meta: Optional[dict] = N
 
 
 def ingest_file(path, store, embedder, settings, meta: Optional[dict] = None, summary_store=None) -> int:
-    """Load, chunk, embed and store a single file. Returns the chunk count.
-
-    Thin wrapper over :func:`ingest_file_stream` for callers that only need the
-    final count (the CLI scan and the non-streaming upload path).
-    """
+    """Like :func:`ingest_file_stream`, for callers that only need the count."""
     count = 0
     for event in ingest_file_stream(path, store, embedder, settings, meta, summary_store=summary_store):
         if event.get("stage") == "stored":

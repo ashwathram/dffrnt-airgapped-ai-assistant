@@ -4,7 +4,9 @@
 #
 # Lives in the bundle and, after install, in the app root. The app runs as a
 # container, so this needs only Docker. It reads ports + GPU from config.toml,
-# manages the Qdrant + Ollama + API containers, and pulls models for online builds.
+# manages the Qdrant + Ollama + API containers, pulls models for online builds,
+# and prunes any cached model config.toml no longer references (so switching
+# llm_model/embed_model + restart reclaims the old model's disk usage).
 #
 # Usage:
 #   ./run.sh start      bring the whole stack up (pull models if online)
@@ -88,12 +90,36 @@ ensure_models() {
   done
 }
 
+# Sweep any cached model the LIVE config no longer references (deliberately
+# not $MODELS, which also unions in whatever was frozen into the bundle at
+# package time) — so switching llm_model/embed_model in config.toml and
+# restarting reclaims the old model's blobs from ./ollama_models instead of
+# accumulating every model ever used across the deployment's lifetime.
+prune_models() {
+  local keep="" m name cached
+  for m in "$(cfg llm_model '')" "$(cfg embed_model '')"; do
+    [ -n "$m" ] || continue
+    case "$m" in *:*) keep="$keep $m" ;; *) keep="$keep $m:latest" ;; esac
+  done
+  [ -n "$keep" ] || return 0
+  cached="$(docker exec ollama ollama list 2>/dev/null | tail -n +2 | awk '{print $1}')"
+  for name in $cached; do
+    [ -n "$name" ] || continue
+    case " $keep " in
+      *" $name "*) ;;
+      *) echo ">> Removing cached model no longer in use: $name"
+         docker exec ollama ollama rm "$name" >/dev/null || true ;;
+    esac
+  done
+}
+
 case "$CMD" in
   start)
     compose_up
     wait_for "Qdrant" "http://localhost:$QDRANT_PORT/healthz" 120
     wait_for "Ollama" "http://localhost:$OLLAMA_PORT"          120
     ensure_models
+    prune_models
     wait_for "API"    "http://localhost:$API_PORT/health"      120 || \
       echo "   (API not healthy yet — it restarts automatically; check ./run.sh logs api)"
     echo ">> Up. UI: http://localhost:$API_PORT"

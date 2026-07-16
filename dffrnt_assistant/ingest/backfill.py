@@ -1,23 +1,15 @@
 """Maintenance CLI: bring the vector store in line with the app's data.
 
-Two jobs (eval/OPTIMIZATION_PLAN.md E3):
-
-1. **Summary backfill** (default): every ingested document should have a point
-   in the summary collection; documents uploaded before summaries existed have
-   none, so summary routing and prompt briefings skip them. For each missing
-   one, generate + embed + upsert a summary. The document text comes from the
-   source file in ``data_dir`` when it exists, else it is reconstructed from
-   the stored chunk payloads (summaries only need the leading ~6k chars).
+1. **Summary backfill** (default): generate + upsert a summary point for every
+   ingested document that lacks one (documents uploaded before summaries
+   existed are otherwise skipped by routing and prompt briefings). The text
+   comes from the source file in ``data_dir``, else from the stored chunks.
 
 2. **Bulk ingest** (``--ingest-missing``, opt-in): ingest supported files that
-   sit in ``data_dir`` but have no chunks in the collection — the restore path
-   for a wiped knowledge base. Opt-in because stale files in ``data_dir``
-   would otherwise silently (re-)enter the KB.
+   sit in ``data_dir`` but have no chunks — the restore path for a wiped KB.
 
-Run from the repo root, services up:
-  python -m dffrnt_assistant.ingest.backfill --dry-run
-  python -m dffrnt_assistant.ingest.backfill
-  DATA_DIR=deploy/data python -m dffrnt_assistant.ingest.backfill --ingest-missing
+Run from the repo root with the services up:
+  python -m dffrnt_assistant.ingest.backfill [--dry-run] [--ingest-missing]
 """
 
 from __future__ import annotations

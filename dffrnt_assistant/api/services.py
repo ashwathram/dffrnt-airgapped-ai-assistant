@@ -30,7 +30,19 @@ def _human_size(num_bytes: int) -> str:
     return f"{num_bytes / 1048576:.1f} MB"
 
 
+def _validate_question(question: str) -> str:
+    question = (question or "").strip()
+    if not question:
+        raise UserError(400, "Question cannot be empty")
+    if len(question) > 2000:
+        raise UserError(400, "Question too long — max 2000 characters")
+    return question
+
+
 class AssistantService:
+    """The document knowledge base: query answering, upload/ingestion with
+    dedup, the library view, deletion, and per-document tags/descriptions."""
+
     def __init__(self, settings, store, summary_store, embedder, rag, audit):
         self.settings = settings
         self.store = store
@@ -45,12 +57,7 @@ class AssistantService:
     def query(
         self, question: str, history: Optional[List[dict]] = None, tags: Optional[List[str]] = None
     ) -> dict:
-        question = (question or "").strip()
-        if not question:
-            raise UserError(400, "Question cannot be empty")
-        if len(question) > 2000:
-            raise UserError(400, "Question too long — max 2000 characters")
-
+        question = _validate_question(question)
         history = history or []
         tag_filter = [t for t in (tags or []) if t]
         result = self.rag.answer(question, history, tag_filter)
@@ -69,17 +76,10 @@ class AssistantService:
     def query_stream(
         self, question: str, history: Optional[List[dict]] = None, tags: Optional[List[str]] = None
     ):
-        """Like ``query`` but streams ``(kind, payload)`` events.
-
-        Validation runs eagerly (before any event is produced) so the HTTP layer
-        can return a proper error status before the stream starts. The audit
-        record is written once the stream is fully consumed.
-        """
-        question = (question or "").strip()
-        if not question:
-            raise UserError(400, "Question cannot be empty")
-        if len(question) > 2000:
-            raise UserError(400, "Question too long — max 2000 characters")
+        """Like ``query`` but streams ``(kind, payload)`` events. Validation
+        runs eagerly so the HTTP layer can fail before the stream starts; the
+        audit record is written once the stream is fully consumed."""
+        question = _validate_question(question)
         history = history or []
         tag_filter = [t for t in (tags or []) if t]
 
@@ -125,12 +125,7 @@ class AssistantService:
         description: str, force: bool,
     ):
         """Validate, dedup-check, persist the bytes and build the ingest meta.
-
-        Returns ``("duplicate", dup_dict)`` when the caller should stop and
-        report a duplicate, or ``("ready", ctx)`` where ``ctx`` carries the
-        saved path, meta and display fields the ingest + result share. Raises
-        :class:`UserError` for unsupported types.
-        """
+        Returns ``("duplicate", dup_dict)`` or ``("ready", ctx)``."""
         ext = Path(filename).suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
             allowed = ", ".join(sorted(e[1:].upper() for e in SUPPORTED_EXTENSIONS))
@@ -139,10 +134,8 @@ class AssistantService:
         save_path = self.data_dir / filename
         content_hash = hashlib.sha256(content).hexdigest()
 
-        # Duplicate detection (skipped when the caller forces the upload, e.g.
-        # the user chose "Keep both"). Two kinds:
-        #   name    — same filename already ingested with identical content
-        #   content — byte-identical content already ingested under another name
+        # Duplicate detection (skipped on force, e.g. the user chose "Keep both"):
+        # same name + identical content, or identical content under another name.
         if not force:
             if (
                 save_path.exists()
@@ -172,9 +165,8 @@ class AssistantService:
 
         tag_items = [t.strip() for t in tags.split(",") if t.strip()]
         leaf_tags, tag_paths = normalize_tag_payload(tag_items)
-        # description/content_hash are stored on every chunk (like tags) so the
-        # library can show them, dedup can match later uploads, and they survive
-        # re-reads of the vector store.
+        # description/content_hash live on every chunk (like tags) so the
+        # library can show them and dedup can match later uploads.
         description = (description or "").strip()
         meta = {
             "description": description,
@@ -239,14 +231,8 @@ class AssistantService:
         self, filename: str, content: bytes, tags: str,
         description: str = "", force: bool = False,
     ):
-        """Upload + ingest, yielding progress events (see ingest_file_stream).
-
-        Emits ``{"stage": ...}`` dicts the caller can serialise as ndjson:
-        ``received`` (bytes persisted), ``parsing`` / ``chunking`` /
-        ``embedding`` (with done/total) / ``storing`` from ingestion, then a
-        terminal ``done`` (carrying the full result) — or ``duplicate`` /
-        ``error``. Lets the UI show a bar tied to the real (embedding) stage.
-        """
+        """Upload + ingest, yielding ``{"stage": ...}`` progress events (see
+        ingest_file_stream), ending with ``done`` / ``duplicate`` / ``error``."""
         try:
             kind, data = self._prepare_upload(filename, content, tags, description, force)
         except UserError as exc:
@@ -348,13 +334,9 @@ class AssistantService:
         }
 
     def _storage_stats(self, total_chunks: int, text_bytes: int, repo_bytes: int) -> dict:
-        """Knowledge-base storage usage vs. the space available to the app.
-
-        Used = the vector store (embedding vectors + chunk text) plus the source
-        document repository on disk. The cap is that usage plus the free space
-        remaining on the volume the app writes to, so the bar reflects real disk
-        pressure rather than a hardcoded quota.
-        """
+        """Knowledge-base storage usage vs. the space available to the app:
+        used = vectors + chunk text + source files; the cap is used + free disk,
+        so the bar reflects real disk pressure rather than a hardcoded quota."""
         vector_bytes = total_chunks * self.store.vector_size * 4  # float32 embeddings
         used = vector_bytes + text_bytes + repo_bytes
         try:
@@ -420,10 +402,8 @@ class AssistantService:
 
     # -- Tags --------------------------------------------------------------
     def distinct_document_tags(self) -> List[str]:
-        """Distinct leaf tag strings across all ingested documents.
-
-        Used to seed the tag taxonomy from tags already attached to documents.
-        """
+        """Distinct leaf tag strings across all ingested documents (used to
+        seed the tag taxonomy)."""
         seen: dict = {}
         for payload in self.store.all_payloads():
             for tag in (payload or {}).get("tags", []) or []:
@@ -523,12 +503,8 @@ class TagService:
 
     # -- Bulk import -------------------------------------------------------
     def import_names(self, names: List[str], type_name: str = "Imported") -> dict:
-        """Idempotently add tag strings under a single type.
-
-        Reuses the type if one with this name already exists, and skips tags
-        that are already present — so re-running is safe. Returns the fresh
-        taxonomy plus how many tags were newly imported.
-        """
+        """Idempotently add tag strings under a single (reused) type; skips
+        tags already present, so re-running is safe."""
         tax = self.store.load()
         target = next(
             (t for t in tax["tag_types"] if t["name"].lower() == type_name.lower()), None

@@ -1,13 +1,7 @@
-// Tiny, dependency-free Markdown → HTML renderer for assistant answers.
-// Covers the subset Qwen 3 emits: headings, bold/italic/strikethrough, inline
-// and fenced code, ordered/unordered (nestable) lists, blockquotes, tables,
-// links, and horizontal rules. Everything is HTML-escaped before any markup is
-// added, so model output can never inject live HTML.
-//
-// Kept separate from chat.js (and styled by styles/markdown.css) so the render
-// rules live on their own: readable, and loosely coupled to the chat view —
-// chat.js passes text in and gets safe HTML back, with an optional `inline`
-// hook to post-process plain text (used for citation chips).
+// Tiny, dependency-free Markdown → HTML renderer for assistant answers,
+// covering the subset the LLM emits (headings, emphasis, code, lists,
+// blockquotes, tables, links, rules). Everything is HTML-escaped before any
+// markup is added, so model output can never inject live HTML.
 import { esc } from './util.js';
 
 // -- Inline formatting -----------------------------------------------------

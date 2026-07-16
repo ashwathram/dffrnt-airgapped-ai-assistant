@@ -19,6 +19,5 @@ deploy/qdrant_storage
 deploy/ollama_models
 
 # Dev-only trees.
-eval
 tests
 conftest.py

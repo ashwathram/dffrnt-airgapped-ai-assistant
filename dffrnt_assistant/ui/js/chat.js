@@ -10,11 +10,8 @@ let nextId = 0;
 const mkId = () => 'm' + (++nextId);  // stable per-message id for actions/targeting
 let abortController = null;           // in-flight stream, so the Stop button can cancel it
 
-// Turn "[1]" markers into clickable citation chips mapped to sources by index.
-// data-msg/data-cite let a click scroll to and highlight the matching source
-// card (see focusSource). Operates on already-escaped text so it can be reused
-// as the Markdown inline hook (it then only ever sees non-code text, leaving
-// code spans untouched).
+// Turn "[1]" markers into clickable citation chips (see focusSource). Operates
+// on already-escaped text so the Markdown inline hook can reuse it safely.
 function citeChips(sources, msgId) {
   return (escaped) => escaped.replace(/\[(\d+)\]/g, (m, n) => {
     const i = parseInt(n, 10);
@@ -30,22 +27,17 @@ function renderContent(text, sources, msgId) {
   return citeChips(sources, msgId)(esc(text));
 }
 
-// Assistant answers: render Markdown to safe HTML, with citation chips applied
-// to the plain-text runs. .md scopes the styling and resets the bubble's
-// pre-wrap (see styles/markdown.css).
+// Assistant answers: Markdown to safe HTML, citation chips on plain-text runs.
 function renderAnswer(text, sources, msgId) {
   return `<div class="md">${renderMarkdown(text, { inline: citeChips(sources, msgId) })}</div>`;
 }
 
-// Sources panel — the answer's [n] markers tell us which sources were actually
-// cited. Those lead; the rest (retrieved but unused) collapse into a dimmed
-// "other retrieved sources" group so they stay auditable without crowding out
-// the ones the answer relied on.
+// Sources panel — sources the answer actually cited lead; the rest collapse
+// into a dimmed "other retrieved sources" group so they stay auditable.
 function sourcesHtml(m) {
   const sources = m.sources || [];
   if (!sources.length) return '';
 
-  // Collect the valid citation numbers present in the final answer text.
   const cited = new Set();
   (m.content || '').replace(/\[(\d+)\]/g, (_, n) => {
     const i = parseInt(n, 10);
@@ -53,10 +45,7 @@ function sourcesHtml(m) {
     return '';
   });
 
-  // Each source keeps its original 1-based number, so the answer's [n] still
-  // maps to badge n and the click-to-flash linkage holds; we only regroup them.
-  // Title (section heading or filename stem) headlines the card; the filename,
-  // page and score sit in the meta line, with a short excerpt of the cited chunk.
+  // Sources keep their original 1-based number so [n] still maps to badge n.
   const row = (s, n) => `
     <a class="source" id="src-${m.id}-${n}" href="/api/documents/${encodeURIComponent(s.filename)}/raw" target="_blank" rel="noopener" title="Open ${esc(s.filename)}">
       <span class="num">${n}</span>
@@ -68,9 +57,7 @@ function sourcesHtml(m) {
       ${svg('externalLink')}
     </a>`;
 
-  // Pair sources with their number, then split by whether the answer cited them.
-  // If nothing was cited (model omitted markers), show everything as primary so
-  // we never hide the whole list.
+  // If nothing was cited (model omitted markers), show everything as primary.
   const numbered = sources.map((s, idx) => [s, idx + 1]);
   const anyCited = numbered.some(([, n]) => cited.has(n));
   const primary = anyCited ? numbered.filter(([, n]) => cited.has(n)) : numbered;
@@ -101,10 +88,8 @@ function emptyStateHtml() {
     </div>`;
 }
 
-// Stylized, collapsible reasoning block — shown when "Show thinking" is on.
-// Open while streaming so the user can watch it think; collapsed once done.
-// The model streams free-form text; we render it as a bulleted "reasoning
-// trace" by splitting on newlines, highlighting the line currently streaming.
+// Collapsible reasoning trace ("Show thinking" on): open while streaming,
+// collapsed once done, with the currently streaming line highlighted.
 function thinkingBlockHtml(m) {
   const openAttr = m.streaming ? ' open' : '';
   const label = m.streaming ? 'Thinking…' : 'Thought process';
@@ -125,17 +110,14 @@ function thinkingBlockHtml(m) {
 }
 
 // Inner HTML of an assistant bubble — reused for live streaming updates.
-// Sources are shown only once streaming is complete (they arrive first, but
-// reading the answer first matches the prototype).
+// Sources are shown only once streaming is complete.
 function bubbleInner(m) {
   let html = '';
-  // Reasoning: a full block (toggle on) or a plain "Thinking…" label (toggle off).
   if (state.showThinking && m.thinking) {
     html += thinkingBlockHtml(m);
   } else if (!state.showThinking && m.streaming && !m.content) {
     html += '<span class="thinking-label">Thinking…</span>';
   }
-  // Answer text (Markdown + citation chips) + a caret while it streams.
   if (m.content) {
     html += renderAnswer(m.content, m.sources, m.id);
     if (m.streaming) html += '<span class="stream-cursor"></span>';
@@ -144,11 +126,8 @@ function bubbleInner(m) {
   return html;
 }
 
-// The only control shown next to the model output *while it generates*: Stop.
-// Retry is deliberately withheld until generation is complete (see actionRowHtml)
-// so it can't be pressed against a half-formed answer. Sits under the streaming
-// bubble and the pre-token typing indicator, so an in-flight answer can be
-// interrupted without reaching back to the composer.
+// While generating, the only message control is Stop — Retry is withheld until
+// the answer is complete so it can't fire against a half-formed one.
 function streamActionsHtml() {
   return `
     <div class="stream-actions">
@@ -156,18 +135,15 @@ function streamActionsHtml() {
     </div>`;
 }
 
-// Formats offered by the "Download As…" menu. Client-only formats (no `server`)
-// build a Blob straight from the answer text the browser already holds after
-// streaming. Server-backed formats (`server: true`) POST the text to a renderer
-// — PDF needs this since the browser has no Markdown->PDF engine.
+// "Download As…" formats. Client-only formats build a Blob from the answer
+// text; `server: true` POSTs it (PDF — the browser has no Markdown->PDF engine).
 const DOWNLOAD_FORMATS = [
   { id: 'txt', label: 'Plain text (.txt)', ext: 'txt', mime: 'text/plain' },
   { id: 'md', label: 'Markdown (.md)', ext: 'md', mime: 'text/markdown' },
   { id: 'pdf', label: 'PDF (.pdf)', ext: 'pdf', server: true },
 ];
 
-// Native <details> disclosure, so open/close needs no JS state (mirrors the
-// thinking block). Option clicks are wired via the shared [data-msg-action] hook.
+// Native <details> disclosure, so open/close needs no JS state.
 function downloadMenuHtml(m) {
   const options = DOWNLOAD_FORMATS.map(
     (f) => `<button data-msg-action="download" data-id="${m.id}" data-format="${f.id}">${f.label}</button>`
@@ -211,7 +187,6 @@ function messageHtml(m) {
 }
 
 // Pre-token indicator: the model is working but nothing has streamed yet.
-// Carries a Stop control (no Retry — there is nothing to redo yet).
 function typingHtml() {
   return `
   <div class="msg assistant">
@@ -248,10 +223,8 @@ export function renderMessages() {
   box.scrollTop = box.scrollHeight;
 }
 
-// Clicking a "[n]" citation chip scrolls to its source card and flashes it.
-// Cited sources lead the panel, so the card is normally already visible; if it
-// happens to sit in the collapsed "other retrieved sources" group, expand that
-// first (which re-renders, so we look the card up afterwards).
+// Clicking a "[n]" chip scrolls to its source card and flashes it, expanding
+// the collapsed secondary group first if the card sits inside it.
 function focusSource(msgId, n) {
   const m = state.messages.find((x) => x.id === msgId);
   if (!m || !m.sources || n < 1 || n > m.sources.length) return;
@@ -282,8 +255,7 @@ export async function sendMessage(text) {
   text = (text || '').trim();
   if (!text || state.busy) return;
   state.messages.push({ id: mkId(), role: 'user', content: text, ts: nowTime() });
-  // The conversation title is its first user turn (mirrors persist() below), so
-  // the top bar shows that rather than a generic label.
+  // The conversation title is its first user turn (mirrors persist()).
   $('topbarTitle').textContent = (state.messages.find((m) => m.role === 'user') || {}).content || 'Conversation';
   await runQuery();
 }
@@ -331,14 +303,13 @@ async function runQuery() {
   const question = last.content;
   const history = turns.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
 
-  state.busy = true; // guard concurrent sends + show the typing indicator + Stop button
+  state.busy = true; // guard concurrent sends; shows typing indicator + Stop
   renderMessages();
   refreshSendBtn();
 
   const assistant = { id: mkId(), role: 'assistant', content: '', thinking: '', sources: [], streaming: true };
   let started = false;
-  // Add the assistant bubble on the first thinking/answer token, replacing the
-  // standalone typing indicator.
+  // On the first token, swap the typing indicator for the assistant bubble.
   const ensureStarted = () => {
     if (started) return;
     started = true;
@@ -357,7 +328,7 @@ async function runQuery() {
       } else if (ev.type === 'thinking') {
         assistant.thinking += ev.text;
         ensureStarted();
-        if (state.showThinking) updateStreamingBubble(assistant); // OFF: static "Thinking…"
+        if (state.showThinking) updateStreamingBubble(assistant);
       } else if (ev.type === 'token') {
         assistant.content += ev.text;
         ensureStarted();
@@ -366,11 +337,10 @@ async function runQuery() {
         if (!started) state.messages.push({ id: mkId(), role: 'notice', content: ev.detail });
         break;
       }
-      // 'done' needs no action; the loop simply ends.
     }
   } catch (e) {
     if (e.name === 'AbortError') {
-      // User pressed Stop — keep whatever streamed so far.
+      // Stop pressed — keep whatever streamed so far.
     } else if (!started) {
       state.messages.push({ id: mkId(), role: 'notice', content: 'Could not reach the assistant. Check the server connection.' });
     }
@@ -420,7 +390,6 @@ async function downloadAnswer(m, formatId) {
   if (!fmt || !m) return;
   const name = `${answerFilename(m)}.${fmt.ext}`;
   if (fmt.server) {
-    // PDF: rendered server-side (the browser has no Markdown->PDF engine).
     const { ok, blob } = await exportAnswerPdf(m.content || '', $('topbarTitle').textContent);
     if (!ok) {
       state.messages.push({ id: mkId(), role: 'notice', content: 'Could not generate the PDF. Check the server connection.' });
@@ -429,7 +398,6 @@ async function downloadAnswer(m, formatId) {
     }
     saveBlob(blob, name);
   } else {
-    // TXT/MD: the answer text is already in the browser — no backend needed.
     saveBlob(new Blob([m.content || ''], { type: fmt.mime }), name);
   }
 }

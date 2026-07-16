@@ -51,3 +51,9 @@ single source of truth for the LLM/embed models, prompt, and retrieval settings,
 and it drives the host ports and GPU acceleration (set `environment = "local-cuda"`
 or `gpu = true` for NVIDIA GPUs — requires the NVIDIA Container Toolkit on the
 host). The API container always serves on port 8000 internally.
+
+Switching `llm_model`/`embed_model` and restarting pulls the new model (online
+builds) and removes the previously configured model from the cache, so disk
+usage doesn't grow with every switch. An OFFLINE bundle must have already
+vendored the new model at package time (`deploy/package.sh`) — offline installs
+have no internet to pull one on demand.

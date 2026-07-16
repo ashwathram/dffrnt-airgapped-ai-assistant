@@ -7,10 +7,9 @@ from typing import Dict, List
 
 from ..schema import page_label, to_source
 
-# Aggregate-intent cues: questions that roll up across many documents ("rates of
-# all candidates", "which employees…", "compare the proposals"). Deliberately
-# loose — a false positive only *adds* per-document evidence that the margin cut
-# then trims, it never removes anything (see retrieve()).
+# Aggregate-intent cues ("rates of all candidates", "compare the proposals").
+# Deliberately loose — a false positive only adds per-document evidence that
+# the margin cut then trims; it never removes anything.
 _AGGREGATE_CUES = re.compile(
     r"\b(all|every|each|who|which|whose|list|compare|comparison|tabulate|table|"
     r"candidates|employees|contractors|resumes|team)\b",
@@ -19,6 +18,9 @@ _AGGREGATE_CUES = re.compile(
 
 
 class Retriever:
+    """Embeds a question, gathers the best chunks, and renders them as the
+    prompt context block + source citations the RAG layer consumes."""
+
     def __init__(self, store, embedder, settings, summary_store=None, audit=None):
         self.store = store
         self.embedder = embedder
@@ -40,7 +42,7 @@ class Retriever:
         return sorted(hits + new, key=lambda h: h["score"], reverse=True), len(new)
 
     def _attach_summaries(self, hits: List[Dict], summary_hits: List[Dict]) -> None:
-        """Stamp each hit's payload with its document's summary (P1), so
+        """Stamp each hit's payload with its document's summary, so
         build_context can brief the model on each source document once."""
         summaries: Dict[str, str] = {}
         for hit in summary_hits:
@@ -66,18 +68,16 @@ class Retriever:
         """Return the top hits as ``[{"payload": ..., "score": ...}, ...]``,
         optionally scoped to documents carrying any of ``tag_filter``.
 
-        Two additive signals extend the global top-k pool — they only ever add
-        chunks, never exclude any (a signal miss must not make a document
-        unfindable when plain chunk search ranks it well — measured regression,
-        eval/OPTIMIZATION_PLAN.md §1.3):
+        Two signals extend the global top-k pool — strictly additively, since a
+        signal miss must never make a document unfindable when plain chunk
+        search ranks it well (a hard summary filter measurably regressed):
 
         - document summaries: chunks from files whose summary matches the query;
-        - aggregate intent: the best chunk(s) from each of the top documents
-          (grouped search), so roll-up questions cover every relevant document.
+        - aggregate intent: the best chunk(s) per document via grouped search,
+          so roll-up questions cover every relevant document.
 
-        Hits scoring more than ``score_margin`` below the best hit are dropped, so
-        clearly-weaker (noisy) chunks never reach the prompt. The top hit is
-        always kept; with ``score_margin`` 0 the cut is disabled."""
+        Finally, hits scoring more than ``score_margin`` below the best hit are
+        dropped (top hit always kept; 0 disables)."""
         t0 = time.perf_counter()
         query_vector = self.embedder.embed_query(question)
         embed_ms = (time.perf_counter() - t0) * 1000
@@ -148,11 +148,8 @@ class Retriever:
 
     @staticmethod
     def build_context(hits: List[Dict]) -> str:
-        """Render hits as <document> tags for the prompt.
-
-        The first chunk of each distinct source document carries a <summary>
-        line (the ingestion-time LLM summary, when available), so the model gets
-        a briefing on every source it is reading fragments of."""
+        """Render hits as <document> tags for the prompt. The first chunk of
+        each distinct source carries a <summary> briefing line when available."""
         blocks = []
         summarized_files = set()
         for index, hit in enumerate(hits, start=1):

@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
+      # Offline tests only; the integration/eval suites need live Qdrant +
+      # Ollama and are excluded by the default pytest markers.
       - name: Run tests
-        # System tests require live Qdrant + Ollama — allowed to fail in CI
-        run: uv run pytest tests/ -v
-        continue-on-error: true
+        run: uv run pytest -v

@@ -28,7 +28,7 @@
         {
             "label": "Pull Ollama models",
             "type": "shell",
-            "command": "docker exec ollama ollama pull qwen3:30b-a3b && docker exec ollama ollama pull bge-m3",
+            "command": "bash deploy/pull-models.sh",
             "dependsOn": ["Start services (config-driven)"],
             "options": {
                 "cwd": "${workspaceFolder}",

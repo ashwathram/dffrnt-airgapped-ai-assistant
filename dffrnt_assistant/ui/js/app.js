@@ -1,17 +1,5 @@
 // Entry point: hydrate icons, wire navigation, boot the default view.
-//
-// Module layout:
-//   util.js     - DOM/text helpers
-//   icons.js    - inline SVG icon set + hydration
-//   state.js    - shared app state
-//   api.js      - fetch wrappers for the backend
-//   sidebar.js  - sidebar (collapse, chat list)
-//   chat.js     - chat view (messages, composer, send)
-//   library.js  - document library (list, delete)
-//   upload.js   - upload modal (validation, per-file tags, dup handling)
-//   settings.js - thinking toggle pill above the composer
-//   tags.js     - tag manager modal (taxonomy CRUD)
-//   app.js      - this file: coordinates views + boot
+// Each sibling module owns one view/concern; this file only coordinates them.
 import { $ } from './util.js';
 import { hydrateIcons } from './icons.js';
 import { state } from './state.js';

@@ -1,10 +1,6 @@
-// Upload modal: a queue with client-side validation, per-file (or per-folder)
-// taxonomy tags + description, sequential upload with a progress bar, and a
-// separate ingestion-summary screen. Duplicates are detected server-side by
-// SHA-256 (same name, or same content under a different name) and resolved
-// inline with Replace / Keep both / Remove file. Tags are grouped by type in
-// collapsible sections and a new tag can be created inline. Wired to /api/upload
-// (+ DELETE for Replace). Folder uploads share tags/description across files.
+// Upload modal: a validated queue with per-file (or per-folder) tags and
+// description, sequential upload with real progress, and an ingestion summary.
+// Server-detected duplicates resolve inline (Replace / Keep both / Remove).
 import { $, esc } from './util.js';
 import { svg } from './icons.js';
 import { state } from './state.js';
