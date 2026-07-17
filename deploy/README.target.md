@@ -41,7 +41,8 @@ cd dffrnt                       # or your chosen install dir
 ./dffrnt_ctrl_panel.sh stop     # stop all containers
 ./dffrnt_ctrl_panel.sh restart
 ./dffrnt_ctrl_panel.sh status   # container + API health
-./dffrnt_ctrl_panel.sh logs     # follow logs (optionally: ./dffrnt_ctrl_panel.sh logs api)
+./dffrnt_ctrl_panel.sh logs     # follow container logs (optionally: ./dffrnt_ctrl_panel.sh logs api)
+./dffrnt_ctrl_panel.sh audit    # follow the app audit trail (logs/audit.jsonl)
 ./dffrnt_ctrl_panel.sh reingest # force re-ingest every stored document in the live API
 ```
 

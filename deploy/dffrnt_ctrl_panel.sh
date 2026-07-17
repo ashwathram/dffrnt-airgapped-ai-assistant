@@ -13,7 +13,8 @@
 #   ./dffrnt_ctrl_panel.sh stop       stop all containers
 #   ./dffrnt_ctrl_panel.sh restart    stop then start
 #   ./dffrnt_ctrl_panel.sh status     show container + API health
-#   ./dffrnt_ctrl_panel.sh logs [svc] follow logs (qdrant|ollama|api; default all)
+#   ./dffrnt_ctrl_panel.sh logs [svc] follow container logs (qdrant|ollama|api; default all)
+#   ./dffrnt_ctrl_panel.sh audit      follow the app audit trail (logs/audit.jsonl)
 #   ./dffrnt_ctrl_panel.sh reingest   force re-ingest every stored document in the live API
 set -euo pipefail
 
@@ -129,7 +130,7 @@ run_menu() {
   echo "== DFFRNT control panel — select an action =="
   local PS3="#? "
   local choice
-  select choice in start stop restart status logs reingest quit; do
+  select choice in start stop restart status logs audit reingest quit; do
     case "$choice" in
       quit) exit 0 ;;
       "")   echo "Invalid selection — enter a listed number." ;;
@@ -164,7 +165,9 @@ case "$CMD" in
       echo "!! The API container 'dffrnt-api' is not running — start the stack first." >&2
       exit 1
     fi
-    REINGEST=(python -m dffrnt_assistant.ingest.backfill --force "$@")
+    # `python -u` keeps stdout unbuffered so the per-file/per-stage progress
+    # streams live through `docker exec` (no tty -> Python would block-buffer).
+    REINGEST=(python -u -m dffrnt_assistant.ingest.backfill --force "$@")
     # Preview first (no writes): list the files that will be (re)ingested and
     # flag any collection docs with no source file on disk, which a disk-driven
     # force cannot reach. Runs in the container against the live stack.
@@ -180,8 +183,9 @@ case "$CMD" in
       case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo ">> Aborted — nothing changed."; exit 0 ;; esac
     fi
     echo ">> Force re-ingesting every stored document in the live API (this can take a while)…"
-    # Idempotent per file; preserves each document's tags/description.
-    docker exec dffrnt-api "${REINGEST[@]}"
+    # --verbose streams each file's pipeline stages; idempotent per file and
+    # preserves each document's tags/description.
+    docker exec dffrnt-api "${REINGEST[@]}" --verbose
     echo ">> Re-ingestion complete."
     ;;
   status)
@@ -195,5 +199,23 @@ case "$CMD" in
   logs)
     "${COMPOSE[@]}" logs -f "$@"
     ;;
-  *) echo "Usage: ./dffrnt_ctrl_panel.sh {start|stop|restart|status|logs|reingest}  (no argument = menu)" >&2; exit 2 ;;
+  audit)
+    # The app's own audit trail (uploads, ingestions, queries) — a host-side
+    # bind mount, so it is read directly, no container needed. audit_log_path is
+    # relative to /app, which mirrors this dir for the mounted data/ and logs/.
+    AUDIT="$HERE/$(cfg audit_log_path logs/audit.jsonl)"
+    if [ ! -f "$AUDIT" ]; then
+      echo "!! No audit log at $AUDIT yet (nothing recorded — has the app been used?)." >&2
+      exit 1
+    fi
+    echo ">> Following $AUDIT (Ctrl-C to stop)"
+    # jq pretty-prints each JSONL record when present; fall back to raw lines.
+    # `fromjson? // .` keeps a partial/non-JSON line from aborting the stream.
+    if command -v jq >/dev/null 2>&1; then
+      tail -n 50 -f "$AUDIT" | jq -R --unbuffered 'fromjson? // .'
+    else
+      tail -n 50 -f "$AUDIT"
+    fi
+    ;;
+  *) echo "Usage: ./dffrnt_ctrl_panel.sh {start|stop|restart|status|logs|audit|reingest}  (no argument = menu)" >&2; exit 2 ;;
 esac

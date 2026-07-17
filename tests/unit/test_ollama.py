@@ -32,3 +32,29 @@ def test_embed_texts_falls_back_to_classic_endpoint():
 
     assert out == [[0.1], [0.1]]
     assert client._use_batch_embed is False
+
+
+def test_embed_on_cpu_pins_embeddings_to_cpu():
+    seen = []
+    client = OllamaClient("http://x", "m", "embed", embed_on_cpu=True)
+
+    def fake_post(path, payload):
+        seen.append(payload)
+        return {"embeddings": [[0.0]]}
+
+    client._post = fake_post
+    client.embed_query("hi")
+    assert seen[0]["options"] == {"num_gpu": 0}   # embedder forced off the GPU
+
+
+def test_embeddings_carry_no_options_by_default():
+    seen = []
+    client = OllamaClient("http://x", "m", "embed")   # embed_on_cpu defaults False
+
+    def fake_post(path, payload):
+        seen.append(payload)
+        return {"embeddings": [[0.0]]}
+
+    client._post = fake_post
+    client.embed_query("hi")
+    assert "options" not in seen[0]                # Ollama places the embedder itself

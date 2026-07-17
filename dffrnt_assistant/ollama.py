@@ -25,6 +25,7 @@ class OllamaClient:
         top_k: int = 20,
         repeat_penalty: float = 1.0,
         num_predict: int = -1,
+        embed_on_cpu: bool = False,
     ):
         self.base_url = base_url.rstrip("/")
         self.llm_model = llm_model
@@ -43,6 +44,10 @@ class OllamaClient:
             "repeat_penalty": repeat_penalty,
             "num_predict": num_predict,
         }
+        # When the GPU can't hold the LLM and the embedder at once, pin
+        # embeddings to CPU (num_gpu=0) so the LLM stays resident. None means
+        # "send no options" and let Ollama place the embedder itself.
+        self.embed_options = {"num_gpu": 0} if embed_on_cpu else None
         # Newer Ollama exposes a batch /api/embed; fall back to /api/embeddings.
         self._use_batch_embed = True
 
@@ -70,7 +75,10 @@ class OllamaClient:
     def _embed(self, texts: List[str]) -> List[List[float]]:
         if self._use_batch_embed:
             try:
-                out = self._post("/api/embed", {"model": self.embed_model, "input": texts})
+                payload = {"model": self.embed_model, "input": texts}
+                if self.embed_options:
+                    payload["options"] = self.embed_options
+                out = self._post("/api/embed", payload)
                 embeddings = out.get("embeddings")
                 if embeddings:
                     return embeddings
@@ -78,12 +86,13 @@ class OllamaClient:
                 if exc.code != 404:
                     raise
                 self._use_batch_embed = False  # older Ollama; use classic endpoint
-        return [
-            self._post("/api/embeddings", {"model": self.embed_model, "prompt": text})[
-                "embedding"
-            ]
-            for text in texts
-        ]
+        vectors: List[List[float]] = []
+        for text in texts:
+            payload = {"model": self.embed_model, "prompt": text}
+            if self.embed_options:
+                payload["options"] = self.embed_options
+            vectors.append(self._post("/api/embeddings", payload)["embedding"])
+        return vectors
 
     def embed_documents(self, texts: List[str], batch_size: int = 64) -> List[List[float]]:
         """Embed documents for storage, with the document task prefix applied."""

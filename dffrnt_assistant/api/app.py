@@ -47,6 +47,7 @@ ollama = OllamaClient(
     settings.llm_top_k,
     settings.llm_repeat_penalty,
     settings.llm_num_predict,
+    settings.embed_on_cpu,
 )
 audit = AuditLog(settings.audit_log_path)
 retriever = Retriever(store, ollama, settings, summary_store=summary_store, audit=audit)

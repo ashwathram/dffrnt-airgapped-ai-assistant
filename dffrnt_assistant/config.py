@@ -43,6 +43,11 @@ class Settings:
     # Changing the embed model or prefixes requires re-uploading documents.
     embed_query_prefix: str = ""
     embed_document_prefix: str = ""
+    # Pin embeddings to CPU (num_gpu=0). On a GPU too small to hold the LLM and
+    # the embedder at once, this keeps the LLM permanently resident instead of
+    # being evicted to embed and reloaded to generate (per-prompt reload thrash).
+    # Ingestion embeds get slower; interactive generation stays warm.
+    embed_on_cpu: bool = False
 
     # -- Qdrant vector store ----------------------------------------------
     qdrant_url: str = "http://localhost:6333"

@@ -120,6 +120,26 @@ def test_ingest_force_reingests_present_and_preserves_meta(tmp_path, monkeypatch
     assert captured["meta"]["content_hash"] != "stale"  # recomputed from disk
 
 
+def test_ingest_verbose_streams_pipeline_stages(tmp_path, monkeypatch, capsys):
+    (tmp_path / "doc.txt").write_text("body")
+    store = FakeStore([])   # no chunks -> file is "missing" -> ingested, not skipped
+
+    def fake_stream(path, s, emb, settings, meta=None, summary_store=None):
+        yield {"stage": "parsing"}
+        yield {"stage": "chunking"}
+        yield {"stage": "embedding", "done": 0, "total": 2}
+        yield {"stage": "embedding", "done": 2, "total": 2}
+        yield {"stage": "stored", "chunks": 2}
+
+    monkeypatch.setattr(backfill, "ingest_file_stream", fake_stream)
+    n = ingest_missing_files(store, FakeLLMEmbedder(), None, tmp_path, verbose=True)
+    out = capsys.readouterr().out
+    assert n == 1
+    assert "parsing" in out and "chunking" in out      # stages surfaced live
+    assert "embedding 2/2" in out                       # per-batch progress
+    assert "doc.txt: ingested (2 chunks)" in out        # final summary line
+
+
 def test_orphaned_documents_flags_docs_without_source_files(tmp_path):
     (tmp_path / "ondisk.txt").write_text("present")
     store = FakeStore([_chunk("ondisk.txt", "a", 0), _chunk("gone.pdf", "b", 0)])

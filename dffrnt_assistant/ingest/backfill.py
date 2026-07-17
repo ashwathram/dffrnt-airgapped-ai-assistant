@@ -12,7 +12,7 @@
    tags/description so curation metadata survives.
 
 Run from the repo root with the services up:
-  python -m dffrnt_assistant.ingest.backfill [--dry-run] [--ingest-missing] [--force]
+  python -m dffrnt_assistant.ingest.backfill [--dry-run] [--ingest-missing] [--force] [--verbose]
 """
 
 from __future__ import annotations
@@ -23,7 +23,12 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from .loaders import load_file
-from .pipeline import SUPPORTED_EXTENSIONS, build_summary_point, ingest_file
+from .pipeline import (
+    SUPPORTED_EXTENSIONS,
+    build_summary_point,
+    ingest_file,
+    ingest_file_stream,
+)
 
 # Only this much reconstructed text is needed: summary prompts truncate anyway.
 _RECONSTRUCT_CHARS = 8000
@@ -99,14 +104,30 @@ def backfill_summaries(store, summary_store, embedder, data_dir: Path, dry_run: 
     return done
 
 
+def _ingest_streaming(path, store, embedder, settings, meta, summary_store) -> int:
+    """Ingest one file, printing each pipeline stage (parse, summarize, chunk,
+    per-batch embed, store) as it happens. Returns the chunk count."""
+    chunks = 0
+    for event in ingest_file_stream(path, store, embedder, settings, meta, summary_store=summary_store):
+        stage = event.get("stage")
+        if stage == "embedding":
+            print(f"       embedding {event['done']}/{event['total']}", flush=True)
+        elif stage == "stored":
+            chunks = event["chunks"]
+        elif stage:
+            print(f"       {stage} …", flush=True)
+    return chunks
+
+
 def ingest_missing_files(store, embedder, settings, data_dir: Path,
                          summary_store=None, dry_run: bool = False,
-                         force: bool = False) -> int:
+                         force: bool = False, verbose: bool = False) -> int:
     """Ingest supported files in ``data_dir``. Files already in the collection
     are skipped unless ``force`` — then every file is re-ingested (ingestion is
     idempotent, replacing each filename's own points). The tags/description
     already stored on a file's chunks are carried over so a refresh never drops
-    curation metadata; ``content_hash`` is always recomputed from disk."""
+    curation metadata; ``content_hash`` is always recomputed from disk. With
+    ``verbose`` each file's pipeline stages are streamed as they run."""
     done = 0
     for path in sorted(data_dir.iterdir()):
         if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
@@ -122,8 +143,12 @@ def ingest_missing_files(store, embedder, settings, data_dir: Path,
         existing = store.payloads_by_filenames([path.name], limit=1) if present else []
         meta = {k: existing[0].get(k) for k in _META_KEYS if existing and existing[0].get(k)}
         meta["content_hash"] = hashlib.sha256(path.read_bytes()).hexdigest()
-        chunks = ingest_file(path, store, embedder, settings, meta, summary_store=summary_store)
-        print(f"  {path.name}: {verb}ed ({chunks} chunks)")
+        if verbose:
+            print(f"  {verb}ing {path.name} …", flush=True)
+            chunks = _ingest_streaming(path, store, embedder, settings, meta, summary_store)
+        else:
+            chunks = ingest_file(path, store, embedder, settings, meta, summary_store=summary_store)
+        print(f"  {path.name}: {verb}ed ({chunks} chunks)", flush=True)
         done += 1
     return done
 
@@ -138,6 +163,10 @@ def main() -> None:
     ap.add_argument(
         "--force", action="store_true",
         help="re-ingest every data_dir file, even those already present (implies --ingest-missing)",
+    )
+    ap.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="stream each file's pipeline stages (parse/summarize/chunk/embed/store)",
     )
     args = ap.parse_args()
 
@@ -160,6 +189,7 @@ def main() -> None:
         settings.embed_query_prefix, settings.embed_document_prefix,
         settings.llm_num_ctx, settings.llm_top_p, settings.llm_top_k,
         settings.llm_repeat_penalty, settings.llm_num_predict,
+        settings.embed_on_cpu,
     )
     data_dir = Path(settings.data_dir)
 
@@ -167,7 +197,8 @@ def main() -> None:
         scope = "re-ingesting all" if args.force else "ingesting missing"
         print(f"== {scope} data_dir files for '{settings.collection_name}' ==")
         n = ingest_missing_files(
-            store, embedder, settings, data_dir, summary_store, args.dry_run, force=args.force
+            store, embedder, settings, data_dir, summary_store, args.dry_run,
+            force=args.force, verbose=args.verbose,
         )
         print(f"== {n} file(s) {'to (re)ingest' if args.dry_run else 'ingested'} ==")
 

@@ -22,6 +22,14 @@ services:
       - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ./ollama_models:/root/.ollama/models
+    # Keep the LLM + embedder both resident so a RAG query (embed -> generate)
+    # never evicts the LLM and pays a full model reload per prompt. KEEP_ALIVE=-1
+    # disables idle unload; MAX_LOADED_MODELS=2 lets the two coexist (they fit a
+    # ~14GB GPU: ~10GB LLM + ~2GB embedder). If the GPU is too small to hold both
+    # even so, set embed_on_cpu = true in config.toml (see below).
+    environment:
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_MAX_LOADED_MODELS=2
     restart: unless-stopped
 
   # The API + web UI, behind the `prod` profile. dffrnt_ctrl_panel.sh always uses

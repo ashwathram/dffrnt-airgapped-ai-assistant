@@ -48,6 +48,10 @@ llm_num_predict = 5000
 # these prefixes requires re-uploading documents (the vector dimension changes).
 embed_query_prefix = ""
 embed_document_prefix = ""
+# Pin embeddings to CPU (num_gpu=0). Set true when the GPU is too small to hold
+# the LLM and the embedder at once, so the LLM is never evicted to embed and
+# reloaded to generate (per-prompt model reload). Ingestion embeds get slower.
+embed_on_cpu = false
 
 # --- Qdrant vector store ---
 qdrant_url = "http://localhost:6333"
