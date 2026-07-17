@@ -135,6 +135,24 @@ prune_models() {
          docker exec ollama ollama rm "$name" >/dev/null || true ;;
     esac
   done
+  # `ollama list` HIDES models whose manifest is broken (blobs missing), so the
+  # loop above can never reach them — yet every list request then logs a
+  # "failed to refresh model list cache" WARN forever. Sweep the manifest files
+  # directly: manifests/registry.ollama.ai/library/<name>/<tag> -> "name:tag".
+  local manifest rel
+  while IFS= read -r manifest; do
+    [ -n "$manifest" ] || continue
+    rel="${manifest#/root/.ollama/models/manifests/registry.ollama.ai/library/}"
+    [ "$rel" != "$manifest" ] || continue      # non-library namespace: leave alone
+    name="${rel%/*}:${rel##*/}"
+    case " $keep " in
+      *" $name "*) ;;
+      *) echo ">> Removing stale model manifest: $name"
+         docker exec ollama ollama rm "$name" >/dev/null 2>&1 || \
+           docker exec ollama rm -f "$manifest" >/dev/null 2>&1 || true ;;
+    esac
+  done < <(docker exec ollama find /root/.ollama/models/manifests/registry.ollama.ai/library \
+             -type f 2>/dev/null || true)
 }
 
 # Interactive picker shown when invoked with no command (see CMD logic above).

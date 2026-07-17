@@ -11,7 +11,7 @@
 # host (deploy/install-prerequisites.sh installs both); dffrnt_ctrl_panel.sh
 # refuses to start in GPU mode when the toolkit is missing. Defaults to false so
 # a fresh checkout runs anywhere; set true on any NVIDIA-equipped machine.
-gpu = false
+gpu = true
 
 # --- Ollama (LLM + embeddings) ---
 ollama_url = "http://localhost:11434"
