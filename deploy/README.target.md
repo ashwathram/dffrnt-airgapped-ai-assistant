@@ -30,23 +30,26 @@ an online build.
 
 ## Run
 
-A `run.sh` is placed in the install directory. It manages the runtime the same way
-the VS Code tasks do — the containers plus the API:
+A `dffrnt_ctrl_panel.sh` is placed in the install directory. Run it with no
+argument for an interactive menu, or pass a command directly — it manages the
+runtime the same way the VS Code tasks do (the containers plus the API):
 
 ```bash
-cd dffrnt          # or your chosen install dir
-./run.sh start     # bring the whole stack up
-./run.sh stop      # stop all containers
-./run.sh restart
-./run.sh status    # container + API health
-./run.sh logs      # follow logs (optionally: ./run.sh logs api)
+cd dffrnt                       # or your chosen install dir
+./dffrnt_ctrl_panel.sh          # interactive menu
+./dffrnt_ctrl_panel.sh start    # bring the whole stack up
+./dffrnt_ctrl_panel.sh stop     # stop all containers
+./dffrnt_ctrl_panel.sh restart
+./dffrnt_ctrl_panel.sh status   # container + API health
+./dffrnt_ctrl_panel.sh logs     # follow logs (optionally: ./dffrnt_ctrl_panel.sh logs api)
+./dffrnt_ctrl_panel.sh reingest # force re-ingest every stored document in the live API
 ```
 
 The UI is at <http://localhost:8000>.
 
 ## Configuration
 
-Edit `config.toml` in the install directory, then `./run.sh restart`. It is the
+Edit `config.toml` in the install directory, then `./dffrnt_ctrl_panel.sh restart`. It is the
 single source of truth for the LLM/embed models, prompt, and retrieval settings,
 and it drives the host ports and GPU acceleration (set `environment = "local-cuda"`
 or `gpu = true` for NVIDIA GPUs — requires the NVIDIA Container Toolkit on the

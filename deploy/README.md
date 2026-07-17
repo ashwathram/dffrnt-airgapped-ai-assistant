@@ -48,7 +48,7 @@ transfer, etc.), keeping them together.
 
 ```bash
 ./install.sh                 # checks prereqs, unpacks, loads images, starts the stack
-cd dffrnt && ./run.sh status # UI at http://localhost:8000
+cd dffrnt && ./dffrnt_ctrl_panel.sh status # UI at http://localhost:8000
 ```
 
 See the generated `README.md` next to the tarball for the target-side details.
@@ -59,7 +59,7 @@ See the generated `README.md` next to the tarball for the target-side details.
 |------|------|
 | `package.sh` | Packager — builds the bundle + installer + README into `dist/` |
 | `install.sh` | Installer — deploys from the tarball (shipped in `dist/`) |
-| `run.sh` | Runner — manages the containers + API (shipped inside the tarball) |
+| `dffrnt_ctrl_panel.sh` | Control panel — menu/CLI managing the containers + API, incl. force-reingest (shipped inside the tarball) |
 | `Dockerfile` | Builds the app image (`dffrnt-assistant:latest`) with uv |
 | `docker-compose.yml` | Qdrant + Ollama + API (`prod` profile) stack |
 | `README.target.md` | Template for the target-side `README.md` (filled in by `package.sh`) |

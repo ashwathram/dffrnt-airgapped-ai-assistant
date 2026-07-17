@@ -59,12 +59,12 @@
         },
         {
             // Production: (re)build the image from source, then hand off to
-            // run.sh — the canonical runner — which brings up the full GPU-aware
-            // containerized stack (Qdrant + Ollama + API), ensures models, and
-            // waits for health. Mirrors the deployed artifact.
+            // dffrnt_ctrl_panel.sh — the canonical runner — which brings up the
+            // full GPU-aware containerized stack (Qdrant + Ollama + API), ensures
+            // models, and waits for health. Mirrors the deployed artifact.
             "label": "Run production stack (Docker)",
             "type": "shell",
-            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && bash deploy/run.sh start",
+            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && bash deploy/dffrnt_ctrl_panel.sh start",
             "options": {
                 "cwd": "${workspaceFolder}",
                 "shell": { "executable": "bash", "args": ["-c"] }
@@ -76,7 +76,7 @@
             // Stop everything (both dev and prod containers).
             "label": "Stop stack (Docker)",
             "type": "shell",
-            "command": "bash deploy/run.sh stop",
+            "command": "bash deploy/dffrnt_ctrl_panel.sh stop",
             "options": {
                 "cwd": "${workspaceFolder}",
                 "shell": { "executable": "bash", "args": ["-c"] }

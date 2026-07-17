@@ -70,7 +70,7 @@ Or use the VSCode launch config `DFFRNT AI Assistant (Dev: host API)`.
 
 ```bash
 docker build -t dffrnt-assistant:latest -f deploy/Dockerfile .
-bash deploy/run.sh start
+bash deploy/dffrnt_ctrl_panel.sh start
 ```
 
 ## Tests

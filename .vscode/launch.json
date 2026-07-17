@@ -18,12 +18,13 @@
             "console": "integratedTerminal"
         },
         {
-            // Rebuild the app image from source, then run the containerized
-            // prod stack via run.sh (detached; stop with `deploy/run.sh stop`).
+            // Rebuild the app image from source, then run the containerized prod
+            // stack via dffrnt_ctrl_panel.sh (detached; stop with
+            // `deploy/dffrnt_ctrl_panel.sh stop`).
             "name": "DFFRNT AI Assistant (Prod: Docker container)",
             "type": "node-terminal",
             "request": "launch",
-            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && bash deploy/run.sh start",
+            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && bash deploy/dffrnt_ctrl_panel.sh start",
             "cwd": "${workspaceFolder}"
         },
         {

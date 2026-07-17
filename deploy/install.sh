@@ -47,9 +47,12 @@ fi
 # swapping the image, and protect the operator's edited config.toml — the bundle
 # ships a default config.toml that the untar below would otherwise clobber.
 KEEP_CONFIG=0
-if [ -f "$DEST/run.sh" ]; then
+# The control panel was named run.sh before; fall back to it so updates from an
+# older install still stop the running stack before the image is swapped.
+CTRL="$DEST/dffrnt_ctrl_panel.sh"; [ -f "$CTRL" ] || CTRL="$DEST/run.sh"
+if [ -f "$CTRL" ]; then
   echo ">> Updating an existing install in $DEST — stopping the running stack first"
-  bash "$DEST/run.sh" stop || true
+  bash "$CTRL" stop || true
 fi
 if [ -f "$DEST/config.toml" ]; then
   ans="${OVERWRITE_CONFIG:-}"               # set OVERWRITE_CONFIG=y|n to skip the prompt
@@ -89,13 +92,14 @@ for t in "$DEST"/images/*.tar; do docker load -i "$t"; done
 
 # ---- bring the stack up (pulls base images + models for online) ------------
 echo ">> [4/4] Starting the stack"
-bash "$DEST/run.sh" start
+bash "$DEST/dffrnt_ctrl_panel.sh" start
 
 cat <<EOF
 
 >> Installed ($TARGET_SYSTEM). The app lives in: $DEST
 
    Manage it:  cd "$DEST"
-               ./run.sh status | stop | restart | logs
+               ./dffrnt_ctrl_panel.sh          # interactive menu
+               ./dffrnt_ctrl_panel.sh status | stop | restart | logs | reingest
    UI:         http://localhost:8000
 EOF

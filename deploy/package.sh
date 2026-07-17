@@ -93,8 +93,8 @@ else
   echo "   (online — models pulled at deploy time: $MODELS)"
 fi
 
-cp "$ROOT/deploy/docker-compose.yml" "$ROOT/deploy/run.sh" "$STAGE/"
-chmod +x "$STAGE/run.sh"
+cp "$ROOT/deploy/docker-compose.yml" "$ROOT/deploy/dffrnt_ctrl_panel.sh" "$STAGE/"
+chmod +x "$STAGE/dffrnt_ctrl_panel.sh"
 cp "$ROOT/config.toml.example" "$STAGE/config.toml"
 cat > "$STAGE/bundle.conf" <<EOF
 TARGET_SYSTEM=$MODE

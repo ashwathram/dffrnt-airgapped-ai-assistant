@@ -7,9 +7,12 @@
 
 2. **Bulk ingest** (``--ingest-missing``, opt-in): ingest supported files that
    sit in ``data_dir`` but have no chunks — the restore path for a wiped KB.
+   Add ``--force`` to re-ingest files already present too — a full refresh
+   after an ingestion-code or config change — preserving each file's stored
+   tags/description so curation metadata survives.
 
 Run from the repo root with the services up:
-  python -m dffrnt_assistant.ingest.backfill [--dry-run] [--ingest-missing]
+  python -m dffrnt_assistant.ingest.backfill [--dry-run] [--ingest-missing] [--force]
 """
 
 from __future__ import annotations
@@ -60,6 +63,13 @@ def missing_summaries(store, summary_store) -> List[str]:
     return [f for f in _distinct_filenames(store) if f not in summarized]
 
 
+def orphaned_documents(store, data_dir: Path) -> List[str]:
+    """Filenames in the collection with no source file in ``data_dir``. A
+    disk-driven re-ingest cannot reach these, so they keep whatever schema and
+    summary they were last written with — the reconciliation must surface them."""
+    return [f for f in _distinct_filenames(store) if not (data_dir / f).is_file()]
+
+
 def backfill_summaries(store, summary_store, embedder, data_dir: Path, dry_run: bool = False) -> int:
     done = 0
     for filename in missing_summaries(store, summary_store):
@@ -90,20 +100,30 @@ def backfill_summaries(store, summary_store, embedder, data_dir: Path, dry_run: 
 
 
 def ingest_missing_files(store, embedder, settings, data_dir: Path,
-                         summary_store=None, dry_run: bool = False) -> int:
+                         summary_store=None, dry_run: bool = False,
+                         force: bool = False) -> int:
+    """Ingest supported files in ``data_dir``. Files already in the collection
+    are skipped unless ``force`` — then every file is re-ingested (ingestion is
+    idempotent, replacing each filename's own points). The tags/description
+    already stored on a file's chunks are carried over so a refresh never drops
+    curation metadata; ``content_hash`` is always recomputed from disk."""
     done = 0
     for path in sorted(data_dir.iterdir()):
         if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             continue
-        if store.has_document(path.name):
+        present = store.has_document(path.name)
+        if present and not force:
             continue
+        verb = "re-ingest" if present else "ingest"
         if dry_run:
-            print(f"  would ingest {path.name}")
+            print(f"  would {verb} {path.name}")
             done += 1
             continue
-        meta = {"content_hash": hashlib.sha256(path.read_bytes()).hexdigest()}
+        existing = store.payloads_by_filenames([path.name], limit=1) if present else []
+        meta = {k: existing[0].get(k) for k in _META_KEYS if existing and existing[0].get(k)}
+        meta["content_hash"] = hashlib.sha256(path.read_bytes()).hexdigest()
         chunks = ingest_file(path, store, embedder, settings, meta, summary_store=summary_store)
-        print(f"  {path.name}: ingested ({chunks} chunks)")
+        print(f"  {path.name}: {verb}ed ({chunks} chunks)")
         done += 1
     return done
 
@@ -114,6 +134,10 @@ def main() -> None:
     ap.add_argument(
         "--ingest-missing", action="store_true",
         help="also ingest supported data_dir files absent from the collection",
+    )
+    ap.add_argument(
+        "--force", action="store_true",
+        help="re-ingest every data_dir file, even those already present (implies --ingest-missing)",
     )
     args = ap.parse_args()
 
@@ -139,10 +163,24 @@ def main() -> None:
     )
     data_dir = Path(settings.data_dir)
 
-    if args.ingest_missing:
-        print(f"== ingesting data_dir files missing from '{settings.collection_name}' ==")
-        n = ingest_missing_files(store, embedder, settings, data_dir, summary_store, args.dry_run)
-        print(f"== {n} file(s) {'to ingest' if args.dry_run else 'ingested'} ==")
+    if args.ingest_missing or args.force:
+        scope = "re-ingesting all" if args.force else "ingesting missing"
+        print(f"== {scope} data_dir files for '{settings.collection_name}' ==")
+        n = ingest_missing_files(
+            store, embedder, settings, data_dir, summary_store, args.dry_run, force=args.force
+        )
+        print(f"== {n} file(s) {'to (re)ingest' if args.dry_run else 'ingested'} ==")
+
+        # Reconciliation: docs the disk-driven pass above could not reach.
+        orphans = orphaned_documents(store, data_dir)
+        if orphans:
+            print(f"!! {len(orphans)} document(s) in the collection have no source file "
+                  f"in {data_dir} — force cannot reach these (old schema/summary kept):")
+            for f in orphans:
+                print(f"     - {f}")
+            print("   restore the source files to data_dir, or wipe + re-upload, to refresh them.")
+        else:
+            print("== reconciled: every collection document has a source file on disk ==")
 
     print(f"== backfilling document summaries ('{settings.summary_collection_name}') ==")
     n = backfill_summaries(store, summary_store, embedder, data_dir, args.dry_run)

@@ -14,7 +14,7 @@ ROOT="$(cd "$HERE/.." && pwd)"
 CONFIG="${DFFRNT_CONFIG:-$ROOT/config.toml}"
 [ -f "$CONFIG" ] || CONFIG="$ROOT/config.toml.example"
 
-# Read a top-level scalar from config.toml (mirrors run.sh's cfg()).
+# Read a top-level scalar from config.toml (mirrors dffrnt_ctrl_panel.sh's cfg()).
 cfg() {
   local v
   v=$(grep -E "^[[:space:]]*$1[[:space:]]*=" "$CONFIG" 2>/dev/null | head -1 \

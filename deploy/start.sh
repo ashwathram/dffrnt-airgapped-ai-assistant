@@ -2,7 +2,7 @@
 #
 # Dev helper: bring up the Qdrant + Ollama containers only (GPU-aware), so the
 # API can run on the host — e.g. the VSCode debugger — against them. The full
-# containerized stack, including the API, is run by run.sh; this script is
+# containerized stack, including the API, is run by dffrnt_ctrl_panel.sh; this script is
 # dev-only and is not shipped in deployment bundles.
 #
 # GPU is enabled when config.toml's `gpu` flag is true (e.g. environment =
