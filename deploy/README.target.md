@@ -75,3 +75,29 @@ The API and UI have **no authentication**: anyone who can reach the port can
 query, upload, and delete documents. Expose it only to trusted networks — on
 AWS, restrict the security group for port 8000 to your VPN/office CIDR (or put
 an authenticating reverse proxy in front). Never open it to 0.0.0.0/0.
+
+## Reverse proxy and streaming
+
+The answer and upload endpoints stream ndjson, and the app sends
+`X-Accel-Buffering: no` on those responses so nginx (and most CDNs) relay tokens
+as they are produced. If you front the API with a reverse proxy, its own
+buffering can still clump the stream so the answer arrives in bursts instead of
+token by token. For the streaming routes, turn buffering and compression off —
+in nginx, scope it to just those paths so other responses keep buffering:
+
+```nginx
+location ~ ^/api/(query|upload)/stream {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_buffering off;          # relay tokens instead of accumulating them
+    gzip off;                     # the compressor re-clumps a token stream
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_read_timeout 600s;      # match llm_timeout so long generations survive
+}
+```
+
+Apply it live with `nginx -t && nginx -s reload` (graceful, no dropped
+connections). `proxy_buffering off` is the actual fix; `gzip off` matters only
+if gzip is enabled upstream. If a CloudFront/ALB also sits in front, it can
+buffer independently — confirm with `curl -N` straight at nginx (bypassing the
+CDN) after reloading.

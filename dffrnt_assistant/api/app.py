@@ -69,6 +69,14 @@ conversation_service = ConversationService(conversation_store)
 UI_DIR = Path(__file__).resolve().parent.parent / "ui"
 UI_FILE = UI_DIR / "index.html"
 
+# Sent on every ndjson streaming response so an intervening reverse proxy relays
+# tokens as they are produced instead of buffering them into bursts. Without
+# these a proxy fronting the app (e.g. an nginx/CDN in an AWS deployment) makes
+# the answer arrive in discretized chunks rather than a live token stream:
+#   X-Accel-Buffering: no   nginx (and many CDNs) disable response buffering
+#   Cache-Control: no-cache  never cache or coalesce a streamed body
+_STREAM_HEADERS = {"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
+
 
 def _warmup_worker():
     """Preload the LLM + embedder so the first user query skips the model-load
@@ -201,7 +209,9 @@ def query_stream_endpoint(request: QueryRequest):
         except Exception as exc:  # generation failed mid-stream
             yield json.dumps({"type": "error", "detail": str(exc)}) + "\n"
 
-    return StreamingResponse(ndjson(), media_type="application/x-ndjson")
+    return StreamingResponse(
+        ndjson(), media_type="application/x-ndjson", headers=_STREAM_HEADERS
+    )
 
 
 @app.post("/api/export/pdf")
@@ -243,7 +253,9 @@ async def upload_file_stream(
         except Exception as exc:  # unexpected failure mid-stream
             yield json.dumps({"stage": "error", "detail": str(exc)}) + "\n"
 
-    return StreamingResponse(ndjson(), media_type="application/x-ndjson")
+    return StreamingResponse(
+        ndjson(), media_type="application/x-ndjson", headers=_STREAM_HEADERS
+    )
 
 
 @app.get("/api/documents")
