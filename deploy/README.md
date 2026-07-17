@@ -13,7 +13,7 @@ to the target, and install. The app ships as a Docker image, so the target needs
 
 ```bash
 # OFFLINE: vendor the models first, then point the packager at the model store
-ollama pull qwen3:4b && ollama pull bge-m3
+ollama pull qwen3:14b && ollama pull bge-m3
 deploy/package.sh ~/.ollama/models OFFLINE
 
 # AWS / online: no local model store needed
@@ -26,9 +26,14 @@ Both parameters accept positional or `KEY=VALUE` form, in any order:
 deploy/package.sh OLLAMA_MODELS_DIR=deploy/ollama_models TARGET_SYSTEM=OFFLINE
 ```
 
-`package.sh` builds the app image from [Dockerfile](Dockerfile) and reads the
-models to vendor/pull from `config.toml.example` (`llm_model` + `embed_model`). It
-writes exactly three files to `dist/` and nothing else:
+`package.sh` builds the app image from [Dockerfile](Dockerfile) and freezes the
+repo's **live `config.toml`** into the bundle — the state of that file at package
+time (models, `gpu` flag, prompt, retrieval settings) is exactly what the
+deployment runs, and `llm_model` + `embed_model` are the models it vendors/pulls
+(`config.toml.example` is only the fallback for a bare checkout). The Qdrant and
+Ollama base images are version-pinned in [docker-compose.yml](docker-compose.yml);
+bump them there and re-run the eval suite before packaging. `package.sh` writes
+exactly three files to `dist/` and nothing else:
 
 ```
 dist/

@@ -109,12 +109,14 @@ def build_summary_prompt(document: dict, max_chars: int = 6000) -> str:
 
 def generate_document_summary(document: dict, llm) -> str:
     """A short LLM routing summary for a document; falls back to a leading
-    excerpt if generation fails, so ingestion always continues."""
+    excerpt if generation fails, so ingestion always continues. Thinking is
+    disabled: a 2-4 sentence routing summary gains nothing from a reasoning
+    pass, and skipping it cuts ingestion time per upload substantially."""
     text = (document.get("text") or "").strip()
     if not text:
         return ""
     try:
-        summary = llm.generate(build_summary_prompt(document)).strip()
+        summary = llm.generate(build_summary_prompt(document), think=False).strip()
     except Exception:
         summary = ""
     return summary or " ".join(text.split())[:400].rstrip()

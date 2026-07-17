@@ -167,12 +167,22 @@ class VectorStore:
             ),
         )
 
-    def all_payloads(self, limit: int = 10000) -> List[Dict]:
-        """Return every stored payload (used to build the document library view)."""
-        points, _ = self.client.scroll(
-            collection_name=self.collection_name, limit=limit, with_payload=True
-        )
-        return [p.payload for p in points]
+    def all_payloads(self, batch_size: int = 1024) -> List[Dict]:
+        """Return every stored payload (used to build the document library view).
+        Pages through the whole collection, so the result stays complete however
+        large the corpus grows (a single capped scroll silently truncates)."""
+        payloads: List[Dict] = []
+        offset = None
+        while True:
+            points, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=batch_size,
+                with_payload=True,
+                offset=offset,
+            )
+            payloads.extend(p.payload for p in points)
+            if offset is None:
+                return payloads
 
     def count(self) -> int:
         try:

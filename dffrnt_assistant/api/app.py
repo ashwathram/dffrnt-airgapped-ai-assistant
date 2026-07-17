@@ -1,11 +1,13 @@
 """FastAPI presentation layer: HTTP wiring only. Business logic is in services.py."""
 
 import json
+import threading
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -67,10 +69,37 @@ conversation_service = ConversationService(conversation_store)
 UI_DIR = Path(__file__).resolve().parent.parent / "ui"
 UI_FILE = UI_DIR / "index.html"
 
-app = FastAPI(title="DFFRNT AI Assistant")
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
+
+def _warmup_worker():
+    """Preload the LLM + embedder so the first user query skips the model-load
+    stall. Runs in a daemon thread at every API start — including container
+    restarts after a host reboot, which bypass dffrnt_ctrl_panel.sh — and
+    retries while the stack boots (on a first online deploy the models may
+    still be pulling). Gives up quietly after ~10 minutes; the app works
+    either way, the first query just pays the load."""
+    t0 = time.perf_counter()
+    for attempt in range(1, 21):
+        try:
+            ollama.warmup()
+            audit.write(
+                "WARMUP",
+                {"attempts": attempt, "ms": round((time.perf_counter() - t0) * 1000, 2)},
+            )
+            return
+        except Exception:
+            time.sleep(30)
+    audit.write("WARMUP", {"attempts": 20, "failed": True})
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    threading.Thread(target=_warmup_worker, name="ollama-warmup", daemon=True).start()
+    yield
+
+
+# No CORS middleware: the UI is served same-origin from this app, and the API
+# is not meant to be called from other origins.
+app = FastAPI(title="DFFRNT AI Assistant", lifespan=lifespan)
 
 app.mount("/ui", StaticFiles(directory=str(UI_DIR)), name="ui")
 
@@ -322,7 +351,7 @@ def main():
 
     print(
         f"Starting DFFRNT AI Assistant on {settings.api_host}:{settings.api_port} "
-        f"(env={settings.environment}, model={settings.llm_model})"
+        f"(gpu={settings.gpu}, model={settings.llm_model})"
     )
     uvicorn.run(app, host=settings.api_host, port=settings.api_port)
 

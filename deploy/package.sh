@@ -54,16 +54,23 @@ STAGE="$OUT/.stage/dffrnt"
 
 echo ">> Packaging '$NAME' ($MODE)"
 
-# ---- model names the target will need (from the bundled config) -------------
-read -r LLM_MODEL EMBED_MODEL < <(python3 - "$ROOT/config.toml.example" <<'PY'
+# ---- the bundled config: the LIVE config.toml, frozen at package time --------
+# What you tuned is exactly what ships (models, gpu flag, prompt, retrieval
+# settings). The example file is only a fallback for a bare checkout.
+CONFIG="$ROOT/config.toml"
+if [ ! -f "$CONFIG" ]; then
+  echo "!! No config.toml at the repo root — bundling config.toml.example defaults instead" >&2
+  CONFIG="$ROOT/config.toml.example"
+fi
+read -r LLM_MODEL EMBED_MODEL GPU_FLAG < <(python3 - "$CONFIG" <<'PY'
 import sys, tomllib
 with open(sys.argv[1], "rb") as f: c = tomllib.load(f)
-print(c.get("llm_model", ""), c.get("embed_model", ""))
+print(c.get("llm_model", ""), c.get("embed_model", ""), str(c.get("gpu", False)).lower())
 PY
 )
 MODELS="$(echo "$LLM_MODEL $EMBED_MODEL" | xargs)"
-[ -n "$MODELS" ] || { echo "!! Could not read models from config.toml.example" >&2; exit 1; }
-echo ">> Models for target: $MODELS"
+[ -n "$MODELS" ] || { echo "!! Could not read models from $(basename "$CONFIG")" >&2; exit 1; }
+echo ">> Baking $(basename "$CONFIG") into the bundle: models=[$MODELS] gpu=$GPU_FLAG"
 
 # ---- fresh staging tree ----------------------------------------------------
 rm -rf "$OUT"
@@ -76,12 +83,15 @@ echo ">> [2/3] Saving images"
 # The app image is custom (not on a public registry), so it ships in every build.
 docker save "$APP_IMAGE" -o "$STAGE/images/app.tar"
 if [ "$MODE" = offline ]; then
-  for image in qdrant/qdrant ollama/ollama; do
+  # The pinned base images, read from the compose file so the bundle always
+  # carries exactly the versions the stack will run (single source of truth).
+  while read -r image; do
+    [ -n "$image" ] && [ "$image" != "$APP_IMAGE" ] || continue
     docker pull "$image"
     docker save "$image" -o "$STAGE/images/$(echo "$image" | tr '/:' '__').tar"
-  done
+  done < <(awk '/^[[:space:]]*image:/ {print $2}' "$ROOT/deploy/docker-compose.yml")
 else
-  echo "   (online — Qdrant/Ollama base images pulled at deploy time)"
+  echo "   (online — pinned Qdrant/Ollama base images pulled at deploy time)"
 fi
 
 echo ">> [3/3] Bundling models + runtime files"
@@ -95,7 +105,7 @@ fi
 
 cp "$ROOT/deploy/docker-compose.yml" "$ROOT/deploy/dffrnt_ctrl_panel.sh" "$STAGE/"
 chmod +x "$STAGE/dffrnt_ctrl_panel.sh"
-cp "$ROOT/config.toml.example" "$STAGE/config.toml"
+cp "$CONFIG" "$STAGE/config.toml"
 cat > "$STAGE/bundle.conf" <<EOF
 TARGET_SYSTEM=$MODE
 MODELS="$MODELS"

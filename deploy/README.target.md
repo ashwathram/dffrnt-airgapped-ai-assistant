@@ -52,12 +52,26 @@ The UI is at <http://localhost:8000>.
 
 Edit `config.toml` in the install directory, then `./dffrnt_ctrl_panel.sh restart`. It is the
 single source of truth for the LLM/embed models, prompt, and retrieval settings,
-and it drives the host ports and GPU acceleration (set `environment = "local-cuda"`
-or `gpu = true` for NVIDIA GPUs — requires the NVIDIA Container Toolkit on the
-host). The API container always serves on port 8000 internally.
+and it drives the host ports and GPU acceleration (`gpu = true` — requires the
+NVIDIA driver + Container Toolkit on the host; `install-prerequisites.sh` sets
+both up on a fresh Ubuntu box, and the control panel refuses to start GPU mode
+without them). The API container always serves on port 8000 internally; editing
+`api_port` moves only the host-side port.
 
 Switching `llm_model`/`embed_model` and restarting pulls the new model (online
 builds) and removes the previously configured model from the cache, so disk
 usage doesn't grow with every switch. An OFFLINE bundle must have already
 vendored the new model at package time (`deploy/package.sh`) — offline installs
 have no internet to pull one on demand.
+
+On every start the API pre-loads the LLM and embedder into memory in the
+background (they then stay resident), so the first query answers at full speed
+once warmup finishes — on a fresh online install the very first warmup waits for
+the model pull and can take a few minutes.
+
+## Security
+
+The API and UI have **no authentication**: anyone who can reach the port can
+query, upload, and delete documents. Expose it only to trusted networks — on
+AWS, restrict the security group for port 8000 to your VPN/office CIDR (or put
+an authenticating reverse proxy in front). Never open it to 0.0.0.0/0.

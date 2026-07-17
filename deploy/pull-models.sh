@@ -22,7 +22,7 @@ cfg() {
   [ -n "$v" ] && printf '%s' "$v" || printf '%s' "$2"
 }
 
-LLM_MODEL="$(cfg llm_model qwen3:4b)"
+LLM_MODEL="$(cfg llm_model qwen3:14b)"
 EMBED_MODEL="$(cfg embed_model bge-m3)"
 
 echo ">> Pulling models from $(basename "$CONFIG"): $LLM_MODEL, $EMBED_MODEL"

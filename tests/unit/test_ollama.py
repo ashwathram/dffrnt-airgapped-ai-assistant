@@ -58,3 +58,55 @@ def test_embeddings_carry_no_options_by_default():
     client._post = fake_post
     client.embed_query("hi")
     assert "options" not in seen[0]                # Ollama places the embedder itself
+
+
+def test_generate_forwards_think_flag():
+    seen = []
+    client = OllamaClient("http://x", "m", "embed")
+
+    def fake_post(path, payload):
+        seen.append(payload)
+        return {"response": "ok"}
+
+    client._post = fake_post
+    assert client.generate("p", think=False) == "ok"
+    assert seen[0]["think"] is False
+    assert client.generate("p") == "ok"
+    assert "think" not in seen[1]                  # None sends nothing
+
+
+def test_generate_retries_without_think_on_400():
+    # A model without thinking support rejects the field; the call must still
+    # succeed by retrying without it (summaries would otherwise fall back to a
+    # raw excerpt).
+    seen = []
+    client = OllamaClient("http://x", "m", "embed")
+
+    def fake_post(path, payload):
+        seen.append(payload)
+        if "think" in payload:
+            raise urllib.error.HTTPError("u", 400, "no thinking support", {}, None)
+        return {"response": "ok"}
+
+    client._post = fake_post
+    assert client.generate("p", think=False) == "ok"
+    assert "think" in seen[0] and "think" not in seen[1]
+
+
+def test_warmup_loads_llm_and_embedder():
+    calls = []
+    client = OllamaClient("http://x", "llm-model", "embed-model")
+
+    def fake_post(path, payload):
+        calls.append((path, payload))
+        return {"embeddings": [[0.0]]}
+
+    client._post = fake_post
+    client.warmup()
+
+    assert [p for p, _ in calls] == ["/api/generate", "/api/embed"]
+    generate_payload = calls[0][1]
+    assert generate_payload["model"] == "llm-model"
+    assert "prompt" not in generate_payload        # load-only: nothing generated
+    assert generate_payload["keep_alive"] == -1    # stays resident once loaded
+    assert generate_payload["options"] == client.gen_options  # same runner config

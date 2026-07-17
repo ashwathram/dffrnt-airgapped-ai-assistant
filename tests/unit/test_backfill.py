@@ -32,7 +32,7 @@ class FakeStore:
 
 
 class FakeLLMEmbedder:
-    def generate(self, prompt):
+    def generate(self, prompt, think=None):
         return "A concise summary."
 
     def embed_documents(self, texts):

@@ -4,7 +4,7 @@ standard library (``urllib``) so the air-gapped bundle ships no ML client."""
 import json
 import urllib.error
 import urllib.request
-from typing import Iterator, List, Tuple
+from typing import Iterator, List, Optional, Tuple
 
 
 class OllamaClient:
@@ -102,17 +102,47 @@ class OllamaClient:
         """Embed a search query, with the query task prefix applied."""
         return self.embed_texts([self.query_prefix + text])[0]
 
-    # -- Generation --------------------------------------------------------
-    def generate(self, prompt: str) -> str:
-        out = self._post(
+    # -- Warmup ------------------------------------------------------------
+    def warmup(self) -> None:
+        """Load both models into memory so the first real request skips the
+        model-load stall (with OLLAMA_KEEP_ALIVE=-1 they then stay resident).
+        A prompt-less generate makes Ollama load the LLM without generating
+        anything; the same gen options are sent so the runner is created with
+        the num_ctx later requests use (a mismatch would trigger a reload).
+        The embed goes through the normal path so a CPU-pinned embedder
+        (embed_on_cpu) is loaded exactly where later requests expect it."""
+        self._post(
             "/api/generate",
             {
                 "model": self.llm_model,
-                "prompt": prompt,
                 "stream": False,
                 "options": self.gen_options,
+                "keep_alive": -1,
             },
         )
+        self.embed_texts(["warmup"])
+
+    # -- Generation --------------------------------------------------------
+    def generate(self, prompt: str, think: Optional[bool] = None) -> str:
+        """One-shot generation. ``think`` toggles a reasoning model's thinking
+        pass (None sends nothing, keeping the model's default). A model
+        without thinking support rejects the field with a 400, so retry
+        without it rather than failing the caller."""
+        payload = {
+            "model": self.llm_model,
+            "prompt": prompt,
+            "stream": False,
+            "options": self.gen_options,
+        }
+        if think is not None:
+            payload["think"] = think
+        try:
+            out = self._post("/api/generate", payload)
+        except urllib.error.HTTPError as exc:
+            if think is None or exc.code != 400:
+                raise
+            retry = {k: v for k, v in payload.items() if k != "think"}
+            out = self._post("/api/generate", retry)
         return out.get("response", "")
 
     def generate_stream(self, prompt: str) -> Iterator[Tuple[str, str]]:

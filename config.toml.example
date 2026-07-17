@@ -2,22 +2,25 @@
 #
 # Copy to `config.toml` and edit, or set any value as an UPPER_SNAKE_CASE env var
 # (e.g. API_PORT=9000). Precedence: env > config.toml > built-in defaults.
+#
+# This file is also the single source of truth at PACKAGE time: deploy/package.sh
+# freezes the repo's config.toml into the bundle, so the state of this file when
+# you package is exactly what a deployment runs (and which models it carries).
 
-# Deployment target. Only affects GPU acceleration: local-cuda enables Ollama
-# CUDA via deploy/start.sh. The LLM model is set by llm_model below, not by this.
-environment = "aws"
-
-# Ollama GPU acceleration (auto-enabled for local-cuda; set true to force it
-# for any environment).
+# Ollama GPU acceleration. Requires the NVIDIA driver + Container Toolkit on the
+# host (deploy/install-prerequisites.sh installs both); dffrnt_ctrl_panel.sh
+# refuses to start in GPU mode when the toolkit is missing. Defaults to false so
+# a fresh checkout runs anywhere; set true on any NVIDIA-equipped machine.
 gpu = false
 
 # --- Ollama (LLM + embeddings) ---
 ollama_url = "http://localhost:11434"
 
-# LLM served by Ollama (used everywhere).
-llm_model = "qwen3:4b" # Lite Model
-#llm_model = "qwen3:14b" # Mid-level Model
-#llm_model = "qwen3:30b-a3b" # High-capacity MoE Model
+# LLM served by Ollama (used everywhere). VRAM figures assume the q8_0 KV cache
+# + flash attention set in deploy/docker-compose.yml and a 16k context.
+#llm_model = "qwen3:4b" # Lite Model (~2.6GB; CPU-viable)
+llm_model = "qwen3:14b" # Mid-level Model (~9.3GB + ~1.4GB KV; fits a 16GB GPU with bge-m3)
+#llm_model = "qwen3:30b-a3b" # High-capacity MoE Model (~19GB; needs a 24GB GPU)
 
 embed_model = "bge-m3"
 vector_size = 1024                 # MUST match the embed_model's output dimension
@@ -25,8 +28,11 @@ llm_temperature = 0.1
 llm_timeout = 600                  # seconds
 # Generation options. num_ctx matters most: Ollama defaults to 4096, which
 # silently truncates RAG prompts once retrieved docs + history grow (measured
-# no-history prompts already run ~1.5k tokens). top_p/top_k are qwen3's
-# recommended sampling knobs.
+# no-history prompts already run ~1.5k tokens). 16384 covers the worst-case
+# aggregate retrieval (global top-k + summary-routed + per-document grouped
+# chunks + history) PLUS num_predict below without context shifting; the KV
+# cost at 16k is ~1.4GB for qwen3:14b with the q8_0 cache. top_p/top_k are
+# qwen3's recommended sampling knobs.
 # repeat_penalty is qwen3's recommended thinking-mode value (1.1); at 1.0 the
 # reasoning model can recycle the same reasoning block verbatim and never
 # converge on ambiguous tasks (measured: an ambiguous "list candidates + sum
@@ -38,7 +44,7 @@ llm_timeout = 600                  # seconds
 # too tight and guillotined the thinking just before the final answer, emitting
 # nothing. Keep well under num_ctx minus the prompt so generation isn't
 # front-truncated.
-llm_num_ctx = 8192
+llm_num_ctx = 16384
 llm_top_p = 0.95
 llm_top_k = 20
 llm_repeat_penalty = 1.1

@@ -6,7 +6,7 @@
 # The app ships as a Docker image, so the host needs only: curl, tar, Docker
 # Engine + Compose v2, and — for GPU inference — the NVIDIA driver and the NVIDIA
 # Container Toolkit. This installs exactly what install.sh checks for, plus the
-# GPU stack so `gpu = true` in config.toml (or environment = "local-cuda") works.
+# GPU stack so `gpu = true` in config.toml works.
 #
 # Run once on the target, then deploy with ./install.sh (see deploy/README.md).
 #

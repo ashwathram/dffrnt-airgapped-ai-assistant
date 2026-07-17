@@ -49,8 +49,7 @@ cfg() {
 API_PORT="$(cfg api_port 8000)"
 OLLAMA_URL="$(cfg ollama_url http://localhost:11434)"; OLLAMA_PORT="${OLLAMA_URL##*:}"
 QDRANT_URL="$(cfg qdrant_url http://localhost:6333)";  QDRANT_PORT="${QDRANT_URL##*:}"
-ENVIRONMENT="$(cfg environment aws)"
-GPU="0"; { [ "$(cfg gpu false)" = "true" ] || [ "$ENVIRONMENT" = "local-cuda" ]; } && GPU="1"
+GPU="0"; [ "$(cfg gpu false)" = "true" ] && GPU="1"
 
 # Models the runtime needs: those frozen into the bundle at package time, PLUS
 # whatever the live config.toml points at now. Without the latter, editing
@@ -67,6 +66,15 @@ COMPOSE=(docker compose -f "$HERE/docker-compose.yml" --profile prod)
 compose_up() {
   mkdir -p "$HERE/data" "$HERE/logs"
   if [ "$GPU" = "1" ]; then
+    # `gpus: all` needs Docker's NVIDIA runtime; fail early with a clear
+    # message instead of a cryptic compose error. install-prerequisites.sh
+    # sets the driver + NVIDIA Container Toolkit up on a fresh box.
+    if ! docker info 2>/dev/null | grep -qi nvidia; then
+      echo "!! gpu = true in config.toml, but Docker has no NVIDIA runtime." >&2
+      echo "   Install the NVIDIA driver + Container Toolkit (deploy/install-prerequisites.sh)," >&2
+      echo "   or set gpu = false in config.toml to run on CPU." >&2
+      exit 1
+    fi
     echo ">> GPU mode — api:$API_PORT ollama:$OLLAMA_PORT qdrant:$QDRANT_PORT"
     printf 'services:\n  ollama:\n    gpus: all\n' | "${COMPOSE[@]}" -f - up -d
   else
@@ -86,11 +94,15 @@ wait_for() {  # wait_for <label> <url> <max_seconds>
 }
 
 ensure_models() {
-  local cached
-  cached="$(docker exec ollama ollama list 2>/dev/null || true)"
+  local cached m want
+  # First column of `ollama list` = exact model:tag names.
+  cached="$(docker exec ollama ollama list 2>/dev/null | tail -n +2 | awk '{print $1}')"
   for m in $MODELS; do
-    # Match the tag literally; Ollama lists an untagged name as "<name>:latest".
-    if printf '%s\n' "$cached" | grep -Fq "$m"; then
+    # Exact whole-name match — a substring match would let a cached
+    # "qwen3:4b-instruct" falsely satisfy "qwen3:4b". Ollama lists an
+    # untagged name as "<name>:latest".
+    case "$m" in *:*) want="$m" ;; *) want="$m:latest" ;; esac
+    if printf '%s\n' "$cached" | grep -Fxq "$want"; then
       continue
     fi
     if [ "$TARGET_SYSTEM" = offline ]; then

@@ -1,14 +1,6 @@
 from dffrnt_assistant.config import Settings, load_settings
 
 
-def test_llm_model_is_independent_of_environment():
-    # No per-environment model presets: the model is the same regardless of target.
-    default = Settings().llm_model
-    assert Settings(environment="macbook").llm_model == default
-    assert Settings(environment="aws").llm_model == default
-    assert Settings(environment="local-cuda").llm_model == default
-
-
 def test_llm_model_from_toml(monkeypatch, tmp_path):
     cfg = tmp_path / "config.toml"
     cfg.write_text('llm_model = "qwen3:4b"\n')
@@ -44,10 +36,16 @@ def test_precedence_env_beats_toml(monkeypatch, tmp_path):
     assert load_settings().api_port == 7001
 
 
-def test_local_cuda_enables_gpu():
-    assert Settings(environment="local-cuda").gpu is True
+def test_gpu_is_a_plain_flag(monkeypatch, tmp_path):
+    # No environment presets: GPU comes only from the `gpu` flag (default off).
+    assert Settings().gpu is False
 
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("gpu = true\n")
+    monkeypatch.setenv("DFFRNT_CONFIG", str(cfg))
+    monkeypatch.delenv("GPU", raising=False)
+    assert load_settings().gpu is True
 
-def test_gpu_off_by_default_for_other_environments():
-    assert Settings(environment="aws").gpu is False
-    assert Settings(environment="macbook").gpu is False
+    # Env still beats the file, with bool coercion.
+    monkeypatch.setenv("GPU", "false")
+    assert load_settings().gpu is False

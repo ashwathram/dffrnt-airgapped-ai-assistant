@@ -5,9 +5,9 @@
 # containerized stack, including the API, is run by dffrnt_ctrl_panel.sh; this script is
 # dev-only and is not shipped in deployment bundles.
 #
-# GPU is enabled when config.toml's `gpu` flag is true (e.g. environment =
-# "local-cuda"); the device reservation is injected here, so there is a single
-# compose file with no separate GPU variant.
+# GPU is enabled when config.toml's `gpu` flag is true; the device reservation
+# is injected here, so there is a single compose file with no separate GPU
+# variant.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -11,34 +11,33 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Optional
 
-# Deployment targets that run Ollama with GPU acceleration by default. The
-# environment never selects the LLM model — that is always `llm_model`.
-GPU_ENVIRONMENTS = {"local-cuda"}
-
 
 @dataclass
 class Settings:
     """All tunables: deployment, models, generation, retrieval, chunking, paths."""
 
     # -- Deployment --------------------------------------------------------
-    environment: str = "aws"
-    gpu: bool = False                  # enable Ollama GPU acceleration in compose
+    # Enable Ollama GPU acceleration in compose (needs the NVIDIA Container
+    # Toolkit on the host). A plain flag — there are no environment presets.
+    gpu: bool = False
 
     # -- Ollama (LLM + embeddings) ----------------------------------------
     ollama_url: str = "http://localhost:11434"
-    llm_model: str = "qwen3:4b"
+    llm_model: str = "qwen3:14b"
     embed_model: str = "bge-m3"
     vector_size: int = 1024            # must match `embed_model` output dim
     llm_temperature: float = 0.1
     llm_timeout: int = 600             # seconds; generation can be slow
     # num_ctx matters: Ollama defaults to 4096, which silently truncates RAG
-    # prompts (retrieved docs + history). The rest are qwen3's recommended
-    # sampling defaults; num_predict -1 = no output cap.
-    llm_num_ctx: int = 8192
+    # prompts (retrieved docs + history); 16384 also leaves room for
+    # num_predict. The rest are qwen3's recommended sampling values for
+    # thinking mode (repeat_penalty 1.1 stops reasoning loops); num_predict
+    # bounds runaway generation. Tuned in config.toml — keep in sync.
+    llm_num_ctx: int = 16384
     llm_top_p: float = 0.95
     llm_top_k: int = 20
-    llm_repeat_penalty: float = 1.0
-    llm_num_predict: int = -1
+    llm_repeat_penalty: float = 1.1
+    llm_num_predict: int = 5000
     # Embedding task prefixes ("search_query: " etc.) — bge-m3 uses none.
     # Changing the embed model or prefixes requires re-uploading documents.
     embed_query_prefix: str = ""
@@ -59,7 +58,7 @@ class Settings:
     top_k: int = 8                     # candidates fetched per query
     # Relative cut: drop hits scoring more than this below the best hit, so
     # weak chunks never reach the prompt. Tuned with tests/eval. 0 disables.
-    score_margin: float = 0.08
+    score_margin: float = 0.20
     # Aggregate (multi-document) queries additionally fetch the best chunk(s)
     # per document via grouped search, merged additively into the top-k pool,
     # so roll-ups ("rates of all candidates") cover every relevant document.
@@ -84,10 +83,6 @@ class Settings:
     api_port: int = 8000
     data_dir: str = "data"             # where uploaded files are stored
     audit_log_path: str = "logs/audit.jsonl"
-
-    def __post_init__(self) -> None:
-        if self.environment in GPU_ENVIRONMENTS:
-            self.gpu = True
 
 
 def _coerce(example, value):
