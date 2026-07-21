@@ -28,6 +28,18 @@
             "cwd": "${workspaceFolder}"
         },
         {
+            // Tkinter control-panel GUI (installer/manager): start/stop/restart,
+            // status, logs, reingest. Manages the stack itself, so — unlike the
+            // dev/eval configs — it has NO preLaunchTask that brings anything up.
+            "name": "DFFRNT Control Panel (installer GUI)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "installer",
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONPATH": "${workspaceFolder}" },
+            "console": "integratedTerminal"
+        },
+        {
             // Fast offline tests: tests/unit + the offline chunk-health checks.
             "name": "Tests: unit",
             "type": "debugpy",
