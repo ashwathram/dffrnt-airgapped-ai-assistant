@@ -1,6 +1,12 @@
 """Main window: a sidebar + content shell echoing the web UI's layout
 (dffrnt_assistant/ui/index.html's .sidebar/.brand/.nav-btn/.main/.topbar),
-switching between the Dashboard and Logs views.
+switching between the Install, Manage, and Logs views.
+
+Install (first-run deployment, ports install.sh) and Manage (day-to-day
+lifecycle, ports dffrnt_ctrl_panel.sh) are separate tabs because they are
+separate stages with separate shell counterparts. When the Install tab
+deploys into a new app root, _on_installed re-points the Manage and Logs
+tabs at it in place — no restart needed.
 """
 
 from __future__ import annotations
@@ -14,18 +20,30 @@ from .backends import Backend
 from .backends.docker_backend import DockerComposeBackend
 from .backends.portable_backend import PortableBackend
 from .config import AppConfig, find_app_root, load_config
+from .installers import Installer
+from .installers.docker_installer import DockerInstaller, is_installed
+from .installers.portable_installer import PortableInstaller
 from .logging_setup import configure_logging
 from .platform_detect import PlatformInfo, Pathway, detect
 from .views.dashboard import DashboardView
+from .views.install import InstallView
 from .views.logs import LogsView
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+
+_NAV_TITLES = {"install": "Install", "manage": "Manage", "logs": "Logs"}
 
 
 def _make_backend(app_root: Path, config: AppConfig, platform_info: PlatformInfo) -> Backend:
     if platform_info.pathway is Pathway.PORTABLE:
         return PortableBackend(app_root, config)
     return DockerComposeBackend(app_root, config)
+
+
+def _make_installer(platform_info: PlatformInfo) -> Installer:
+    if platform_info.pathway is Pathway.PORTABLE:
+        return PortableInstaller()
+    return DockerInstaller()
 
 
 class InstallerApp(tk.Tk):
@@ -53,14 +71,18 @@ class InstallerApp(tk.Tk):
             self.config.llm_model, self.config.embed_model,
         )
         self.backend = _make_backend(self.app_root, self.config, self.platform_info)
-        self.logger.info("backend: %s", type(self.backend).__name__)
+        self.installer = _make_installer(self.platform_info)
+        self.logger.info("backend: %s, installer: %s",
+                         type(self.backend).__name__, type(self.installer).__name__)
 
         self._views: dict[str, tk.Widget] = {}
         self._nav_buttons: dict[str, ttk.Button] = {}
         self._active = None
 
         self._build_shell(fonts)
-        self._show("dashboard")
+        # Land on Manage when a stack is already installed (the common case
+        # for a control panel); land on Install on a bare machine.
+        self._show("manage" if is_installed(self.app_root) else "install")
 
     def _set_icon(self) -> None:
         icon_path = ASSETS_DIR / "icon.png"
@@ -87,7 +109,8 @@ class InstallerApp(tk.Tk):
 
         nav = ttk.Frame(sidebar, style="Sidebar.TFrame", padding=(8, 16))
         nav.pack(fill="x")
-        self._add_nav(nav, "dashboard", "Dashboard")
+        self._add_nav(nav, "install", "Install")
+        self._add_nav(nav, "manage", "Manage")
         self._add_nav(nav, "logs", "Logs")
 
         ttk.Frame(sidebar, style="Sidebar.TFrame").pack(fill="both", expand=True)  # spacer
@@ -104,7 +127,7 @@ class InstallerApp(tk.Tk):
 
         topbar = ttk.Frame(main, style="Topbar.TFrame", padding=(20, 14))
         topbar.grid(row=0, column=0, sticky="ew")
-        self._topbar_title = ttk.Label(topbar, text="Dashboard", style="TopbarTitle.TLabel")
+        self._topbar_title = ttk.Label(topbar, text="", style="TopbarTitle.TLabel")
         self._topbar_title.pack(side="left")
 
         self._content = ttk.Frame(main, style="App.TFrame")
@@ -112,7 +135,10 @@ class InstallerApp(tk.Tk):
         self._content.columnconfigure(0, weight=1)
         self._content.rowconfigure(0, weight=1)
 
-        self._views["dashboard"] = DashboardView(self._content, self.platform_info, self.config, self.backend)
+        self._views["install"] = InstallView(
+            self._content, self.platform_info, self.installer, self.app_root,
+            on_installed=self._on_installed)
+        self._views["manage"] = DashboardView(self._content, self.platform_info, self.config, self.backend)
         self._views["logs"] = LogsView(self._content, self.backend)
         for view in self._views.values():
             view.grid(row=0, column=0, sticky="nsew")
@@ -125,13 +151,32 @@ class InstallerApp(tk.Tk):
     def _show(self, key: str) -> None:
         if self._active == key:
             return
-        if self._active == "logs":
-            self._views["logs"].on_hide()
+        # Let a view release resources when it's hidden (logs stops following,
+        # scroll panes release the mouse wheel) and re-acquire them when shown.
+        if self._active is not None:
+            prev = self._views[self._active]
+            if hasattr(prev, "on_hide"):
+                prev.on_hide()
         for k, btn in self._nav_buttons.items():
             btn.configure(style="NavActive.TButton" if k == key else "Nav.TButton")
-        self._views[key].tkraise()
-        self._topbar_title.configure(text=key.capitalize())
+        view = self._views[key]
+        view.tkraise()
+        if hasattr(view, "on_show"):
+            view.on_show()
+        self._topbar_title.configure(text=_NAV_TITLES[key])
         self._active = key
+
+    # ---- post-install re-point --------------------------------------------
+    def _on_installed(self, app_root: Path) -> None:
+        """InstallView succeeded: point the whole app (config, backend,
+        Manage + Logs tabs) at the freshly installed root and show Manage."""
+        self.logger.info("installed: re-pointing app at %s", app_root)
+        self.app_root = app_root
+        self.config = load_config(app_root)
+        self.backend = _make_backend(app_root, self.config, self.platform_info)
+        self._views["manage"].set_backend(self.backend, self.config)
+        self._views["logs"].set_backend(self.backend)
+        self._show("manage")
 
 
 def main() -> None:

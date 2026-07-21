@@ -1,11 +1,14 @@
 """Reads config.toml the same way dffrnt_ctrl_panel.sh's `cfg()` shell
 function does: env var wins, then the file, then a hardcoded default —
 never an error for a missing key. See deploy/dffrnt_ctrl_panel.sh.
+Also reads bundle.conf (the packager's manifest), shared by the management
+backend and the installer.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -107,3 +110,23 @@ def load_config(app_root: Path) -> AppConfig:
         embed_model=str(get("embed_model")),
         audit_log_path=str(get("audit_log_path")),
     )
+
+
+def read_bundle_conf(app_root: Path) -> tuple[str, list[str]]:
+    """Best-effort read of bundle.conf's TARGET_SYSTEM/MODELS — a bash
+    snippet in real deployments (ctrl_panel.sh sources it directly). This
+    is not a shell parser: it only recognizes the simple
+    `KEY="value"` / `KEY=value` lines package.sh actually emits.
+    """
+    bundle_conf = app_root / "bundle.conf"
+    target_system, models = "online", []
+    if not bundle_conf.is_file():
+        return target_system, models
+    text = bundle_conf.read_text()
+    m = re.search(r'^TARGET_SYSTEM=["\']?([^"\'\n]+)', text, re.MULTILINE)
+    if m:
+        target_system = m.group(1).strip().lower()
+    m = re.search(r'^MODELS=["\']?([^"\'\n]*)', text, re.MULTILINE)
+    if m:
+        models = [x for x in m.group(1).split() if x]
+    return target_system, models

@@ -21,10 +21,18 @@ OutputCallback = Callable[[str], None]
 
 
 class CommandError(RuntimeError):
-    def __init__(self, cmd: list[str], returncode: int):
+    def __init__(self, cmd: list[str], returncode: int, stderr: str = ""):
         self.cmd = cmd
         self.returncode = returncode
-        super().__init__(f"command failed ({returncode}): {' '.join(cmd)}")
+        self.stderr = stderr.strip()
+        msg = f"command failed ({returncode}): {' '.join(cmd)}"
+        # The exit code alone is useless to an operator ("docker info returned
+        # 1" — why?). Docker et al. put the actual reason on stderr ("Cannot
+        # connect to the Docker daemon ... Is the docker daemon running?"), so
+        # fold it into the message every wrapper and log line already shows.
+        if self.stderr:
+            msg += f"\n{self.stderr}"
+        super().__init__(msg)
 
 
 def run_command(
@@ -65,10 +73,17 @@ def run_command(
 
 def run_capture(cmd: list[str], *, cwd=None, env=None, timeout: float | None = 15) -> str:
     """Run `cmd`, wait for it, and return stripped stdout. For quick,
-    non-streaming lookups (prereq checks, `docker inspect`, ...)."""
+    non-streaming lookups (prereq checks, `docker inspect`, ...).
+
+    On a non-zero exit, raises CommandError carrying the command's stderr —
+    unlike subprocess's own check=True, whose CalledProcessError message
+    drops stderr and leaves only an opaque exit code.
+    """
     result = subprocess.run(
-        cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, check=True,
+        cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout,
     )
+    if result.returncode != 0:
+        raise CommandError(cmd, result.returncode, result.stderr)
     return result.stdout.strip()
 
 

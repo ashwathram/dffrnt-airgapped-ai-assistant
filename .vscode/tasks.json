@@ -82,6 +82,62 @@
                 "shell": { "executable": "bash", "args": ["-c"] }
             },
             "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            // Ship the GUI installer (installer/, pure-stdlib source) into dist/
+            // NEXT TO the bundle tarball — it can't live inside the bundle it
+            // unpacks, so it travels alongside like install.sh does. MUST run
+            // AFTER package.sh, which starts by wiping dist/ (rm -rf "$OUT").
+            // On the target: python -m installer  (needs Python 3.14+ with Tk;
+            // install.sh remains the Docker-only fallback).
+            "label": "Package: ship GUI installer into dist",
+            "type": "shell",
+            "command": "rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && echo '>> GUI installer shipped: dist/installer (run: python -m installer)'",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            "label": "Package: build bundle (AWS)",
+            "type": "shell",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=AWS",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            "label": "Package: build bundle (OFFLINE)",
+            "type": "shell",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            // Full AWS package: bundle first (package.sh wipes dist/), then the
+            // GUI installer alongside it.
+            "label": "Package: AWS deployment (bundle + GUI installer)",
+            "dependsOn": [
+                "Package: build bundle (AWS)",
+                "Package: ship GUI installer into dist"
+            ],
+            "dependsOrder": "sequence",
+            "group": "build"
+        },
+        {
+            "label": "Package: Offline deployment (bundle + GUI installer)",
+            "dependsOn": [
+                "Package: build bundle (OFFLINE)",
+                "Package: ship GUI installer into dist"
+            ],
+            "dependsOrder": "sequence",
+            "group": "build"
         }
     ]
 }

@@ -84,18 +84,21 @@
             "console": "integratedTerminal"
         },
         {
-            // Package a deployment bundle into dist/ (see deploy/README.md).
+            // Package a deployment bundle into dist/ (see deploy/README.md), then
+            // ship the GUI installer (installer/, pure-stdlib source) into dist/
+            // next to the tarball — it can't live inside the bundle it unpacks.
+            // Copy MUST follow package.sh, which starts by wiping dist/.
             "name": "Package: AWS deployment",
             "type": "node-terminal",
             "request": "launch",
-            "command": "bash deploy/package.sh TARGET_SYSTEM=AWS",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=AWS && rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && echo '>> GUI installer shipped: dist/installer'",
             "cwd": "${workspaceFolder}"
         },
         {
             "name": "Package: Offline deployment",
             "type": "node-terminal",
             "request": "launch",
-            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE && rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && echo '>> GUI installer shipped: dist/installer'",
             "cwd": "${workspaceFolder}"
         }
     ]

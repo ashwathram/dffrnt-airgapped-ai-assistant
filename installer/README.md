@@ -1,17 +1,34 @@
 # DFFRNT Control Panel (desktop GUI)
 
-A Tkinter desktop app that replaces the day-to-day parts of
-[`deploy/dffrnt_ctrl_panel.sh`](../deploy/dffrnt_ctrl_panel.sh) — start,
-stop, restart, status, logs, reingest — with a GUI that runs unchanged on
-Linux, Windows, and (once phase 2 lands) macOS. Tkinter ships with Python
-itself, so this adds no dependency and freezes cleanly for air-gapped
-delivery.
+A Tkinter desktop app with three tabs:
+
+- **Install** — first-run deployment from a `dffrnt-*.tar.gz` bundle,
+  porting [`deploy/install.sh`](../deploy/install.sh): pick bundle + dest,
+  prereq gate, unpack (stdlib `tarfile`, so no `tar` binary needed —
+  works on Windows too), `docker load`, first start.
+- **Manage** — day-to-day lifecycle, porting
+  [`deploy/dffrnt_ctrl_panel.sh`](../deploy/dffrnt_ctrl_panel.sh): start,
+  stop, restart, status, reingest.
+- **Logs** — follow container logs per service.
+
+Runs unchanged on Linux, Windows, and (once phase 2 lands) macOS. Tkinter
+ships with Python itself, so this adds no dependency and freezes cleanly
+for air-gapped delivery.
 
 **Status: preliminary.** The container pathway (Linux/Windows) is
-implemented and exercised against a real `docker compose` stack. The
-`install-prerequisites.sh` / `install.sh` bundle-unpack flow is not — this
-app currently manages an *already-installed* stack, same scope as
-`dffrnt_ctrl_panel.sh` itself.
+implemented; management verified against a real `docker compose` stack and
+the install unpack logic against a synthetic bundle. `install-prerequisites.sh`
+(Docker/NVIDIA host provisioning) remains out of scope — the Install tab's
+prereq gate tells you what's missing but doesn't install it.
+
+**Shipping caveat for the Install tab:** a GUI that installs the bundle
+cannot itself live inside that bundle. For install-from-scratch on a target
+machine, this app must ship in `dist/` *next to* the tarball (like
+`install.sh` does) — and since targets are only guaranteed to have Docker,
+that realistically means freezing it (PyInstaller) into a self-contained
+binary. Until that's wired into `package.sh`, the Install tab is usable
+from a dev checkout (installing/updating a local deployment from a locally
+packaged `dist/`).
 
 ## Running it
 
@@ -94,22 +111,32 @@ self-contained change that shouldn't need to touch the GUI layer at all.
 
 ```
 installer/
-  app.py                  Tk root window, sidebar nav, backend selection, startup logging
+  app.py                  Tk root window, Install/Manage/Logs nav, post-install re-point
   theme.py                Palette/fonts ported from dffrnt_assistant/ui/styles/*.css
   platform_detect.py      OS/arch/GPU detection, the Pathway enum
-  config.py               config.toml + app-root resolution (mirrors cfg() in the bash script)
+  config.py               config.toml / bundle.conf / app-root resolution
   logging_setup.py        installer.log file handler + the with_logging() output-tap helper
   process.py              subprocess streaming + the BackgroundJob/LogFollower thread bridge
-  widgets.py               small styled-widget factories (buttons, status pills, console)
+  widgets.py               styled-widget factories + the ScrollableFrame container
   backends/
     __init__.py            Backend ABC + PrereqCheck/ServiceStatus/BackendError
     docker_backend.py       CONTAINER pathway — ports dffrnt_ctrl_panel.sh verb for verb
     portable_backend.py     PORTABLE pathway — documented stub, not implemented
+  installers/
+    __init__.py            Installer ABC + BundleInfo/InstallError + find_bundles()
+    docker_installer.py     CONTAINER pathway — ports install.sh stage for stage
+    portable_installer.py   PORTABLE pathway — documented stub, not implemented
   views/
-    dashboard.py            platform info, prereqs, service status, start/stop/restart/reingest
+    install.py              bundle picker, dest, prereq gate, install + streamed console
+    dashboard.py            the Manage tab: prereqs, service status, start/stop/restart/reingest
     logs.py                  service picker + follow/stop streaming logs
   assets/icon.png           window icon, generated from ui/img/dffrnt_favicon.jpg
 ```
+
+Views scroll (`widgets.ScrollableFrame`) when content exceeds the window,
+with the mouse wheel routed to whichever tab is visible. The app opens on
+Manage when an installed stack is detected, otherwise on Install; a
+successful install re-points Manage/Logs at the new app root in place.
 
 ## Design language
 
@@ -123,14 +150,15 @@ for the token source of truth.
 
 ## What isn't here yet
 
-- The macOS `PortableBackend` (see above) — all of its methods, including
-  reingest, still raise `NotImplementedError` (logged as a warning each
+- The macOS `PortableBackend` / `PortableInstaller` (see above) — all of
+  their methods still raise `NotImplementedError` (logged as a warning each
   time, so an attempt on an unsupported Mac leaves a trace).
-- The `install.sh`/`install-prerequisites.sh` first-run flow (bundle
-  unpack, Docker/driver provisioning) — this app assumes Docker and the
-  stack are already installed, same as `dffrnt_ctrl_panel.sh`.
-- Packaging as a native app (PyInstaller/py2app/etc.) for distribution
-  without a Python install on the target machine.
+- `install-prerequisites.sh`'s job (Docker Engine / NVIDIA driver + toolkit
+  provisioning) — inherently privileged, OS-specific host mutation; the
+  Install tab's prereq gate reports what's missing instead.
+- Packaging as a native app (PyInstaller/py2app/etc.) and wiring it into
+  `package.sh`'s `dist/` output — required before the Install tab can serve
+  a bare target machine (see the shipping caveat at the top).
 
 ## Manual verification done so far
 
@@ -155,8 +183,16 @@ visually verified — only exercised at the logic layer:
   lifecycle brackets as INFO, exceptions as ERROR with traceback).
 - `py_compile` + `ast.parse` on every module.
 
+- Install-tab logic without a display: bundle auto-discovery
+  (`find_bundles`), `inspect_bundle` on a valid synthetic bundle (reads
+  TARGET_SYSTEM) and on garbage (clean `InstallError`), and the
+  strip-components-1 unpack with operator-config preservation.
+
 **Before relying on this**, run it on a machine with a real display and
 click through: Start (full cold-start including model pull/prune), Stop,
-Restart, Status refresh, Logs follow/stop, and Reingest (both declining and
-confirming the prompt, and with the stack stopped to see the "not running"
-guard) — on both a `gpu = false` and `gpu = true` config.
+Restart, Status refresh, Logs follow/stop (including switching the service
+dropdown mid-follow), Reingest (both declining and confirming the prompt,
+and with the stack stopped to see the "not running" guard), scrolling each
+tab at a small window size, and a full Install from a real `package.sh`
+bundle (fresh dest + update-in-place with an edited config.toml) — on both
+a `gpu = false` and `gpu = true` config.

@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
 from pathlib import Path
 from typing import Iterable
 
 from .. import process
-from ..config import AppConfig
+from ..config import AppConfig, read_bundle_conf
 from ..logging_setup import get_logger, with_logging
 from . import Backend, BackendError, OutputCallback, PrereqCheck, ServiceStatus
 
@@ -65,7 +64,7 @@ class DockerComposeBackend(Backend):
         self.app_root = app_root
         self.config = config
         self.compose_file = app_root / "docker-compose.yml"
-        target_system, bundled_models = _read_bundle_conf(app_root)
+        target_system, bundled_models = read_bundle_conf(app_root)
         self.target_system = target_system
         self.bundled_models = bundled_models
 
@@ -323,23 +322,3 @@ class DockerComposeBackend(Backend):
             healthy = ok
             detail = "healthy" if ok else "starting"
         return ServiceStatus(label, running=running, healthy=healthy, detail=detail)
-
-
-def _read_bundle_conf(app_root: Path) -> tuple[str, list[str]]:
-    """Best-effort read of bundle.conf's TARGET_SYSTEM/MODELS — a bash
-    snippet in real deployments (ctrl_panel.sh sources it directly). This
-    is not a shell parser: it only recognizes the simple
-    `KEY="value"` / `KEY=value` lines package.sh actually emits.
-    """
-    bundle_conf = app_root / "bundle.conf"
-    target_system, models = "online", []
-    if not bundle_conf.is_file():
-        return target_system, models
-    text = bundle_conf.read_text()
-    m = re.search(r'^TARGET_SYSTEM=["\']?([^"\'\n]+)', text, re.MULTILINE)
-    if m:
-        target_system = m.group(1).strip().lower()
-    m = re.search(r'^MODELS=["\']?([^"\'\n]*)', text, re.MULTILINE)
-    if m:
-        models = [x for x in m.group(1).split() if x]
-    return target_system, models

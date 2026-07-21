@@ -29,6 +29,7 @@ class LogsView(ttk.Frame):
         self._service = tk.StringVar(value="all")
         combo = ttk.Combobox(head, textvariable=self._service, values=_SERVICES, state="readonly", width=10)
         combo.pack(side="left", padx=(0, 12))
+        combo.bind("<<ComboboxSelected>>", self._on_service_changed)
 
         self._follow_btn = widgets.primary_button(head, "Follow", self._on_follow)
         self._follow_btn.pack(side="left", padx=(0, 8))
@@ -42,6 +43,13 @@ class LogsView(ttk.Frame):
         wrap.rowconfigure(0, weight=1)
         self._console = widgets.console(wrap, height=28)
         self._console.grid(row=0, column=0, sticky="nsew")
+
+    def _on_service_changed(self, _event=None) -> None:
+        # If a stream is live, re-follow the newly selected service so the
+        # view reflects the menu without a manual Stop/Follow. If nothing is
+        # being followed, the new selection just applies on the next Follow.
+        if self._follower is not None:
+            self._on_follow()
 
     def _on_follow(self) -> None:
         self._stop_follower()
@@ -84,3 +92,10 @@ class LogsView(ttk.Frame):
         """Called by the app shell when navigating away — logs are only
         followed while this view is visible."""
         self._stop_follower()
+        self._follow_btn.state(["!disabled"])
+        self._stop_btn.state(["disabled"])
+
+    def set_backend(self, backend: Backend) -> None:
+        """Re-point at a (re)installed stack (see DashboardView.set_backend)."""
+        self._stop_follower()
+        self.backend = backend

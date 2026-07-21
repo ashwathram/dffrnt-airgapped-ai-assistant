@@ -27,7 +27,16 @@ class DashboardView(ttk.Frame):
         self._on_success = None  # callback for the current job, if any
         self._busy = False
 
+        # Everything lives inside a scroll container so a small window (or a
+        # long prereq/status list) can be scrolled instead of clipping the
+        # cards below the fold. Cards are built into self._body, not self.
         self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        self._scroll = widgets.ScrollableFrame(self, style="App.TFrame")
+        self._scroll.grid(row=0, column=0, sticky="nsew")
+        self._body = self._scroll.body
+        self._body.configure(padding=20)
+        self._body.columnconfigure(0, weight=1)
 
         self._build_platform_card()
         self._build_prereq_card()
@@ -38,9 +47,26 @@ class DashboardView(ttk.Frame):
         self.refresh_prereqs()
         self.refresh_status()
 
+    def on_show(self) -> None:
+        """Called by the app shell when this view becomes visible — routes
+        the mouse wheel to this pane's scroll container."""
+        self._scroll.enable_wheel()
+
+    def on_hide(self) -> None:
+        """Called by the app shell when navigating away."""
+        self._scroll.disable_wheel()
+
+    def set_backend(self, backend: Backend, config: AppConfig) -> None:
+        """Re-point at a (re)installed stack — called by the app shell after
+        the Install tab deploys into a new app root."""
+        self.backend = backend
+        self.config = config
+        self.refresh_prereqs()
+        self.refresh_status()
+
     # ---- layout -----------------------------------------------------------
     def _build_platform_card(self) -> None:
-        c = widgets.card(self)
+        c = widgets.card(self._body)
         c.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         c.columnconfigure(1, weight=1)
 
@@ -62,7 +88,7 @@ class DashboardView(ttk.Frame):
             ).grid(row=2, column=0, sticky="w", columnspan=2, pady=(8, 0))
 
     def _build_prereq_card(self) -> None:
-        c = widgets.card(self)
+        c = widgets.card(self._body)
         c.grid(row=1, column=0, sticky="ew", pady=(0, 12))
         c.columnconfigure(0, weight=1)
 
@@ -77,7 +103,7 @@ class DashboardView(ttk.Frame):
         self._prereq_rows.columnconfigure(1, weight=1)
 
     def _build_services_card(self) -> None:
-        c = widgets.card(self)
+        c = widgets.card(self._body)
         c.grid(row=2, column=0, sticky="ew", pady=(0, 12))
         c.columnconfigure(0, weight=1)
 
@@ -105,7 +131,7 @@ class DashboardView(ttk.Frame):
                 btn.state(["disabled"])
 
     def _build_maintenance_card(self) -> None:
-        c = widgets.card(self)
+        c = widgets.card(self._body)
         c.grid(row=3, column=0, sticky="ew", pady=(0, 12))
         c.columnconfigure(0, weight=1)
 
@@ -123,13 +149,14 @@ class DashboardView(ttk.Frame):
             self._reingest_btn.state(["disabled"])
 
     def _build_console(self) -> None:
-        ttk.Label(self, text="Output", style="MutedApp.TLabel").grid(row=4, column=0, sticky="w")
-        wrap = ttk.Frame(self, style="Card.TFrame", padding=1)
+        ttk.Label(self._body, text="Output", style="MutedApp.TLabel").grid(row=4, column=0, sticky="w")
+        wrap = ttk.Frame(self._body, style="Card.TFrame", padding=1)
         wrap.grid(row=5, column=0, sticky="nsew", pady=(4, 0))
         wrap.columnconfigure(0, weight=1)
         wrap.rowconfigure(0, weight=1)
-        self.rowconfigure(5, weight=1)
-        self._console = widgets.console(wrap)
+        # Fixed height inside the scroll region: the whole pane scrolls rather
+        # than the console growing to swallow the window.
+        self._console = widgets.console(wrap, height=16)
         self._console.grid(row=0, column=0, sticky="nsew")
 
     # ---- prerequisite / status refresh ------------------------------------
