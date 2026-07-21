@@ -8,13 +8,14 @@ Two pathways exist by design:
   `docker compose` exactly like dffrnt_ctrl_panel.sh does today.
   backends.docker_backend.DockerComposeBackend implements this pathway.
 
-  PORTABLE — macOS. Docker Desktop on macOS runs containers inside a Linux
-  VM with no Metal/GPU passthrough, so a containerized Ollama would be
-  CPU-only. The macOS bundle instead carries portable, self-contained
-  binaries — Ollama runs as a native host process for GPU acceleration,
-  alongside a bundled portable container runtime for Qdrant. This pathway
-  is NOT implemented yet; backends.portable_backend.PortableBackend is a
-  stub that documents the plan. See that module's docstring.
+  PORTABLE — macOS. Docker's Linux VM has no Metal/GPU passthrough, so a
+  containerized Ollama would be CPU-only. The macOS bundle instead carries
+  portable, self-contained binaries: Ollama runs as a native host process
+  (Metal acceleration is automatic on Apple Silicon), and Qdrant + the API
+  run as containers in a bundled portable runtime (colima + lima + the
+  static docker CLI). backends.portable_backend.PortableBackend implements
+  management; installers.portable_installer.PortableInstaller implements
+  first-run deployment.
 
 `detect()` is the single entry point the app calls at startup; everything
 else in this module is a building block for it.
@@ -41,8 +42,7 @@ class Pathway(Enum):
     PORTABLE = "portable"  # macOS — native Ollama + bundled portable runtime
 
 
-# The container pathway is the only one implemented so far.
-IMPLEMENTED_PATHWAYS = {Pathway.CONTAINER}
+IMPLEMENTED_PATHWAYS = {Pathway.CONTAINER, Pathway.PORTABLE}
 
 _OS_TO_PATHWAY = {
     OS.LINUX: Pathway.CONTAINER,
@@ -64,6 +64,12 @@ class PlatformInfo:
     @property
     def pathway_implemented(self) -> bool:
         return self.pathway in IMPLEMENTED_PATHWAYS
+
+    @property
+    def is_apple_silicon(self) -> bool:
+        """arm64 Mac — native Ollama uses Metal automatically. An Intel Mac
+        still works on the portable pathway, but inference is CPU-only."""
+        return self.os is OS.MACOS and self.arch.lower() in ("arm64", "aarch64")
 
 
 def detect_os() -> OS:

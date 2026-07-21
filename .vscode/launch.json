@@ -100,6 +100,17 @@
             "request": "launch",
             "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE && rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && echo '>> GUI installer shipped: dist/installer'",
             "cwd": "${workspaceFolder}"
+        },
+        {
+            // macOS target: OFFLINE bundle + GUI installer + the portable
+            // runtime (native Ollama with Metal, colima/lima/docker CLI for the
+            // Qdrant + API containers). The app image must be linux/arm64 for
+            // Apple Silicon — build on an arm64 machine or via buildx.
+            "name": "Package: macOS deployment",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE && rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && bash deploy/package-macos-portable.sh arm64 && echo '>> macOS dist complete: bundle + installer/ + portable/macos'",
+            "cwd": "${workspaceFolder}"
         }
     ]
 }

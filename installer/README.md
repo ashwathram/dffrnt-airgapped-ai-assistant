@@ -11,15 +11,18 @@ A Tkinter desktop app with three tabs:
   stop, restart, status, reingest.
 - **Logs** — follow container logs per service.
 
-Runs unchanged on Linux, Windows, and (once phase 2 lands) macOS. Tkinter
-ships with Python itself, so this adds no dependency and freezes cleanly
-for air-gapped delivery.
+Runs unchanged on Linux, Windows, and macOS. Tkinter ships with Python
+itself, so this adds no dependency and freezes cleanly for air-gapped
+delivery.
 
 **Status: preliminary.** The container pathway (Linux/Windows) is
 implemented; management verified against a real `docker compose` stack and
-the install unpack logic against a synthetic bundle. `install-prerequisites.sh`
-(Docker/NVIDIA host provisioning) remains out of scope — the Install tab's
-prereq gate tells you what's missing but doesn't install it.
+the install unpack logic against a synthetic bundle. The portable pathway
+(macOS: native Ollama with Metal + colima-hosted containers) is implemented
+and logic-tested on this Linux box with a faked runtime — it has NOT yet
+run on actual macOS hardware. `install-prerequisites.sh` (Docker/NVIDIA
+host provisioning on Linux) remains out of scope — the Install tab's prereq
+gate tells you what's missing but doesn't install it.
 
 **Shipping caveat for the Install tab:** a GUI that installs the bundle
 cannot itself live inside that bundle. For install-from-scratch on a target
@@ -87,25 +90,35 @@ that's already live in the GUI or already durable elsewhere. See
 ## Why two pathways
 
 ```
-Linux / Windows -> Pathway.CONTAINER -> DockerComposeBackend  (implemented)
-macOS           -> Pathway.PORTABLE  -> PortableBackend       (stub, phase 2)
+Linux / Windows -> Pathway.CONTAINER -> DockerComposeBackend / DockerInstaller
+macOS           -> Pathway.PORTABLE  -> PortableBackend / PortableInstaller
 ```
 
-Docker Desktop on macOS runs containers inside a Linux VM with no
-Metal/GPU passthrough, so a containerized Ollama on a Mac would be
-CPU-only — a non-starter for this app's LLM/embedding workload. The
-planned fix (see
-[`backends/portable_backend.py`](backends/portable_backend.py)) is to
-carry portable, self-contained binaries in the macOS bundle instead:
-Ollama as a native host process for full GPU acceleration, plus a bundled
-portable container runtime for Qdrant (which is CPU-only and doesn't need
-the native path).
+Docker's Linux VM has no Metal/GPU passthrough, so a containerized Ollama
+on a Mac would be CPU-only — a non-starter for this app's LLM/embedding
+workload. The portable pathway therefore runs **Ollama as a native host
+process** (Metal is automatic on Apple Silicon; keeping it out of the VM
+is the entirety of "enabling Metal") with the same tuning env as the
+compose service, while **Qdrant + the API stay containers** under a
+bundled portable runtime: colima + lima + the static docker CLI + compose
+plugin, all vendored in `dist/portable/macos/` by
+`deploy/package-macos-portable.sh` — nothing installed system-wide, and
+all runtime state (COLIMA_HOME/LIMA_HOME/DOCKER_CONFIG) contained under
+the install's `portable/` directory. The API container reaches the native
+Ollama via `host.docker.internal` (compose stdin override with
+`depends_on: !override` to drop the never-started ollama container).
 
-`platform_detect.detect()` picks the pathway; `app.py` picks the backend
-class from it. Everything else — both views, the widget helpers, the
-BackgroundJob/LogFollower plumbing — talks only to the `Backend` ABC in
-`backends/__init__.py`, so implementing `PortableBackend` later is a
-self-contained change that shouldn't need to touch the GUI layer at all.
+The portable classes subclass the container ones at explicit seams
+(`_env`, `_ollama_cmd`, `_preflight`, `_compose_up`,
+`_manifest_model_names`; installer: `_backend_for`, `_post_unpack`,
+`_image_tars`, `_load_env`), so the lifecycle flow, model ensure/prune,
+health waits, and reingest are single-sourced — and the GUI layer needed
+no changes at all.
+
+**Air-gap caveat (macOS only):** colima's *first* start downloads its VM
+guest image. Warm it on a networked Mac before transferring `dist/`, or
+allow one-time network access at install. Everything else (models, images,
+binaries) is fully offline. See `package-macos-portable.sh`'s header.
 
 ## Layout
 
@@ -121,11 +134,11 @@ installer/
   backends/
     __init__.py            Backend ABC + PrereqCheck/ServiceStatus/BackendError
     docker_backend.py       CONTAINER pathway — ports dffrnt_ctrl_panel.sh verb for verb
-    portable_backend.py     PORTABLE pathway — documented stub, not implemented
+    portable_backend.py     PORTABLE pathway — native Metal Ollama + colima containers
   installers/
     __init__.py            Installer ABC + BundleInfo/InstallError + find_bundles()
     docker_installer.py     CONTAINER pathway — ports install.sh stage for stage
-    portable_installer.py   PORTABLE pathway — documented stub, not implemented
+    portable_installer.py   PORTABLE pathway — + runtime staging, skips the ollama image
   views/
     install.py              bundle picker, dest, prereq gate, install + streamed console
     dashboard.py            the Manage tab: prereqs, service status, start/stop/restart/reingest
@@ -150,15 +163,18 @@ for the token source of truth.
 
 ## What isn't here yet
 
-- The macOS `PortableBackend` / `PortableInstaller` (see above) — all of
-  their methods still raise `NotImplementedError` (logged as a warning each
-  time, so an attempt on an unsupported Mac leaves a trace).
+- **On-Mac validation of the portable pathway.** All macOS logic was
+  exercised on Linux with a faked runtime; colima's first boot, the
+  host.docker.internal route from the VM, Metal inference, and the full
+  install flow need a real Apple Silicon machine (see the checklist below).
 - `install-prerequisites.sh`'s job (Docker Engine / NVIDIA driver + toolkit
-  provisioning) — inherently privileged, OS-specific host mutation; the
-  Install tab's prereq gate reports what's missing instead.
+  provisioning on Linux) — inherently privileged, OS-specific host
+  mutation; the Install tab's prereq gate reports what's missing instead.
 - Packaging as a native app (PyInstaller/py2app/etc.) and wiring it into
   `package.sh`'s `dist/` output — required before the Install tab can serve
-  a bare target machine (see the shipping caveat at the top).
+  a bare target machine (see the shipping caveat at the top). On macOS the
+  target additionally needs a Python with Tk until the GUI is frozen.
+- Offline seeding of colima's guest image (see the air-gap caveat above).
 
 ## Manual verification done so far
 
@@ -176,8 +192,20 @@ visually verified — only exercised at the logic layer:
   `_require_api_running` guard, and the failure is both logged (with
   traceback, to `installer.log`) and surfaced as `job.error`.
 - `process.BackgroundJob` success and failure paths (`echo` / `false`).
-- `PortableBackend`'s stub behavior (`NotImplementedError`, prereq/status
-  messaging, and that every attempted operation logs a warning first).
+- `PortableBackend` / `PortableInstaller` against a faked runtime (shell
+  scripts standing in for ollama/docker/colima/limactl): `_env`
+  containment (PATH, DOCKER_HOST, COLIMA_HOME/LIMA_HOME/DOCKER_CONFIG,
+  CLI-vs-serve OLLAMA_HOST split), manifest walking of a host-side model
+  store including a stale manifest, prereq reporting (incl. the Apple
+  Silicon/Metal line), status degradation when docker is unreachable,
+  `find_portable_runtime` discovery from a dist layout, and the image
+  filter keeping app+qdrant while skipping the ollama container image.
+- The macOS compose stdin override validated against real `docker compose
+  config`: `depends_on: !override` correctly drops the ollama dependency
+  while keeping qdrant's health condition (this test caught that `!reset`
+  silently unsets the whole node — a real bug fixed before shipping),
+  OLLAMA_URL re-pointed at host.docker.internal, extra_hosts host-gateway
+  applied.
 - `logging_setup.configure_logging()`'s file output, inspected directly
   after the runs above — correct levels (prereq failures as WARNING,
   lifecycle brackets as INFO, exceptions as ERROR with traceback).
@@ -196,3 +224,12 @@ and with the stack stopped to see the "not running" guard), scrolling each
 tab at a small window size, and a full Install from a real `package.sh`
 bundle (fresh dest + update-in-place with an edited config.toml) — on both
 a `gpu = false` and `gpu = true` config.
+
+**macOS checklist** (Apple Silicon, from a dist/ built by the "Package:
+macOS deployment" job): Install from scratch (runtime staging, colima
+first boot, image load skipping the ollama tar, first start); confirm
+Metal via the ollama-native.log (`gpu` layers / Metal lines) and that
+query latency matches native expectations; confirm the API container
+answers queries (i.e. host.docker.internal reaches the host Ollama);
+Stop/Start cycle (colima stop/start, native process pidfile); the Logs
+tab's "ollama" selection tailing the native log; and Reingest end-to-end.

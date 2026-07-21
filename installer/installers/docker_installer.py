@@ -107,6 +107,30 @@ class DockerInstaller(Installer):
         logger.info("install: complete (app_root=%s)", dest)
         return dest
 
+    # ---- pathway seams ---------------------------------------------------
+    # PortableInstaller (macOS) subclasses this and overrides these; the
+    # install flow in _install stays single-sourced (same pattern as
+    # DockerComposeBackend's seams).
+
+    def _backend_for(self, app_root: Path):
+        """The Backend used to stop an old stack / first-start the new one."""
+        return DockerComposeBackend(app_root, load_config(app_root))
+
+    def _post_unpack(self, bundle: Path, dest: Path, out: OutputCallback) -> None:
+        """Hook between unpack and image load. The portable pathway stages
+        its bundled runtime + boots colima here (images can't load before
+        the runtime exists). No-op on the container pathway."""
+
+    def _image_tars(self, images_dir: Path) -> list[Path]:
+        """Which image tarballs to docker-load. The portable pathway skips
+        the containerized-Ollama image (Ollama runs natively on macOS)."""
+        return sorted(images_dir.glob("*.tar")) if images_dir.is_dir() else []
+
+    def _load_env(self) -> dict | None:
+        """Environment for `docker load` — the portable pathway points it at
+        the bundled runtime's daemon."""
+        return None
+
     def _install(self, bundle: Path, dest: Path, out: OutputCallback,
                  keep_config: bool) -> None:
         info = self.inspect_bundle(bundle)  # re-validate; cheap
@@ -118,7 +142,7 @@ class DockerInstaller(Installer):
         if (dest / "docker-compose.yml").is_file():
             out(f">> Updating an existing install in {dest} — stopping the running stack first")
             try:
-                old_backend = DockerComposeBackend(dest, load_config(dest))
+                old_backend = self._backend_for(dest)
                 old_backend.stop(out)
             except Exception as exc:
                 out(f"   (could not stop the old stack cleanly: {exc} — continuing)")
@@ -151,19 +175,22 @@ class DockerInstaller(Installer):
             (dest / "config.toml").write_bytes(preserved_config)
             out("   restored the preserved config.toml over the bundle default")
 
+        self._post_unpack(bundle, dest, out)
+
         # ---- load container image(s) ------------------------------------
         out(">> [3/4] Loading container image(s)")
         images_dir = dest / "images"
-        image_tars = sorted(images_dir.glob("*.tar")) if images_dir.is_dir() else []
+        image_tars = self._image_tars(images_dir)
         if not image_tars:
             # AWS/online bundles ship no images dir — compose pulls instead.
             out(f"   no image tarballs in {images_dir} (online bundle — Docker will pull)")
         for image_tar in image_tars:
-            process.run_command(["docker", "load", "-i", str(image_tar)], out)
+            process.run_command(["docker", "load", "-i", str(image_tar)], out,
+                                env=self._load_env())
 
         # ---- first start, via the same backend the Manage tab uses ------
         out(">> [4/4] Starting the stack")
-        backend = DockerComposeBackend(dest, load_config(dest))
+        backend = self._backend_for(dest)
         backend.start(out)
         out(f">> Installed ({info.target_system}). The app lives in: {dest}")
 

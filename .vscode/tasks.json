@@ -120,6 +120,21 @@
             "presentation": { "reveal": "always", "panel": "shared" }
         },
         {
+            // Portable macOS runtime -> dist/portable/macos: native Ollama
+            // (Metal automatic on Apple Silicon) + colima/lima/docker-CLI for
+            // the Qdrant + API containers. Networked build machine only; runs
+            // AFTER package.sh (which wipes dist/). Version pins live in the
+            // script. Pass x86_64 for Intel Macs (CPU-only inference).
+            "label": "Package: fetch macOS portable runtime (Ollama + Docker)",
+            "type": "shell",
+            "command": "bash deploy/package-macos-portable.sh arm64",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
             // Full AWS package: bundle first (package.sh wipes dist/), then the
             // GUI installer alongside it.
             "label": "Package: AWS deployment (bundle + GUI installer)",
@@ -135,6 +150,19 @@
             "dependsOn": [
                 "Package: build bundle (OFFLINE)",
                 "Package: ship GUI installer into dist"
+            ],
+            "dependsOrder": "sequence",
+            "group": "build"
+        },
+        {
+            // Full macOS package: OFFLINE bundle (models cached; build the app
+            // image on/for linux/arm64 so it runs in colima's VM on Apple
+            // Silicon), GUI installer, then the portable Ollama+Docker runtime.
+            "label": "Package: macOS deployment (bundle + GUI installer + portable runtime)",
+            "dependsOn": [
+                "Package: build bundle (OFFLINE)",
+                "Package: ship GUI installer into dist",
+                "Package: fetch macOS portable runtime (Ollama + Docker)"
             ],
             "dependsOrder": "sequence",
             "group": "build"

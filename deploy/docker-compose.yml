@@ -11,6 +11,14 @@
 #
 # Do not run `docker compose` against this file directly. Use dffrnt_ctrl_panel.sh,
 # which reads config.toml and injects the GPU reservation + ports dynamically.
+#
+# macOS (portable pathway): the GUI control panel starts ONLY qdrant + api from
+# this file — the ollama service below never runs there. Ollama runs natively on
+# the host for Metal acceleration, and a stdin override re-points the api at it
+# (OLLAMA_URL=http://host.docker.internal:<port>, extra_hosts host-gateway) and
+# !override-replaces the api dependency map to drop ollama. See
+# installer/backends/portable_backend.py; keep the ollama env tuning below in
+# sync with _OLLAMA_TUNING there.
 services:
   qdrant:
     image: qdrant/qdrant:v1.18.3

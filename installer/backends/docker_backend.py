@@ -68,7 +68,22 @@ class DockerComposeBackend(Backend):
         self.target_system = target_system
         self.bundled_models = bundled_models
 
-    # ---- command building ---------------------------------------------
+    # ---- command building / pathway seams --------------------------------
+    # PortableBackend (macOS) subclasses this backend and overrides these
+    # seams; keep pathway differences INSIDE them so the lifecycle flow in
+    # start()/stop()/reingest stays single-sourced.
+
+    def _env(self) -> dict | None:
+        """Process environment for every docker/ollama invocation. None =
+        inherit. The portable pathway injects its bundled bin dir + the
+        colima DOCKER_HOST here."""
+        return None
+
+    def _ollama_cmd(self) -> list[str]:
+        """How to invoke the ollama CLI against the serving instance:
+        containerized here, the native host binary on macOS."""
+        return ["docker", "exec", "ollama", "ollama"]
+
     def _compose_cmd(self, *args: str) -> list[str]:
         return [
             "docker", "compose",
@@ -147,30 +162,8 @@ class DockerComposeBackend(Backend):
         (self.app_root / "data").mkdir(parents=True, exist_ok=True)
         (self.app_root / "logs").mkdir(parents=True, exist_ok=True)
 
-        if self.config.gpu:
-            try:
-                info = process.run_capture(["docker", "info"])
-            except Exception as exc:
-                raise BackendError(f"could not reach the Docker daemon: {exc}") from exc
-            if "nvidia" not in info.lower():
-                raise BackendError(
-                    "gpu = true in config.toml, but Docker has no NVIDIA runtime. "
-                    "Install the NVIDIA driver + Container Toolkit, or set gpu = false "
-                    "to run on CPU."
-                )
-            on_output(f">> GPU mode — api:{self.config.api_port} "
-                      f"ollama:{self.config.ollama_port} qdrant:{self.config.qdrant_port}")
-            # Same stdin-YAML override ctrl_panel.sh pipes into `compose -f -`.
-            process.run_command(
-                self._compose_cmd("-f", "-", "up", "-d"),
-                on_output,
-                cwd=self.app_root,
-                input_text="services:\n  ollama:\n    gpus: all\n",
-            )
-        else:
-            on_output(f">> CPU mode — api:{self.config.api_port} "
-                      f"ollama:{self.config.ollama_port} qdrant:{self.config.qdrant_port}")
-            process.run_command(self._compose_cmd("up", "-d"), on_output, cwd=self.app_root)
+        self._preflight(on_output)
+        self._compose_up(on_output)
 
         self._wait_for("Qdrant", f"http://localhost:{self.config.qdrant_port}/healthz", 120, on_output)
         self._wait_for("Ollama", f"http://localhost:{self.config.ollama_port}", 120, on_output)
@@ -181,10 +174,47 @@ class DockerComposeBackend(Backend):
             on_output("   (API not healthy yet — it restarts automatically; check the Logs view)")
         on_output(f">> Up. UI: http://localhost:{self.config.api_port}")
 
+    def _preflight(self, on_output: OutputCallback) -> None:
+        """Pathway-specific readiness before compose up. Container pathway:
+        the NVIDIA-runtime gate for gpu = true. Portable (macOS): boot the
+        bundled runtime + the native Ollama process instead."""
+        if self.config.gpu:
+            try:
+                info = process.run_capture(["docker", "info"], env=self._env())
+            except Exception as exc:
+                raise BackendError(f"could not reach the Docker daemon: {exc}") from exc
+            if "nvidia" not in info.lower():
+                raise BackendError(
+                    "gpu = true in config.toml, but Docker has no NVIDIA runtime. "
+                    "Install the NVIDIA driver + Container Toolkit, or set gpu = false "
+                    "to run on CPU."
+                )
+
+    def _compose_up(self, on_output: OutputCallback) -> None:
+        """Bring the containers up. Portable (macOS) overrides this to start
+        only qdrant + api, with the API pointed at the native Ollama."""
+        ports = (f"api:{self.config.api_port} "
+                 f"ollama:{self.config.ollama_port} qdrant:{self.config.qdrant_port}")
+        if self.config.gpu:
+            on_output(f">> GPU mode — {ports}")
+            # Same stdin-YAML override ctrl_panel.sh pipes into `compose -f -`.
+            process.run_command(
+                self._compose_cmd("-f", "-", "up", "-d"),
+                on_output,
+                cwd=self.app_root,
+                env=self._env(),
+                input_text="services:\n  ollama:\n    gpus: all\n",
+            )
+        else:
+            on_output(f">> CPU mode — {ports}")
+            process.run_command(self._compose_cmd("up", "-d"), on_output,
+                                cwd=self.app_root, env=self._env())
+
     @_logged("stop")
     def stop(self, on_output: OutputCallback) -> None:
         on_output(">> Stopping containers")
-        process.run_command(self._compose_cmd("down"), on_output, cwd=self.app_root)
+        process.run_command(self._compose_cmd("down"), on_output,
+                            cwd=self.app_root, env=self._env())
 
     @_logged("reingest.preview")
     def reingest_preview(self, on_output: OutputCallback) -> None:
@@ -192,6 +222,7 @@ class DockerComposeBackend(Backend):
         on_output(">> Reconciliation preview (no changes made yet):")
         process.run_command(
             ["docker", "exec", "dffrnt-api", *_REINGEST_CMD, "--dry-run"], on_output,
+            env=self._env(),
         )
 
     @_logged("reingest.apply")
@@ -200,12 +231,13 @@ class DockerComposeBackend(Backend):
         on_output(">> Force re-ingesting every stored document in the live API (this can take a while)…")
         process.run_command(
             ["docker", "exec", "dffrnt-api", *_REINGEST_CMD, "--verbose"], on_output,
+            env=self._env(),
         )
         on_output(">> Re-ingestion complete.")
 
     def _require_api_running(self) -> None:
         try:
-            process.run_capture(["docker", "exec", "dffrnt-api", "true"])
+            process.run_capture(["docker", "exec", "dffrnt-api", "true"], env=self._env())
         except Exception as exc:
             raise BackendError(
                 "The API container 'dffrnt-api' is not running — start the stack first."
@@ -224,7 +256,7 @@ class DockerComposeBackend(Backend):
 
     def stream_logs(self, service: str | None, on_line: OutputCallback):
         cmd = self._compose_cmd("logs", "-f", "--tail", "200", *([service] if service else []))
-        return process.LogFollower(cmd, cwd=self.app_root)
+        return process.LogFollower(cmd, cwd=self.app_root, env=self._env())
 
     # ---- helpers, ported from dffrnt_ctrl_panel.sh -----------------------
     def _wait_for(self, label: str, url: str, max_seconds: int, on_output: OutputCallback) -> bool:
@@ -239,7 +271,7 @@ class DockerComposeBackend(Backend):
 
     def _cached_models(self) -> set[str]:
         try:
-            out = process.run_capture(["docker", "exec", "ollama", "ollama", "list"])
+            out = process.run_capture([*self._ollama_cmd(), "list"], env=self._env())
         except Exception:
             return set()
         lines = out.splitlines()[1:]  # drop the header row
@@ -275,23 +307,21 @@ class DockerComposeBackend(Backend):
                 on_output(f"!! Model '{name}' missing from the cached store")
             else:
                 on_output(f">> Pulling model: {name} (not in local cache)")
-                process.run_command(["docker", "exec", "ollama", "ollama", "pull", name], on_output)
+                process.run_command([*self._ollama_cmd(), "pull", name], on_output, env=self._env())
 
-    def _prune_models(self, on_output: OutputCallback) -> None:
-        keep = {self._with_tag(m) for m in (self.config.llm_model, self.config.embed_model) if m}
-        if not keep:
-            return
-        for name in self._cached_models():
-            if name not in keep:
-                on_output(f">> Removing cached model no longer in use: {name}")
-                process.run_command(["docker", "exec", "ollama", "ollama", "rm", name], on_output, check=False)
-        # `ollama list` hides models with a broken manifest, so sweep the
-        # manifest files directly too — mirrors ctrl_panel.sh's second pass.
+    def _manifest_model_names(self) -> list[str]:
+        """Every model named by a manifest file in the store, including ones
+        `ollama list` hides because their manifest is broken. Containerized
+        store here; the portable pathway walks the host directory instead."""
+        manifest_root = "/root/.ollama/models/manifests/registry.ollama.ai/library"
         try:
-            manifest_root = "/root/.ollama/models/manifests/registry.ollama.ai/library"
-            found = process.run_capture(["docker", "exec", "ollama", "find", manifest_root, "-type", "f"])
+            found = process.run_capture(
+                ["docker", "exec", "ollama", "find", manifest_root, "-type", "f"],
+                env=self._env(),
+            )
         except Exception:
-            return
+            return []
+        names = []
         for manifest in found.splitlines():
             prefix = f"{manifest_root}/"
             if not manifest.startswith(prefix):
@@ -300,17 +330,35 @@ class DockerComposeBackend(Backend):
             if "/" not in rel:
                 continue
             name, tag = rel.rsplit("/", 1)
-            full = f"{name}:{tag}"
+            names.append(f"{name}:{tag}")
+        return names
+
+    def _prune_models(self, on_output: OutputCallback) -> None:
+        keep = {self._with_tag(m) for m in (self.config.llm_model, self.config.embed_model) if m}
+        if not keep:
+            return
+        for name in self._cached_models():
+            if name not in keep:
+                on_output(f">> Removing cached model no longer in use: {name}")
+                process.run_command([*self._ollama_cmd(), "rm", name], on_output,
+                                    check=False, env=self._env())
+        # `ollama list` hides models with a broken manifest, so sweep the
+        # manifest files directly too — mirrors ctrl_panel.sh's second pass.
+        for full in self._manifest_model_names():
             if full not in keep:
                 on_output(f">> Removing stale model manifest: {full}")
-                process.run_command(["docker", "exec", "ollama", "ollama", "rm", full], on_output, check=False)
+                process.run_command([*self._ollama_cmd(), "rm", full], on_output,
+                                    check=False, env=self._env())
 
     def _inspect(self, label: str, container: str) -> ServiceStatus:
         try:
-            raw = process.run_capture(["docker", "inspect", "--format", "{{json .State}}", container])
+            raw = process.run_capture(["docker", "inspect", "--format", "{{json .State}}", container],
+                                      env=self._env())
+            state = json.loads(raw)
         except Exception:
+            # Covers both "container doesn't exist" (nonzero exit) and any
+            # unparseable output — status() must degrade, never crash.
             return ServiceStatus(label, running=False, healthy=None, detail="not running")
-        state = json.loads(raw)
         running = bool(state.get("Running"))
         health = (state.get("Health") or {}).get("Status")
         healthy = {"healthy": True, "unhealthy": False}.get(health)
