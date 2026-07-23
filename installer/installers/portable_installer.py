@@ -5,11 +5,12 @@ The macOS dist/ layout (produced by the VS Code packaging jobs) is:
 
     dist/
       dffrnt-offline.tar.gz     the ordinary bundle (package.sh)
-      installer/                this GUI, shipped next to the bundle
+      installer/                the manager, shipped as source next to the bundle
       portable/macos/           deploy/package-macos-portable.sh output:
         bin/ollama              native Ollama (Metal automatic on Apple Silicon)
         bin/colima, bin/limactl, share/lima/…   portable container runtime
         bin/docker, bin/docker-compose          static docker CLI + compose plugin
+        python/                 relocatable CPython that runs the manager
 
 install() extends the container-pathway flow at its seams: after unpacking
 the bundle it copies portable/macos into <dest>/portable, wires the compose
@@ -36,7 +37,7 @@ from .docker_installer import DockerInstaller
 
 def find_portable_runtime(near: list[Path]) -> Path | None:
     """Locate the shipped portable/macos directory: next to the bundle /
-    dist / the GUI package — mirroring find_bundles' search spirit."""
+    dist / the manager package — mirroring find_bundles' search spirit."""
     gui_dist = Path(__file__).resolve().parent.parent.parent  # dist/ when shipped
     for base in [*near, gui_dist, Path.cwd(), Path.cwd() / "dist"]:
         candidate = base / "portable" / "macos"

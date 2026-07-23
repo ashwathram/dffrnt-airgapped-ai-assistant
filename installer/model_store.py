@@ -15,7 +15,7 @@ near-incompressible — gzip would burn minutes for ~1%), and merges such a
 tar back into a store additively (blobs dedupe by hash).
 
 Everything here is filesystem-only and safe to call with the stack down.
-No tkinter, no docker — backends wire these into the GUI.
+No UI, no docker — backends wire these into the panel and the CLI.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ KEEP_FILE = "models.keep"
 
 class ModelStoreError(RuntimeError):
     """Expected failures (bad tar, hash mismatch, missing blob...) with an
-    operator-readable message — the GUI shows str(exc), never a traceback."""
+    operator-readable message — the panel/CLI show str(exc), never a traceback."""
 
 
 @dataclass(frozen=True)

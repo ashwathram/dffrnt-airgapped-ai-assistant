@@ -42,8 +42,6 @@ class Pathway(Enum):
     PORTABLE = "portable"  # macOS — native Ollama + bundled portable runtime
 
 
-IMPLEMENTED_PATHWAYS = {Pathway.CONTAINER, Pathway.PORTABLE}
-
 _OS_TO_PATHWAY = {
     OS.LINUX: Pathway.CONTAINER,
     OS.WINDOWS: Pathway.CONTAINER,
@@ -60,10 +58,6 @@ class PlatformInfo:
     pathway: Pathway
     docker_present: bool
     has_nvidia_gpu: bool
-
-    @property
-    def pathway_implemented(self) -> bool:
-        return self.pathway in IMPLEMENTED_PATHWAYS
 
     @property
     def is_apple_silicon(self) -> bool:

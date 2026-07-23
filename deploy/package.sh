@@ -83,15 +83,18 @@ rm -rf "$OUT"
 mkdir -p "$STAGE/images"
 
 echo ">> [1/4] Freezing the control panel (dffrnt-manager)"
-# One self-contained binary from installer/__main__.py: bare launch = GUI,
-# any argument = headless CLI — so the same artifact installs over SSH on a
-# displayless AWS box and manages an air-gapped desktop. The `package`
-# dependency group (pyproject.toml) exists solely for this step.
+# One self-contained binary from installer/__main__.py: bare launch serves
+# the BROWSER control panel (installer/web — the view layer is the target's
+# own browser, so no GUI toolkit is bundled), any argument = headless CLI.
+# The same artifact installs over SSH on a displayless AWS box and manages
+# an air-gapped desktop. The `package` dependency group (pyproject.toml)
+# exists solely for this step.
 uv run --group package pyinstaller \
   --noconfirm --clean --onefile \
   --name dffrnt-manager \
   --paths "$ROOT" \
   --add-data "$ROOT/installer/assets/icon.png:installer/assets" \
+  --add-data "$ROOT/installer/web/static:installer/web/static" \
   --distpath "$OUT/.pyi/dist" --workpath "$OUT/.pyi/build" --specpath "$OUT/.pyi" \
   "$ROOT/installer/__main__.py"
 MANAGER="$OUT/.pyi/dist/dffrnt-manager"

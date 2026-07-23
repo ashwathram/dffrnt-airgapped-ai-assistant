@@ -3,21 +3,22 @@
 This folder contains everything needed to deploy the assistant:
 
 - `@NAME@.tar.gz` — the application bundle
-- `dffrnt-manager` — the installer + control panel (one binary; GUI and CLI)
+- `dffrnt-manager` — the installer + control panel (one binary; browser UI and CLI)
 - `README.md` — this file
 
 Target: **@MODE@**  ·  Models: **@MODELS@**
 
 The app runs as a Docker container, so the target needs **only Docker** (Engine +
 the Compose v2 plugin) — no Python, uv, pip, or shell scripts. `dffrnt-manager`
-is self-contained: launched with no arguments it opens the graphical control
-panel; given any command it runs fully headless, so it works identically over
-SSH on a displayless box.
+is self-contained: launched with no arguments it serves the control panel to
+your browser (127.0.0.1 only, token-gated URL) and opens it; given any command
+it runs fully headless, so it works identically over SSH on a displayless box
+(`panel --no-browser` prints the URL for an SSH tunnel).
 
 ## Install
 
-Desktop: run `./dffrnt-manager` and use the **Install** tab (it auto-detects the
-tarball next to it, and you pick the destination).
+In a browser: run `./dffrnt-manager` and use the **Install** tab (it auto-detects
+the tarball next to it, and you pick the destination).
 
 Headless / SSH:
 
@@ -40,11 +41,11 @@ on an online build. An existing edited `config.toml` is kept by default
 ## Run
 
 A copy of `dffrnt-manager` is placed in the install directory. No arguments
-opens the GUI (Manage / Models / Logs tabs); commands run headless:
+serves the browser panel (Manage / Models / Logs tabs); commands run headless:
 
 ```bash
 cd dffrnt                      # or your chosen install dir
-./dffrnt-manager               # GUI control panel (needs a display)
+./dffrnt-manager               # browser control panel (prints + opens a local URL)
 ./dffrnt-manager start         # bring the whole stack up
 ./dffrnt-manager stop          # stop all containers
 ./dffrnt-manager restart
@@ -80,7 +81,7 @@ smaller than most models). Then on this machine:
 ./dffrnt-manager models use qwen3:8b
 ```
 
-Both operations are also available in the GUI's **Models** tab. Imported models
+Both operations are also available in the panel's **Models** tab. Imported models
 are protected from the disk-reclaim sweep until you switch to or delete them.
 
 ## Configuration

@@ -3,7 +3,7 @@ wins, then the file, then a hardcoded default — never an error for a
 missing key (mirrors dffrnt_assistant.config.load_settings). Also reads
 bundle.conf (the packager's manifest) and performs the one config WRITE in
 the codebase (write_config_value, for model switching). Shared by the
-management backends, the installer, the GUI, and the CLI.
+management backends, the installer, the panel, and the CLI.
 """
 
 from __future__ import annotations

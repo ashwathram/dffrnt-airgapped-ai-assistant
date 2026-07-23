@@ -366,7 +366,7 @@ class DockerComposeBackend(Backend):
                 process.run_command([*self._ollama_cmd(), "rm", full], on_output,
                                     check=False, env=self._env())
 
-    # ---- model store operations (Backend interface; views/models.py) ------
+    # ---- model store operations (Backend interface; panel Models view/CLI) --
     # Pathway-independent: the store is a host directory everywhere (see
     # _manifest_model_names), and pull/delete go through the _ollama_cmd
     # seam, so PortableBackend inherits all of these unchanged.

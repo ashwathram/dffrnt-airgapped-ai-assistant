@@ -1,8 +1,8 @@
-"""Headless command-line interface — the same backends the GUI drives,
-minus Tk, so an SSH'd or displayless box (AWS targets, CI) has full
+"""Headless command-line interface — the same backends the browser panel
+drives, so an SSH'd or displayless box (AWS targets, CI) has full
 install/manage/model coverage from the one shipped binary:
 
-    dffrnt-manager                    # no args: the GUI control panel
+    dffrnt-manager                    # no args: serve + open the browser panel
     dffrnt-manager install [bundle]   # deploy a dffrnt-*.tar.gz
     dffrnt-manager start|stop|restart|status
     dffrnt-manager logs [service]     # follow (Ctrl-C to stop)
@@ -14,9 +14,9 @@ install/manage/model coverage from the one shipped binary:
     dffrnt-manager models export NAME DEST.tar
     dffrnt-manager models import TARBALL
 
-This module must stay import-clean of tkinter: a server's Python may not
-have Tk at all, and the CLI is exactly for those machines. Views and app.py
-are imported by __main__ only on the bare-launch (GUI) path.
+The `panel` command serves the browser control panel without opening a
+browser (SSH tunnels); a bare `dffrnt-manager` launch serves it AND opens
+the browser — see installer/web/server.py.
 """
 
 from __future__ import annotations
@@ -42,7 +42,8 @@ def _echo(line: str) -> None:
 
 class _Context:
     """Everything a command needs, resolved once: app root, config,
-    platform, backend — the same resolution order app.py performs."""
+    platform, backend — the same resolution order the panel server's
+    Context performs (web/server.py)."""
 
     def __init__(self):
         self.platform_info = detect()
@@ -194,6 +195,14 @@ def _cmd_reingest(ctx: _Context, args) -> int:
     return 0
 
 
+def _cmd_panel(ctx, args) -> int:
+    # Dispatched before Context construction (see run_cli): the web server
+    # builds and owns its own Context, which install/model_use re-point.
+    from .web.server import serve
+    serve(open_browser=not args.no_browser, port=args.port)
+    return 0
+
+
 def _cmd_models(ctx: _Context, args) -> int:
     action = args.action or "list"
 
@@ -260,7 +269,7 @@ def _one_name(args) -> str:
 def _models_use(ctx: _Context, name: str) -> int:
     """Swap the active LLM: rewrite config.toml, then restart so start's
     ensure/prune loads the new model and reclaims the old one — the CLI
-    twin of the GUI's Apply & restart (views/models.py)."""
+    twin of the panel's Apply & restart (web/static/app.js)."""
     model_store.name_to_manifest_rel(name)  # syntax check; raises on garbage
     config_path = find_config(ctx.app_root)
     if config_path is None:
@@ -291,7 +300,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dffrnt-manager",
         description="DFFRNT AI Assistant control panel. Run with no arguments "
-                    "for the GUI; any command below runs headless.",
+                    "to serve + open the browser panel; any command below runs "
+                    "headless.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -317,6 +327,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("service", nargs="?", choices=["all", "qdrant", "ollama", "api"])
     p.set_defaults(fn=_cmd_logs)
 
+    p = sub.add_parser("panel", help="serve the browser control panel "
+                                     "(what a bare launch does), with options")
+    p.add_argument("--port", type=int, help="fixed port (default: 8901, else ephemeral)")
+    p.add_argument("--no-browser", action="store_true",
+                   help="don't open a browser — print the URL only (SSH tunnels)")
+    p.set_defaults(fn=_cmd_panel)
+
     p = sub.add_parser("reingest", help="force re-ingest every stored document")
     p.add_argument("--dry-run", action="store_true", help="preview only")
     p.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
@@ -338,6 +355,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run_cli(argv: list[str]) -> int:
     args = build_parser().parse_args(argv)
+    if args.fn is _cmd_panel:
+        # The panel server owns its own Context (it must reload/repoint it);
+        # building a second one here would double platform detection.
+        return _cmd_panel(None, args)
     # `models export NAME DEST` positional convenience: second name is the dest.
     if getattr(args, "action", None) == "export" and not getattr(args, "dest", None) \
             and len(getattr(args, "names", [])) > 1:

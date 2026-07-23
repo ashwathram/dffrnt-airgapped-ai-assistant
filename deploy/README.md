@@ -1,8 +1,9 @@
 # Deployment
 
-Package the app into a single tarball + installer + README, copy those three files
-to the target, and install. The app ships as a Docker image, so the target needs
-**only Docker** — no Python, uv or pip. Two flavours:
+Package the app into a single tarball + the `dffrnt-manager` binary + README,
+copy those three files to the target, and install. The app ships as a Docker
+image and the manager is a frozen binary, so the target needs **only Docker** —
+no Python, uv, pip, or shell scripts. Two flavours:
 
 - **OFFLINE** — for an air-gapped box. Caches the app image, the Qdrant/Ollama
   base images, and the Ollama model store, so installing needs no internet.
@@ -38,7 +39,7 @@ exactly three files to `dist/` and nothing else:
 ```
 dist/
   dffrnt-offline.tar.gz   (or dffrnt-aws.tar.gz)
-  dffrnt-manager          (frozen installer + control panel; GUI and headless CLI)
+  dffrnt-manager          (frozen installer + control panel; browser UI and headless CLI)
   README.md
 ```
 
@@ -57,8 +58,9 @@ cd dffrnt && ./dffrnt-manager status   # UI at http://localhost:8000
 ```
 
 Headless boxes get the full CLI (`install`, `start`, `stop`, `status`, `logs`,
-`audit`, `reingest`, `models ...`); a desktop gets the GUI by running
-`./dffrnt-manager` with no arguments.
+`audit`, `reingest`, `models ...`); running `./dffrnt-manager` with no
+arguments serves the browser control panel on 127.0.0.1 and opens it
+(`panel --no-browser` prints the URL instead — SSH tunnels).
 
 See the generated `README.md` next to the tarball for the target-side details.
 

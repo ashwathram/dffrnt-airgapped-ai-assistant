@@ -1,12 +1,12 @@
-"""Subprocess plumbing shared by backends. No tkinter import here — this
-module knows nothing about the GUI; it just runs commands and hands lines
-back through plain callables/queues that a Tk view can poll safely.
+"""Subprocess plumbing shared by backends. This module knows nothing about
+any UI; it just runs commands and hands lines back through plain
+callables/queues that any consumer can poll.
 
-Tkinter widgets may only be touched from the main thread, so anything that
-runs a subprocess to completion (which can take minutes, e.g. pulling a
-model) must do so off the main thread. BackgroundJob is the bridge: it runs
-a Backend verb in a worker thread and buffers its output in a queue.Queue
-for the view to drain via `widget.after(...)`.
+Anything that runs a subprocess to completion (which can take minutes,
+e.g. pulling a model) must not block its caller. BackgroundJob is the
+bridge: it runs a Backend verb in a worker thread and buffers its output
+in a queue.Queue — the web panel's SSE handler drains it into the browser
+(installer/web/server.py), and the CLI simply passes print as the callback.
 """
 
 from __future__ import annotations
@@ -45,8 +45,8 @@ def run_command(
     check: bool = True,
 ) -> int:
     """Run `cmd` to completion, streaming merged stdout/stderr to on_output
-    one line at a time. Blocks the calling thread — call from a worker
-    thread (e.g. inside a BackgroundJob), never from the Tk main thread.
+    one line at a time. Blocks the calling thread — run it inside a
+    BackgroundJob (the panel does) or from a CLI that intends to block.
     """
     proc = subprocess.Popen(
         cmd,
@@ -99,19 +99,16 @@ def probe_http(url: str, timeout: float = 2.0) -> bool:
 
 class BackgroundJob:
     """Runs `fn(on_output)` in a daemon thread; on_output pushes lines into
-    a thread-safe queue this job exposes via `drain()`. Meant to be polled
-    from Tk with `widget.after(interval_ms, poll)`::
+    a thread-safe queue this job exposes via `drain()`. Poll it from any
+    loop::
 
         job = BackgroundJob(backend.start).start()
-        def poll():
-            for line in job.drain():
-                console.append(line)
-            if job.done.is_set():
-                if job.error is not None:
-                    show_error(job.error)
-                return
-            widget.after(100, poll)
-        widget.after(100, poll)
+        while not job.done.is_set():
+            emit(job.drain()); sleep(0.15)
+        emit(job.drain())          # done is set AFTER the final put
+        if job.error: report(job.error)
+
+    (installer/web/server.py's Job wraps exactly this for SSE streaming.)
     """
 
     def __init__(self, fn: Callable[[OutputCallback], None]):
@@ -128,7 +125,7 @@ class BackgroundJob:
     def _run(self) -> None:
         try:
             self._fn(self._lines.put)
-        except BaseException as exc:  # surfaced to the GUI via .error, never swallowed
+        except BaseException as exc:  # surfaced to the caller via .error, never swallowed
             self.error = exc
         finally:
             self.done.set()

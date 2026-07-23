@@ -171,9 +171,9 @@ class PortableBackend(DockerComposeBackend):
         # not route to the host's 127.0.0.1 under every network mode.
         env["OLLAMA_HOST"] = f"0.0.0.0:{self.config.ollama_port}"
         self._ollama_log.parent.mkdir(parents=True, exist_ok=True)
-        # Detached from the GUI (start_new_session) so closing the control
-        # panel doesn't kill inference; output to its own log file, which the
-        # Logs view tails for the "ollama" selection.
+        # Detached from the manager (start_new_session) so quitting the
+        # panel/CLI doesn't kill inference; output to its own log file, which
+        # the Logs view tails for the "ollama" selection.
         with open(self._ollama_log, "ab") as log_fh:
             proc = subprocess.Popen(
                 [str(self.bin_dir / "ollama"), "serve"],

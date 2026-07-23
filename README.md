@@ -73,8 +73,9 @@ docker build -t dffrnt-assistant:latest -f deploy/Dockerfile .
 uv run python -m installer start
 ```
 
-`python -m installer` with no arguments opens the desktop control panel
-(install/manage/models/logs); every operation is also a headless CLI command
+`python -m installer` with no arguments serves the browser control panel
+(install/manage/models/logs — rendered by your browser, styled like the app)
+and opens it; every operation is also a headless CLI command
 (`start`, `stop`, `status`, `logs`, `models`, ... — see `installer/cli.py`).
 
 ## Tests

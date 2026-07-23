@@ -15,6 +15,7 @@
 #     share/lima/…          lima guest agents (resolved relative to bin/limactl)
 #     bin/docker            static docker CLI (client only — the daemon lives in the VM)
 #     bin/docker-compose    compose v2 CLI plugin
+#     python/…              relocatable CPython (runs the control panel; no Tk needed)
 #     VERSIONS              what was fetched, for the audit trail
 #
 # The GUI installer (installer/) copies this tree into <install>/portable and
@@ -45,6 +46,14 @@ COLIMA_VERSION="${COLIMA_VERSION:-v0.8.1}"
 LIMA_VERSION="${LIMA_VERSION:-1.0.7}"
 DOCKER_CLI_VERSION="${DOCKER_CLI_VERSION:-28.3.2}"
 COMPOSE_VERSION="${COMPOSE_VERSION:-v2.39.1}"
+# Relocatable CPython for the control panel (installer/ runs from source on
+# macOS: modern macOS ships NO system python, and the manager can't be
+# PyInstaller-frozen for a Mac from a Linux build box). python-build-standalone
+# publishes self-contained darwin builds — fetched here exactly like the other
+# mac-native binaries, no Mac needed to package. The panel UI is the browser,
+# so this Python needs no Tk. Match PYTHON_VERSION to pyproject's floor (3.14).
+PYTHON_VERSION="${PYTHON_VERSION:-3.14.2}"
+PBS_RELEASE="${PBS_RELEASE:-20260618}"
 
 case "$ARCH" in
   arm64)  LIMA_ARCH="arm64";  DOCKER_ARCH="aarch64"; COMPOSE_ARCH="aarch64"; COLIMA_ARCH="arm64" ;;
@@ -63,18 +72,18 @@ fetch() { # fetch <url> <dest-file>
   curl -fSL --progress-bar "$1" -o "$2"
 }
 
-echo ">> [1/5] Ollama $OLLAMA_VERSION (native — Metal automatic on Apple Silicon)"
+echo ">> [1/6] Ollama $OLLAMA_VERSION (native — Metal automatic on Apple Silicon)"
 fetch "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-darwin.tgz" \
       "$WORK/ollama.tgz"
 tar -xzf "$WORK/ollama.tgz" -C "$WORK"
 # The tgz contains the `ollama` binary at its top level (universal: arm64+x86_64).
 mv "$WORK/ollama" "$OUT/bin/ollama"
 
-echo ">> [2/5] colima $COLIMA_VERSION (portable container runtime)"
+echo ">> [2/6] colima $COLIMA_VERSION (portable container runtime)"
 fetch "https://github.com/abiosoft/colima/releases/download/${COLIMA_VERSION}/colima-Darwin-${COLIMA_ARCH}" \
       "$OUT/bin/colima"
 
-echo ">> [3/5] lima $LIMA_VERSION (colima's VM engine + guest agents)"
+echo ">> [3/6] lima $LIMA_VERSION (colima's VM engine + guest agents)"
 fetch "https://github.com/lima-vm/lima/releases/download/v${LIMA_VERSION}/lima-${LIMA_VERSION}-Darwin-${LIMA_ARCH}.tar.gz" \
       "$WORK/lima.tgz"
 # Extract the whole tree: bin/limactl finds share/lima relative to itself.
@@ -84,7 +93,7 @@ cp -a "$WORK/lima-tree/bin/." "$OUT/bin/"
 mkdir -p "$OUT/share"
 cp -a "$WORK/lima-tree/share/." "$OUT/share/"
 
-echo ">> [4/5] docker CLI $DOCKER_CLI_VERSION (static client) + compose $COMPOSE_VERSION"
+echo ">> [4/6] docker CLI $DOCKER_CLI_VERSION (static client) + compose $COMPOSE_VERSION"
 fetch "https://download.docker.com/mac/static/stable/${DOCKER_ARCH}/docker-${DOCKER_CLI_VERSION}.tgz" \
       "$WORK/docker.tgz"
 tar -xzf "$WORK/docker.tgz" -C "$WORK"     # extracts docker/docker
@@ -92,7 +101,19 @@ mv "$WORK/docker/docker" "$OUT/bin/docker"
 fetch "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-darwin-${COMPOSE_ARCH}" \
       "$OUT/bin/docker-compose"
 
-echo ">> [5/5] Permissions + manifest"
+echo ">> [5/6] CPython $PYTHON_VERSION (relocatable, for the control panel)"
+case "$ARCH" in
+  arm64)  PBS_ARCH="aarch64-apple-darwin" ;;
+  x86_64) PBS_ARCH="x86_64-apple-darwin" ;;
+esac
+fetch "https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_RELEASE}/cpython-${PYTHON_VERSION}+${PBS_RELEASE}-${PBS_ARCH}-install_only.tar.gz" \
+      "$WORK/python.tgz"
+# Extracts a self-contained python/ tree (bin/python3, lib/...). On the
+# target: portable/macos/python/bin/python3 -m installer  (with the installer
+# source shipped in dist/ by the macOS packaging task).
+tar -xzf "$WORK/python.tgz" -C "$OUT"
+
+echo ">> [6/6] Permissions + manifest"
 chmod +x "$OUT"/bin/*
 cat > "$OUT/VERSIONS" <<EOF
 arch=$ARCH
@@ -101,6 +122,7 @@ colima=$COLIMA_VERSION
 lima=$LIMA_VERSION
 docker_cli=$DOCKER_CLI_VERSION
 compose=$COMPOSE_VERSION
+python=$PYTHON_VERSION+$PBS_RELEASE
 fetched=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 

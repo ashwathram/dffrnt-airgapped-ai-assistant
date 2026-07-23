@@ -1,13 +1,13 @@
 """The Installer interface — first-run deployment (the retired
-deploy/install.sh shell script's job, absorbed here; both the GUI Install
-tab and the CLI `install` command drive it).
+deploy/install.sh shell script's job, absorbed here; both the panel's
+Install view and the CLI `install` command drive it).
 
 Same pathway split as backends/: DockerInstaller for the CONTAINER pathway
 (Linux/Windows), PortableInstaller for macOS. The install flow is
 distinct from management because it runs BEFORE an app root exists — the
-InstallView owns an Installer, and only after install() succeeds does the
-app construct a Backend against the new app root (see app.py's
-on_installed re-point).
+panel/CLI drive an Installer, and only after install() succeeds is a
+Backend constructed against the new app root (the panel server re-points
+its Context; see web/server.py's install verb).
 
 Shipping note: for install-from-scratch to work on a box that has nothing
 yet, the frozen dffrnt-manager binary travels NEXT TO the bundle tarball
@@ -62,13 +62,13 @@ class Installer(ABC):
         """Deploy `bundle` into `dest` and return the resulting app root:
         stop any old stack, preserve (keep_config=True) or
         archive-and-overwrite the edited config, unpack, load images, first
-        start. Callers resolve keep_config BEFORE starting (GUI dialog /
+        start. Callers resolve keep_config BEFORE starting (panel modal /
         CLI flag) — a background job must never block on a question."""
 
 
 def make_installer(platform_info) -> "Installer":
     """The one place a PlatformInfo picks an Installer implementation,
-    shared by the GUI shell and the CLI (same pattern as
+    shared by the panel server and the CLI (same pattern as
     backends.make_backend)."""
     from ..platform_detect import Pathway
     from .docker_installer import DockerInstaller

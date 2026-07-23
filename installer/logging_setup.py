@@ -1,15 +1,15 @@
-"""Central logging for the installer GUI.
+"""Central logging for the manager (browser panel + CLI).
 
-Every lifecycle operation a Backend performs — start, stop, restart,
-check_prerequisites, reingest_preview/apply, and (once phase 2 lands) the
-install/provisioning flow — writes its full streamed output plus a clear
-begin/end/error marker to a log file, so a failure survives after the GUI
-console scrolls away or the window closes.
+Every lifecycle operation a Backend or Installer performs — start, stop,
+restart, check_prerequisites, reingest_preview/apply, install, the model
+verbs — writes its full streamed output plus a clear begin/end/error
+marker to a log file, so a failure survives after the panel console
+scrolls away or the browser tab closes.
 
 Deliberately NOT logged per-line: status() polling and stream_logs()
 follow output. Both are read-only, high-frequency (status is re-polled
 after every action; log-follow can run indefinitely), and already fully
-visible live in the GUI — status in the Services card, logs in the Logs
+visible live in the panel — status in the Services card, logs in the Logs
 view. stream_logs in particular would just duplicate `docker compose
 logs`, which Docker already persists on its own. Logging them here would
 mean an unbounded file for zero new information. See docker_backend.py's
@@ -40,7 +40,7 @@ def configure_logging(app_root: Path, *, verbose: bool = True) -> logging.Logger
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
     except OSError:
         # app_root/logs isn't writable (e.g. a read-only checkout) — fall
-        # back to the OS temp dir rather than crash the GUI over logging.
+        # back to the OS temp dir rather than crash the manager over logging.
         log_path = Path(tempfile.gettempdir()) / "dffrnt-installer.log"
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
@@ -60,7 +60,7 @@ def configure_logging(app_root: Path, *, verbose: bool = True) -> logging.Logger
 
 def get_logger() -> logging.Logger:
     """The configured logger, or a no-op default if configure_logging()
-    hasn't run yet (e.g. a module imported and used outside the GUI)."""
+    hasn't run yet (e.g. a module imported in isolation, as in tests)."""
     return logging.getLogger(LOGGER_NAME)
 
 
@@ -68,7 +68,7 @@ def with_logging(stage: str, on_output):
     """Wraps an OutputCallback so every line it receives is also written
     to the log file at DEBUG, tagged with `stage` (e.g. "start",
     "reingest.apply"). Use for any Backend method whose output should
-    survive the GUI console."""
+    survive the panel console."""
     logger = get_logger()
 
     def wrapped(line: str) -> None:

@@ -1,10 +1,10 @@
 """The Backend interface every pathway implements.
 
-The UI layers (views/ for the GUI, cli.py for headless targets) talk only
-to this interface, never to `docker compose` or a native process directly —
-that's what lets the same surfaces work against DockerComposeBackend
-(Linux/Windows) and PortableBackend (macOS) without an if/else on OS
-anywhere above. See platform_detect.py for how a PlatformInfo picks a
+The UI layers (web/server.py for the browser panel, cli.py for headless
+targets) talk only to this interface, never to `docker compose` or a
+native process directly — that's what lets the same surfaces work against
+DockerComposeBackend (Linux/Windows) and PortableBackend (macOS) without
+an if/else on OS anywhere above. See platform_detect.py for how a PlatformInfo picks a
 backend, and make_backend below for the single place that choice is made.
 """
 
@@ -34,7 +34,7 @@ class ServiceStatus:
 
 class BackendError(RuntimeError):
     """Raised for expected failures (docker not running, compose missing,
-    ...) so the GUI can show a message instead of a traceback."""
+    ...) so the panel/CLI can show a message instead of a traceback."""
 
 
 class Backend(ABC):
@@ -46,9 +46,9 @@ class Backend(ABC):
     override, model ensure/prune, health-wait order) live on here.
 
     All long-running methods stream progress via an OutputCallback rather
-    than returning captured text, so the GUI can pipe it straight into a
-    live console. Callbacks may be invoked from a background thread —
-    callers marshal back onto the Tk main thread (see process.py).
+    than returning captured text, so the panel can pipe it straight into
+    a live console (SSE) and the CLI can print it. Callbacks may be
+    invoked from a background thread (see process.BackgroundJob).
     """
 
     @abstractmethod
@@ -85,10 +85,10 @@ class Backend(ABC):
     def reingest_apply(self, on_output: OutputCallback) -> None:
         """Force re-ingest every stored document. Mutating — callers should
         only invoke this after showing the operator reingest_preview's
-        output and getting explicit confirmation (see views/dashboard.py)."""
+        output and getting explicit confirmation (panel modal / CLI prompt)."""
         raise NotImplementedError("reingest is not implemented for this pathway yet.")
 
-    # ---- model store operations (views/models.py) -------------------------
+    # ---- model store operations (the panel's Models view + `models` CLI) --
     # All host-side against the ollama_models directory, so they work with
     # the stack down — except pull/delete, which talk to the serving Ollama.
 
@@ -133,7 +133,7 @@ class Backend(ABC):
 
 def make_backend(app_root, config, platform_info) -> "Backend":
     """The one place a PlatformInfo picks a Backend implementation, shared
-    by the GUI shell (app.py) and the CLI. Imports live inside so this
+    by the panel server (web/server.py) and the CLI. Imports live inside so this
     module stays import-cycle-free (concrete backends import from here)."""
     from ..platform_detect import Pathway
     from .docker_backend import DockerComposeBackend
