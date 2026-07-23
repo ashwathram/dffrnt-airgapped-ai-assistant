@@ -1,6 +1,6 @@
 """Dashboard view: platform summary, prerequisite checks, service status,
-and the start/stop/restart/reingest actions — the GUI equivalent of
-`dffrnt_ctrl_panel.sh {start|stop|restart|status|reingest}`.
+and the start/stop/restart/reingest actions — the GUI face of the CLI's
+`start|stop|restart|status|reingest` commands (same Backend underneath).
 """
 
 from __future__ import annotations
@@ -137,8 +137,8 @@ class DashboardView(ttk.Frame):
 
         ttk.Label(c, text="Maintenance", style="CardTitle.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(
-            c, text="Re-ingest every stored document — the GUI equivalent of "
-                     "dffrnt_ctrl_panel.sh reingest. Previews the affected files first; "
+            c, text="Re-ingest every stored document in the live API. "
+                     "Previews the affected files first; "
                      "nothing changes until you confirm.",
             style="Muted.TLabel", wraplength=640, justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(4, 10))

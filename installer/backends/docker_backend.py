@@ -1,8 +1,8 @@
-"""CONTAINER pathway (Linux/Windows): drives the same `docker compose`
-stack as deploy/dffrnt_ctrl_panel.sh, verb for verb. Treat that script as
-the reference implementation — this is a GUI-facing port of it, not an
-independent redesign, so behavior (GPU override, model pruning, health
-polling) should keep matching it.
+"""CONTAINER pathway (Linux/Windows): drives the `docker compose` stack.
+This IS the reference implementation of stack management (it absorbed the
+retired dffrnt_ctrl_panel.sh shell script verb for verb — GPU override,
+model ensure/prune, health-wait order all originated there and their
+behavior contracts continue here unchanged).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Iterable
 
-from .. import process
+from .. import model_store, process
 from ..config import AppConfig, read_bundle_conf
 from ..logging_setup import get_logger, with_logging
 from . import Backend, BackendError, OutputCallback, PrereqCheck, ServiceStatus
@@ -25,8 +25,8 @@ _CONTAINER_NAMES = {
 }
 
 # python -u -m dffrnt_assistant.ingest.backfill --force, run inside the API
-# container — see deploy/dffrnt_ctrl_panel.sh's `reingest` case, which this
-# mirrors exactly (dry-run preview first, force+verbose only on confirm).
+# container. Safety order: dry-run preview first, force+verbose only after
+# the operator confirms (dialog in the GUI, prompt in the CLI).
 _REINGEST_CMD = ["python", "-u", "-m", "dffrnt_assistant.ingest.backfill", "--force"]
 
 
@@ -197,7 +197,8 @@ class DockerComposeBackend(Backend):
                  f"ollama:{self.config.ollama_port} qdrant:{self.config.qdrant_port}")
         if self.config.gpu:
             on_output(f">> GPU mode — {ports}")
-            # Same stdin-YAML override ctrl_panel.sh pipes into `compose -f -`.
+            # Stdin-YAML override piped into `compose -f -`: one compose
+            # file, the GPU reservation injected only when configured.
             process.run_command(
                 self._compose_cmd("-f", "-", "up", "-d"),
                 on_output,
@@ -215,6 +216,32 @@ class DockerComposeBackend(Backend):
         on_output(">> Stopping containers")
         process.run_command(self._compose_cmd("down"), on_output,
                             cwd=self.app_root, env=self._env())
+
+    @_logged("start.dev")
+    def start_dev(self, on_output: OutputCallback) -> None:
+        """Dev loop (CLI `dev`): bring up ONLY qdrant + ollama, GPU-aware,
+        so the API can run on the host (e.g. the VS Code debugger) against
+        them. Waits for health and ensures the configured models are
+        present, but never prunes — a dev store accumulating models is the
+        developer's business. Container pathway only."""
+        self._preflight(on_output)
+        ports = f"ollama:{self.config.ollama_port} qdrant:{self.config.qdrant_port}"
+        # Explicit service names keep the prod-profile api service down.
+        if self.config.gpu:
+            on_output(f">> GPU mode — dev services: {ports}")
+            process.run_command(
+                self._compose_cmd("-f", "-", "up", "-d", "qdrant", "ollama"),
+                on_output, cwd=self.app_root, env=self._env(),
+                input_text="services:\n  ollama:\n    gpus: all\n",
+            )
+        else:
+            on_output(f">> CPU mode — dev services: {ports}")
+            process.run_command(self._compose_cmd("up", "-d", "qdrant", "ollama"),
+                                on_output, cwd=self.app_root, env=self._env())
+        self._wait_for("Qdrant", f"http://localhost:{self.config.qdrant_port}/healthz", 120, on_output)
+        self._wait_for("Ollama", f"http://localhost:{self.config.ollama_port}", 120, on_output)
+        self._ensure_models(on_output)
+        on_output(">> Dev services up. Run the API on the host (VS Code launch config).")
 
     @_logged("reingest.preview")
     def reingest_preview(self, on_output: OutputCallback) -> None:
@@ -258,7 +285,7 @@ class DockerComposeBackend(Backend):
         cmd = self._compose_cmd("logs", "-f", "--tail", "200", *([service] if service else []))
         return process.LogFollower(cmd, cwd=self.app_root, env=self._env())
 
-    # ---- helpers, ported from dffrnt_ctrl_panel.sh -----------------------
+    # ---- lifecycle helpers (health waits, model ensure/prune) ------------
     def _wait_for(self, label: str, url: str, max_seconds: int, on_output: OutputCallback) -> bool:
         on_output(f">> Waiting for {label}")
         for _ in range(max_seconds):
@@ -283,9 +310,8 @@ class DockerComposeBackend(Backend):
 
     def _wanted_models(self) -> list[str]:
         # Union of what package.sh froze into the bundle and whatever the
-        # live config.toml points at now — see dffrnt_ctrl_panel.sh's own
-        # comment on why both matter (editing the model + restart mustn't
-        # run against a model Ollama never pulled).
+        # live config.toml points at now — both matter: editing the model +
+        # restart mustn't run against a model Ollama never pulled.
         wanted, seen = [], set()
         for name in [*self.bundled_models, self.config.llm_model, self.config.embed_model]:
             if not name or name in seen:
@@ -311,44 +337,95 @@ class DockerComposeBackend(Backend):
 
     def _manifest_model_names(self) -> list[str]:
         """Every model named by a manifest file in the store, including ones
-        `ollama list` hides because their manifest is broken. Containerized
-        store here; the portable pathway walks the host directory instead."""
-        manifest_root = "/root/.ollama/models/manifests/registry.ollama.ai/library"
-        try:
-            found = process.run_capture(
-                ["docker", "exec", "ollama", "find", manifest_root, "-type", "f"],
-                env=self._env(),
-            )
-        except Exception:
-            return []
-        names = []
-        for manifest in found.splitlines():
-            prefix = f"{manifest_root}/"
-            if not manifest.startswith(prefix):
-                continue
-            rel = manifest[len(prefix):]
-            if "/" not in rel:
-                continue
-            name, tag = rel.rsplit("/", 1)
-            names.append(f"{name}:{tag}")
-        return names
+        `ollama list` hides because their manifest is broken. The store is a
+        host directory on every pathway (bind-mounted into the container on
+        Linux/Windows, OLLAMA_MODELS for the native macOS process), so walk
+        it directly — no docker exec, and it works with the stack down.
+        Covers ALL registry namespaces (hf.co/... included)."""
+        return [info.name for info in model_store.list_models(self.models_dir)]
 
     def _prune_models(self, on_output: OutputCallback) -> None:
         keep = {self._with_tag(m) for m in (self.config.llm_model, self.config.embed_model) if m}
         if not keep:
             return
+        # Never sweep a model the operator imported over USB but hasn't
+        # switched to yet — on an air-gapped box that deletion costs another
+        # physical media trip. See model_store's keep-file comment.
+        keep |= {self._with_tag(m) for m in model_store.read_keep_file(self.app_root)}
         for name in self._cached_models():
             if name not in keep:
                 on_output(f">> Removing cached model no longer in use: {name}")
                 process.run_command([*self._ollama_cmd(), "rm", name], on_output,
                                     check=False, env=self._env())
         # `ollama list` hides models with a broken manifest, so sweep the
-        # manifest files directly too — mirrors ctrl_panel.sh's second pass.
+        # manifest files directly too — otherwise a half-broken model leaks
+        # disk forever and spams the Ollama log on every list request.
         for full in self._manifest_model_names():
             if full not in keep:
                 on_output(f">> Removing stale model manifest: {full}")
                 process.run_command([*self._ollama_cmd(), "rm", full], on_output,
                                     check=False, env=self._env())
+
+    # ---- model store operations (Backend interface; views/models.py) ------
+    # Pathway-independent: the store is a host directory everywhere (see
+    # _manifest_model_names), and pull/delete go through the _ollama_cmd
+    # seam, so PortableBackend inherits all of these unchanged.
+
+    @property
+    def models_dir(self) -> Path:
+        return self.app_root / "ollama_models"
+
+    def list_models(self) -> list[model_store.ModelInfo]:
+        return model_store.list_models(self.models_dir)
+
+    def ollama_reachable(self) -> bool:
+        return process.probe_http(f"http://localhost:{self.config.ollama_port}")
+
+    @_logged("model.pull")
+    def pull_model(self, on_output: OutputCallback, name: str) -> None:
+        if self.target_system == "offline":
+            raise BackendError(
+                "This is an offline (air-gapped) deployment — models cannot be "
+                "pulled here. Export a tarball on a networked machine and use "
+                "Import instead.")
+        if not self.ollama_reachable():
+            raise BackendError(
+                "Ollama is not running — start the stack (Manage tab) first, "
+                "then pull.")
+        on_output(f">> Pulling model: {name}")
+        process.run_command([*self._ollama_cmd(), "pull", name], on_output, env=self._env())
+
+    @_logged("model.delete")
+    def delete_model(self, on_output: OutputCallback, name: str) -> None:
+        # `ollama rm` (not a manual manifest delete) so shared blobs are
+        # reference-counted correctly — it needs the server up.
+        if not self.ollama_reachable():
+            raise BackendError(
+                "Ollama is not running — start the stack (Manage tab) first, "
+                "then delete.")
+        on_output(f">> Removing model: {name}")
+        process.run_command([*self._ollama_cmd(), "rm", name], on_output, env=self._env())
+        model_store.remove_from_keep_file(self.app_root, name)
+
+    @_logged("model.export")
+    def export_model(self, on_output: OutputCallback, name: str, dest_tar: Path) -> None:
+        if not model_store.model_present(self.models_dir, name):
+            self.pull_model(on_output, name)
+        try:
+            model_store.export_model(self.models_dir, name, dest_tar, on_output)
+        except model_store.ModelStoreError as exc:
+            raise BackendError(str(exc)) from exc
+
+    @_logged("model.import")
+    def import_model_tar(self, on_output: OutputCallback, tar_path: Path) -> list[str]:
+        try:
+            names = model_store.import_tarball(tar_path, self.models_dir, on_output)
+        except model_store.ModelStoreError as exc:
+            raise BackendError(str(exc)) from exc
+        model_store.add_to_keep_file(self.app_root, names)
+        on_output(">> Protected from the start-time prune (models.keep) until "
+                  "selected as the active model.")
+        return names
 
     def _inspect(self, label: str, container: str) -> ServiceStatus:
         try:
@@ -364,8 +441,8 @@ class DockerComposeBackend(Backend):
         healthy = {"healthy": True, "unhealthy": False}.get(health)
         detail = health or ("running" if running else "stopped")
         if label == "API" and running and healthy is None:
-            # The API container has no compose-level healthcheck; probe it
-            # directly, same as ctrl_panel.sh's `status` verb does with curl.
+            # The API container has no compose-level healthcheck; probe its
+            # /health endpoint directly.
             ok = process.probe_http(f"http://localhost:{self.config.api_port}/health")
             healthy = ok
             detail = "healthy" if ok else "starting"

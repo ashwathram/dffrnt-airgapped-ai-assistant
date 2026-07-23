@@ -38,7 +38,7 @@ exactly three files to `dist/` and nothing else:
 ```
 dist/
   dffrnt-offline.tar.gz   (or dffrnt-aws.tar.gz)
-  install.sh
+  dffrnt-manager          (frozen installer + control panel; GUI and headless CLI)
   README.md
 ```
 
@@ -52,9 +52,13 @@ transfer, etc.), keeping them together.
 ## 3. Install & run (target)
 
 ```bash
-./install.sh                 # checks prereqs, unpacks, loads images, starts the stack
-cd dffrnt && ./dffrnt_ctrl_panel.sh status # UI at http://localhost:8000
+./dffrnt-manager install           # checks prereqs, unpacks, loads images, starts the stack
+cd dffrnt && ./dffrnt-manager status   # UI at http://localhost:8000
 ```
+
+Headless boxes get the full CLI (`install`, `start`, `stop`, `status`, `logs`,
+`audit`, `reingest`, `models ...`); a desktop gets the GUI by running
+`./dffrnt-manager` with no arguments.
 
 See the generated `README.md` next to the tarball for the target-side details.
 
@@ -62,9 +66,7 @@ See the generated `README.md` next to the tarball for the target-side details.
 
 | File | Role |
 |------|------|
-| `package.sh` | Packager — builds the bundle + installer + README into `dist/` |
-| `install.sh` | Installer — deploys from the tarball (shipped in `dist/`) |
-| `dffrnt_ctrl_panel.sh` | Control panel — menu/CLI managing the containers + API, incl. force-reingest (shipped inside the tarball) |
+| `package.sh` | Packager — freezes `dffrnt-manager` (from `installer/`) and builds the bundle + README into `dist/` |
 | `Dockerfile` | Builds the app image (`dffrnt-assistant:latest`) with uv |
 | `docker-compose.yml` | Qdrant + Ollama + API (`prod` profile) stack |
 | `README.target.md` | Template for the target-side `README.md` (filled in by `package.sh`) |

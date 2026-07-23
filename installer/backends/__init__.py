@@ -1,10 +1,11 @@
 """The Backend interface every pathway implements.
 
-The GUI (views/) talks only to this interface, never to `docker compose` or
-a native process directly — that's what lets the same Dashboard/Logs views
-work against DockerComposeBackend (Linux/Windows, implemented) and, later,
-PortableBackend (macOS, stubbed) without an if/else on OS anywhere in the
-UI layer. See platform_detect.py for how a PlatformInfo picks a backend.
+The UI layers (views/ for the GUI, cli.py for headless targets) talk only
+to this interface, never to `docker compose` or a native process directly —
+that's what lets the same surfaces work against DockerComposeBackend
+(Linux/Windows) and PortableBackend (macOS) without an if/else on OS
+anywhere above. See platform_detect.py for how a PlatformInfo picks a
+backend, and make_backend below for the single place that choice is made.
 """
 
 from __future__ import annotations
@@ -37,9 +38,12 @@ class BackendError(RuntimeError):
 
 
 class Backend(ABC):
-    """Verbs mirror deploy/dffrnt_ctrl_panel.sh's command set: start, stop,
-    restart, status, logs, reingest — plus check_prerequisites, which
-    mirrors install.sh's prerequisite gate.
+    """The management verb set: start, stop, restart, status, logs,
+    reingest, the model-store operations, and check_prerequisites (the
+    pre-start gate). This is the reference implementation of stack
+    management — the retired deploy shell scripts (dffrnt_ctrl_panel.sh,
+    install.sh) were its ancestors, and their behavior contracts (GPU
+    override, model ensure/prune, health-wait order) live on here.
 
     All long-running methods stream progress via an OutputCallback rather
     than returning captured text, so the GUI can pipe it straight into a
@@ -83,3 +87,58 @@ class Backend(ABC):
         only invoke this after showing the operator reingest_preview's
         output and getting explicit confirmation (see views/dashboard.py)."""
         raise NotImplementedError("reingest is not implemented for this pathway yet.")
+
+    # ---- model store operations (views/models.py) -------------------------
+    # All host-side against the ollama_models directory, so they work with
+    # the stack down — except pull/delete, which talk to the serving Ollama.
+
+    def list_models(self):
+        """Non-mutating: every model in the store as model_store.ModelInfo,
+        across all registry namespaces."""
+        raise NotImplementedError("model management is not implemented for this pathway yet.")
+
+    def ollama_reachable(self) -> bool:
+        """Non-mutating: is the serving Ollama up (pull/delete need it)?"""
+        raise NotImplementedError("model management is not implemented for this pathway yet.")
+
+    def pull_model(self, on_output: OutputCallback, name: str) -> None:
+        """Pull ``name`` from the registry into the store (networked
+        machines only — an offline bundle refuses). on_output comes first,
+        matching the (self, on_output, *args) shape every mutating verb
+        shares so they wrap uniformly (see docker_backend._logged)."""
+        raise NotImplementedError("model management is not implemented for this pathway yet.")
+
+    def delete_model(self, on_output: OutputCallback, name: str) -> None:
+        """Remove ``name`` from the store and the keep file. Mutating and,
+        on an air-gapped box, unrecoverable — confirm first."""
+        raise NotImplementedError("model management is not implemented for this pathway yet.")
+
+    def export_model(self, on_output: OutputCallback, name: str, dest_tar) -> None:
+        """Pack ``name`` (manifest + blobs) into an uncompressed tar for
+        USB transfer, pulling it first if absent (online machines)."""
+        raise NotImplementedError("model management is not implemented for this pathway yet.")
+
+    def import_model_tar(self, on_output: OutputCallback, tar_path) -> list[str]:
+        """Merge an exported model tar into the store (checksum-verified)
+        and protect the imported models from the start-time prune. Returns
+        the imported model names."""
+        raise NotImplementedError("model management is not implemented for this pathway yet.")
+
+    def start_dev(self, on_output: OutputCallback) -> None:
+        """Dev-loop bring-up: only the dependency services (Qdrant +
+        Ollama), so the API can run on the host under a debugger. Never
+        prunes models. Not meaningful on an installed target."""
+        raise NotImplementedError("the dev loop is not implemented for this pathway.")
+
+
+def make_backend(app_root, config, platform_info) -> "Backend":
+    """The one place a PlatformInfo picks a Backend implementation, shared
+    by the GUI shell (app.py) and the CLI. Imports live inside so this
+    module stays import-cycle-free (concrete backends import from here)."""
+    from ..platform_detect import Pathway
+    from .docker_backend import DockerComposeBackend
+    from .portable_backend import PortableBackend
+
+    if platform_info.pathway is Pathway.PORTABLE:
+        return PortableBackend(app_root, config)
+    return DockerComposeBackend(app_root, config)

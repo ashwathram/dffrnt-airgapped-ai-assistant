@@ -1,5 +1,5 @@
-"""Logs view: follow container logs, the GUI equivalent of
-`dffrnt_ctrl_panel.sh logs [service]`.
+"""Logs view: follow container logs per service — the GUI face of the
+CLI's `logs [service]` command.
 """
 
 from __future__ import annotations

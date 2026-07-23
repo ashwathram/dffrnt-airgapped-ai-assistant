@@ -8,10 +8,10 @@
 # you package is exactly what a deployment runs (and which models it carries).
 
 # Ollama GPU acceleration — Linux/Windows (container pathway) only. Requires the
-# NVIDIA driver + Container Toolkit on the host (deploy/install-prerequisites.sh
-# installs both); dffrnt_ctrl_panel.sh refuses to start in GPU mode when the
-# toolkit is missing. Defaults to false so a fresh checkout runs anywhere; set
-# true on any NVIDIA-equipped machine.
+# NVIDIA driver + Container Toolkit on the host (install both from your distro /
+# NVIDIA's repo); the control panel (dffrnt-manager) refuses to start in GPU
+# mode when the toolkit is missing and says so. Defaults to false so a fresh
+# checkout runs anywhere; set true on any NVIDIA-equipped machine.
 # macOS (portable pathway): this flag is IGNORED. Ollama runs as a native host
 # process and uses Metal automatically on Apple Silicon — there is no NVIDIA
 # runtime to gate on, and nothing to configure for GPU inference.

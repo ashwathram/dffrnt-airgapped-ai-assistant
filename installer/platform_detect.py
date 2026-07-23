@@ -5,8 +5,8 @@ Two pathways exist by design:
 
   CONTAINER — Linux and Windows. Qdrant + Ollama + the API all run as
   Docker containers (see deploy/docker-compose.yml), managed via
-  `docker compose` exactly like dffrnt_ctrl_panel.sh does today.
-  backends.docker_backend.DockerComposeBackend implements this pathway.
+  `docker compose`. backends.docker_backend.DockerComposeBackend
+  implements this pathway.
 
   PORTABLE — macOS. Docker's Linux VM has no Metal/GPU passthrough, so a
   containerized Ollama would be CPU-only. The macOS bundle instead carries
@@ -88,9 +88,9 @@ def detect_docker_present() -> bool:
 
 
 def detect_nvidia_gpu() -> bool:
-    """Best-effort GPU probe, mirroring install-prerequisites.sh's own check
-    (`nvidia-smi` on the PATH and responding). Never raises — a probe that
-    can't run just means "no GPU detected", not an installer crash.
+    """Best-effort GPU probe: `nvidia-smi` on the PATH and responding.
+    Never raises — a probe that can't run just means "no GPU detected",
+    not an installer crash.
     """
     nvidia_smi = shutil.which("nvidia-smi")
     if not nvidia_smi:

@@ -1,15 +1,14 @@
-"""CONTAINER-pathway installer (Linux/Windows): a port of deploy/install.sh
-stage for stage. Treat that script as the reference implementation, same
-rule as docker_backend.py vs dffrnt_ctrl_panel.sh.
+"""CONTAINER-pathway installer (Linux/Windows). This is the reference
+implementation of deployment (it absorbed the retired deploy/install.sh
+shell script stage for stage, same as docker_backend.py absorbed the
+control-panel script). Notable properties:
 
-Differences from the script, all deliberate:
   - tarfile instead of a `tar` binary (works on Windows; one less prereq).
-  - The operator picks bundle + destination in the GUI, so the "exactly one
-    dffrnt-*.tar.gz next to me" auto-detection lives in the view, not here.
-  - The config-overwrite question is answered by the view (a dialog) BEFORE
-    install starts, via keep_config — install.sh prompts mid-run instead.
+  - Bundle + destination selection lives in the callers (view/CLI), which
+    also answer the config-overwrite question BEFORE install starts, via
+    keep_config — a running install never stops to ask.
   - First start is DockerComposeBackend.start() — the same code path the
-    Manage tab uses — rather than shelling out to dffrnt_ctrl_panel.sh.
+    Manage tab and CLI `start` use.
 """
 
 from __future__ import annotations
@@ -28,8 +27,8 @@ from . import BundleInfo, InstallError, Installer, OutputCallback
 
 class DockerInstaller(Installer):
     def check_prerequisites(self) -> list[PrereqCheck]:
-        """install.sh's [1/4] gate, minus tar (tarfile is stdlib) and curl
-        (probe_http is stdlib) — Docker + Compose is all that's left."""
+        """The pre-install gate: Docker + Compose v2 is everything a target
+        needs (tar and curl equivalents are stdlib — tarfile, probe_http)."""
         logger = get_logger()
         logger.info("install.check_prerequisites: starting")
         checks = []
@@ -137,7 +136,7 @@ class DockerInstaller(Installer):
         out(f">> Installing from {bundle.name} into {dest}")
 
         # ---- update handling: stop the old stack, protect the config ----
-        # (all no-ops on a fresh install, same as install.sh)
+        # (all no-ops on a fresh install)
         preserved_config = None
         if (dest / "docker-compose.yml").is_file():
             out(f">> Updating an existing install in {dest} — stopping the running stack first")
@@ -196,13 +195,12 @@ class DockerInstaller(Installer):
 
 
 def default_install_dest() -> Path:
-    """install.sh's default: ./dffrnt next to the installer. In a dev
-    checkout that's <repo>/dffrnt; from a frozen binary it's next to the
-    executable — writable in both cases, unlike a system dir."""
+    """Default destination: ./dffrnt under the invoking directory. In a dev
+    checkout that's <repo>/dffrnt; run next to a bundle it's a sibling of
+    the tarball — writable in both cases, unlike a system dir."""
     return Path.cwd() / "dffrnt"
 
 
 def is_installed(app_root: Path) -> bool:
-    """Heuristic install.sh also relies on: an app root is 'installed' when
-    the compose file is present."""
+    """An app root is 'installed' when the compose file is present."""
     return (app_root / "docker-compose.yml").is_file()

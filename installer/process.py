@@ -88,8 +88,8 @@ def run_capture(cmd: list[str], *, cwd=None, env=None, timeout: float | None = 1
 
 
 def probe_http(url: str, timeout: float = 2.0) -> bool:
-    """True if `url` responds to a GET without raising. Used for the same
-    purpose as ctrl_panel.sh's `curl -sf` health checks."""
+    """True if `url` responds to a GET without raising — the stack's
+    `curl -sf`-style health probe."""
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:
             return 200 <= resp.status < 300

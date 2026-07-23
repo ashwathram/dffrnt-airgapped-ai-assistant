@@ -19,12 +19,12 @@
         },
         {
             // Rebuild the app image from source, then run the containerized prod
-            // stack via dffrnt_ctrl_panel.sh (detached; stop with
-            // `deploy/dffrnt_ctrl_panel.sh stop`).
+            // stack via the manager CLI (detached; stop with
+            // `uv run python -m installer stop`).
             "name": "DFFRNT AI Assistant (Prod: Docker container)",
             "type": "node-terminal",
             "request": "launch",
-            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && bash deploy/dffrnt_ctrl_panel.sh start",
+            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && uv run python -m installer start",
             "cwd": "${workspaceFolder}"
         },
         {
@@ -84,32 +84,34 @@
             "console": "integratedTerminal"
         },
         {
-            // Package a deployment bundle into dist/ (see deploy/README.md), then
-            // ship the GUI installer (installer/, pure-stdlib source) into dist/
-            // next to the tarball — it can't live inside the bundle it unpacks.
-            // Copy MUST follow package.sh, which starts by wiping dist/.
+            // Package a deployment bundle into dist/ (see deploy/README.md).
+            // package.sh freezes installer/ into the dffrnt-manager binary and
+            // ships it inside the bundle AND next to the tarball — nothing
+            // else to copy.
             "name": "Package: AWS deployment",
             "type": "node-terminal",
             "request": "launch",
-            "command": "bash deploy/package.sh TARGET_SYSTEM=AWS && rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && echo '>> GUI installer shipped: dist/installer'",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=AWS",
             "cwd": "${workspaceFolder}"
         },
         {
             "name": "Package: Offline deployment",
             "type": "node-terminal",
             "request": "launch",
-            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE && rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && echo '>> GUI installer shipped: dist/installer'",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE",
             "cwd": "${workspaceFolder}"
         },
         {
-            // macOS target: OFFLINE bundle + GUI installer + the portable
-            // runtime (native Ollama with Metal, colima/lima/docker CLI for the
-            // Qdrant + API containers). The app image must be linux/arm64 for
-            // Apple Silicon — build on an arm64 machine or via buildx.
+            // macOS target: OFFLINE bundle + installer as SOURCE (a Linux-
+            // frozen dffrnt-manager can't run on a Mac; target uses
+            // python3 -m installer) + the portable runtime (native Ollama with
+            // Metal, colima/lima/docker CLI for the Qdrant + API containers).
+            // The app image must be linux/arm64 for Apple Silicon — build on
+            // an arm64 machine or via buildx.
             "name": "Package: macOS deployment",
             "type": "node-terminal",
             "request": "launch",
-            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE && rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && bash deploy/package-macos-portable.sh arm64 && echo '>> macOS dist complete: bundle + installer/ + portable/macos'",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE && rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && bash deploy/package-macos-portable.sh arm64 && echo '>> macOS dist complete: bundle + installer source + portable/macos'",
             "cwd": "${workspaceFolder}"
         }
     ]

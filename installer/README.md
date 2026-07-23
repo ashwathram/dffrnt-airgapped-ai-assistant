@@ -1,37 +1,40 @@
-# DFFRNT Control Panel (desktop GUI)
+# DFFRNT Control Panel (installer/manager)
 
-A Tkinter desktop app with three tabs:
+The single management surface for the stack — there are no shell scripts on
+targets anymore (only the two packaging scripts remain in `deploy/`, and
+they run on the build machine). One codebase, two faces:
 
-- **Install** — first-run deployment from a `dffrnt-*.tar.gz` bundle,
-  porting [`deploy/install.sh`](../deploy/install.sh): pick bundle + dest,
-  prereq gate, unpack (stdlib `tarfile`, so no `tar` binary needed —
-  works on Windows too), `docker load`, first start.
-- **Manage** — day-to-day lifecycle, porting
-  [`deploy/dffrnt_ctrl_panel.sh`](../deploy/dffrnt_ctrl_panel.sh): start,
-  stop, restart, status, reingest.
-- **Logs** — follow container logs per service.
+- **GUI** (launch with no arguments): a Tkinter app with four tabs —
+  **Install** (first-run deployment from a `dffrnt-*.tar.gz` bundle: pick
+  bundle + dest, prereq gate, unpack via stdlib `tarfile`, `docker load`,
+  first start), **Manage** (start/stop/restart, status, reingest),
+  **Models** (switch the active LLM; move models on/off an air-gapped
+  machine as tarballs — see below), **Logs** (follow container logs).
+- **CLI** (`cli.py`, any argument): the same verbs headless —
+  `install`, `start`, `stop`, `restart`, `status`, `logs`, `audit`,
+  `reingest`, `dev`, `models list|pull|rm|use|export|import` — for SSH'd
+  or displayless boxes (AWS targets). The CLI never imports tkinter.
 
 Runs unchanged on Linux, Windows, and macOS. Tkinter ships with Python
-itself, so this adds no dependency and freezes cleanly for air-gapped
-delivery.
+itself, so this adds no third-party runtime dependency.
+
+**Shipping:** `deploy/package.sh` freezes this package (PyInstaller, the
+`package` dependency group) into a self-contained `dffrnt-manager` binary
+and ships it twice: next to the tarball in `dist/` (bootstrap install on a
+box that has only Docker) and inside the bundle (managing the installed
+stack from the app root). The binary is platform-specific — package on a
+machine matching the target, like the container images. macOS currently
+ships the package as *source* instead (`python3 -m installer`) until
+freezing is exercised on real Apple hardware.
 
 **Status: preliminary.** The container pathway (Linux/Windows) is
 implemented; management verified against a real `docker compose` stack and
 the install unpack logic against a synthetic bundle. The portable pathway
 (macOS: native Ollama with Metal + colima-hosted containers) is implemented
-and logic-tested on this Linux box with a faked runtime — it has NOT yet
-run on actual macOS hardware. `install-prerequisites.sh` (Docker/NVIDIA
-host provisioning on Linux) remains out of scope — the Install tab's prereq
-gate tells you what's missing but doesn't install it.
-
-**Shipping caveat for the Install tab:** a GUI that installs the bundle
-cannot itself live inside that bundle. For install-from-scratch on a target
-machine, this app must ship in `dist/` *next to* the tarball (like
-`install.sh` does) — and since targets are only guaranteed to have Docker,
-that realistically means freezing it (PyInstaller) into a self-contained
-binary. Until that's wired into `package.sh`, the Install tab is usable
-from a dev checkout (installing/updating a local deployment from a locally
-packaged `dist/`).
+and logic-tested on a Linux box with a faked runtime — it has NOT yet run
+on actual macOS hardware. Host provisioning (Docker Engine / NVIDIA driver
++ Container Toolkit) is out of scope — the prereq gates tell you exactly
+what's missing but don't install it.
 
 ## Running it
 
@@ -46,23 +49,67 @@ package — install your distro's `tk` (Arch: `tk`, Debian/Ubuntu:
 `python3-tk`) if `import tkinter` fails. Windows/macOS python.org
 installers already bundle Tcl/Tk, so this only comes up on Linux dev boxes.
 
-It auto-detects the app root the same way `dffrnt_ctrl_panel.sh` does: a
+It auto-detects the app root: a
 sibling `deploy/` directory in a dev checkout, or the directory it's
 running from in an installed bundle (override with `DFFRNT_APP_ROOT`).
 `config.toml` resolution follows the same rule as `DFFRNT_CONFIG`.
 
+## The Models tab (offline model transfer + switching)
+
+Everything the runtime consumes is Ollama's store format — a
+`manifests/<registry>/…/<name>/<tag>` JSON index plus content-addressed
+`blobs/sha256-*` — living host-side in `<app_root>/ollama_models` on every
+pathway (bind-mounted into the container on Linux/Windows, `OLLAMA_MODELS`
+for the native macOS process). The Models tab operates on that directory
+directly (`model_store.py`), so listing/import/export work with the stack
+down; only pull and delete talk to the serving Ollama.
+
+**Getting a model onto an air-gapped machine:**
+
+1. On the **networked staging machine**: Models → Export — pick an
+   installed model or type any Ollama name (it's pulled first if absent),
+   choose a file on the USB drive. One uncompressed `.tar` of the manifest
+   + blobs (weights are already quantized; gzip would burn minutes for
+   ~1%). Exporting refuses up front if the drive is FAT32 and the model
+   exceeds its 4 GiB single-file ceiling — use exFAT.
+2. On the **air-gapped machine**: Models → Import — every blob is
+   sha256-verified against its filename before anything touches the store
+   (catches USB corruption), manifests are checked for completeness, and
+   blobs dedupe by hash.
+3. Select it under **Active model** → Apply & restart. This rewrites
+   `llm_model` in `config.toml` (surgically — the file's comments survive)
+   and restarts the stack; start's ensure/prune loads the new model and
+   reclaims the old one's disk.
+
+**The prune interaction:** start-time pruning removes every cached model
+the live config doesn't reference — right for reclaiming disk on a swap,
+wrong for a model just imported but not yet selected. Imported models are
+therefore recorded in `<app_root>/models.keep` and protected from the
+sweep (GUI and CLI alike) until they become the
+active model or are deleted from the Installed list.
+
+Switching is **LLM-only** by design: changing `embed_model` changes the
+vector dimension and demands a full re-ingest of every document, so it
+stays a deliberate `config.toml` edit.
+
+A raw HuggingFace download is *not* importable as-is: a safetensors repo
+needs a llama.cpp convert + quantize first, and a GGUF file needs one
+`ollama create` on any Ollama machine — after either, it's in a store and
+exportable from this tab. `hf.co/...` pulls land under their own registry
+namespace, which the store walk covers.
+
 ## Reingest
 
-The Dashboard's "Reingest documents" button mirrors
-`dffrnt_ctrl_panel.sh reingest` exactly, including its safety order:
+The Dashboard's "Reingest documents" button (and the CLI's `reingest`)
+follow a strict safety order:
 
 1. Runs `--dry-run` inside the API container and streams the reconciliation
    preview (what would change) into the console. Nothing is mutated yet.
 2. On a clean preview, a confirm dialog asks the operator to proceed.
 3. Only on "yes" does it run the real `--force --verbose` reingest.
 
-Declining, or the API container not running (checked up front, same as the
-bash script's guard), aborts with nothing changed. See
+Declining, or the API container not running (checked up front), aborts
+with nothing changed. See
 `Backend.reingest_preview` / `Backend.reingest_apply` in
 `backends/__init__.py` and their implementation in `docker_backend.py`.
 
@@ -73,7 +120,7 @@ Every lifecycle operation — `start`, `stop`, `restart` (via `start`/`stop`),
 full output plus a begin/end/error marker to `<app_root>/logs/installer.log`
 (falls back to the OS temp dir if that path isn't writable), in addition to
 whatever's shown live in the GUI console. This is the same `logs/`
-directory `dffrnt_ctrl_panel.sh`/the API already use for `audit.jsonl`. The
+directory the API already uses for `audit.jsonl`. The
 app logs its own startup context too — detected platform, resolved config,
 and which backend it picked — so a support request can start from the log
 file alone.
@@ -109,11 +156,10 @@ Ollama via `host.docker.internal` (compose stdin override with
 `depends_on: !override` to drop the never-started ollama container).
 
 The portable classes subclass the container ones at explicit seams
-(`_env`, `_ollama_cmd`, `_preflight`, `_compose_up`,
-`_manifest_model_names`; installer: `_backend_for`, `_post_unpack`,
-`_image_tars`, `_load_env`), so the lifecycle flow, model ensure/prune,
-health waits, and reingest are single-sourced — and the GUI layer needed
-no changes at all.
+(`_env`, `_ollama_cmd`, `_preflight`, `_compose_up`; installer:
+`_backend_for`, `_post_unpack`, `_image_tars`, `_load_env`), so the
+lifecycle flow, model ensure/prune/store operations, health waits, and
+reingest are single-sourced — and the GUI layer needed no changes at all.
 
 **Air-gap caveat (macOS only):** colima's *first* start downloads its VM
 guest image. Warm it on a networked Mac before transferring `dist/`, or
@@ -124,7 +170,9 @@ binaries) is fully offline. See `package-macos-portable.sh`'s header.
 
 ```
 installer/
-  app.py                  Tk root window, Install/Manage/Logs nav, post-install re-point
+  app.py                  Tk root window, Install/Manage/Models/Logs nav, re-point logic
+  cli.py                  headless CLI over the same backends (no tkinter import)
+  model_store.py          Ollama store walk, tarball export/import, models.keep
   theme.py                Palette/fonts ported from dffrnt_assistant/ui/styles/*.css
   platform_detect.py      OS/arch/GPU detection, the Pathway enum
   config.py               config.toml / bundle.conf / app-root resolution
@@ -133,16 +181,17 @@ installer/
   widgets.py               styled-widget factories + the ScrollableFrame container
   backends/
     __init__.py            Backend ABC + PrereqCheck/ServiceStatus/BackendError
-    docker_backend.py       CONTAINER pathway — ports dffrnt_ctrl_panel.sh verb for verb
+    docker_backend.py       CONTAINER pathway — compose lifecycle + model ensure/prune
     portable_backend.py     PORTABLE pathway — native Metal Ollama + colima containers
   installers/
     __init__.py            Installer ABC + BundleInfo/InstallError + find_bundles()
-    docker_installer.py     CONTAINER pathway — ports install.sh stage for stage
+    docker_installer.py     CONTAINER pathway — unpack, image load, first start
     portable_installer.py   PORTABLE pathway — + runtime staging, skips the ollama image
   views/
     install.py              bundle picker, dest, prereq gate, install + streamed console
     dashboard.py            the Manage tab: prereqs, service status, start/stop/restart/reingest
     logs.py                  service picker + follow/stop streaming logs
+    models.py                the Models tab: swap/import/export/delete
   assets/icon.png           window icon, generated from ui/img/dffrnt_favicon.jpg
 ```
 
@@ -167,13 +216,11 @@ for the token source of truth.
   exercised on Linux with a faked runtime; colima's first boot, the
   host.docker.internal route from the VM, Metal inference, and the full
   install flow need a real Apple Silicon machine (see the checklist below).
-- `install-prerequisites.sh`'s job (Docker Engine / NVIDIA driver + toolkit
-  provisioning on Linux) — inherently privileged, OS-specific host
-  mutation; the Install tab's prereq gate reports what's missing instead.
-- Packaging as a native app (PyInstaller/py2app/etc.) and wiring it into
-  `package.sh`'s `dist/` output — required before the Install tab can serve
-  a bare target machine (see the shipping caveat at the top). On macOS the
-  target additionally needs a Python with Tk until the GUI is frozen.
+- Host provisioning (Docker Engine / NVIDIA driver + toolkit on Linux) —
+  inherently privileged, OS-specific host mutation; the prereq gates
+  report what's missing instead.
+- Freezing on macOS (py2app or PyInstaller-on-Mac) — until then the macOS
+  dist ships this package as source and the target needs a Python with Tk.
 - Offline seeding of colima's guest image (see the air-gap caveat above).
 
 ## Manual verification done so far

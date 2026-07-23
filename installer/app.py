@@ -1,12 +1,13 @@
 """Main window: a sidebar + content shell echoing the web UI's layout
 (dffrnt_assistant/ui/index.html's .sidebar/.brand/.nav-btn/.main/.topbar),
-switching between the Install, Manage, and Logs views.
+switching between the Install, Manage, Models, and Logs views.
 
-Install (first-run deployment, ports install.sh) and Manage (day-to-day
-lifecycle, ports dffrnt_ctrl_panel.sh) are separate tabs because they are
-separate stages with separate shell counterparts. When the Install tab
-deploys into a new app root, _on_installed re-points the Manage and Logs
-tabs at it in place — no restart needed.
+Install (first-run deployment) and Manage (day-to-day lifecycle) are
+separate tabs because they are separate stages: install runs before an app
+root exists. When the Install tab deploys into a new app root,
+_on_installed re-points the Manage, Models, and Logs tabs at it in place —
+no restart needed. Every tab's verbs are also headless CLI commands
+(cli.py); this shell is only the Tk face over the same backends.
 """
 
 from __future__ import annotations
@@ -16,34 +17,20 @@ from pathlib import Path
 from tkinter import ttk
 
 from . import theme
-from .backends import Backend
-from .backends.docker_backend import DockerComposeBackend
-from .backends.portable_backend import PortableBackend
-from .config import AppConfig, find_app_root, load_config
-from .installers import Installer
-from .installers.docker_installer import DockerInstaller, is_installed
-from .installers.portable_installer import PortableInstaller
+from .backends import make_backend
+from .config import find_app_root, load_config
+from .installers import make_installer
+from .installers.docker_installer import is_installed
 from .logging_setup import configure_logging
-from .platform_detect import PlatformInfo, Pathway, detect
+from .platform_detect import detect
 from .views.dashboard import DashboardView
 from .views.install import InstallView
 from .views.logs import LogsView
+from .views.models import ModelsView
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
-_NAV_TITLES = {"install": "Install", "manage": "Manage", "logs": "Logs"}
-
-
-def _make_backend(app_root: Path, config: AppConfig, platform_info: PlatformInfo) -> Backend:
-    if platform_info.pathway is Pathway.PORTABLE:
-        return PortableBackend(app_root, config)
-    return DockerComposeBackend(app_root, config)
-
-
-def _make_installer(platform_info: PlatformInfo) -> Installer:
-    if platform_info.pathway is Pathway.PORTABLE:
-        return PortableInstaller()
-    return DockerInstaller()
+_NAV_TITLES = {"install": "Install", "manage": "Manage", "models": "Models", "logs": "Logs"}
 
 
 class InstallerApp(tk.Tk):
@@ -70,8 +57,8 @@ class InstallerApp(tk.Tk):
             self.app_root, self.config.api_port, self.config.gpu,
             self.config.llm_model, self.config.embed_model,
         )
-        self.backend = _make_backend(self.app_root, self.config, self.platform_info)
-        self.installer = _make_installer(self.platform_info)
+        self.backend = make_backend(self.app_root, self.config, self.platform_info)
+        self.installer = make_installer(self.platform_info)
         self.logger.info("backend: %s, installer: %s",
                          type(self.backend).__name__, type(self.installer).__name__)
 
@@ -111,6 +98,7 @@ class InstallerApp(tk.Tk):
         nav.pack(fill="x")
         self._add_nav(nav, "install", "Install")
         self._add_nav(nav, "manage", "Manage")
+        self._add_nav(nav, "models", "Models")
         self._add_nav(nav, "logs", "Logs")
 
         ttk.Frame(sidebar, style="Sidebar.TFrame").pack(fill="both", expand=True)  # spacer
@@ -139,6 +127,9 @@ class InstallerApp(tk.Tk):
             self._content, self.platform_info, self.installer, self.app_root,
             on_installed=self._on_installed)
         self._views["manage"] = DashboardView(self._content, self.platform_info, self.config, self.backend)
+        self._views["models"] = ModelsView(
+            self._content, self.platform_info, self.config, self.backend,
+            self.app_root, on_config_changed=self.reload_config)
         self._views["logs"] = LogsView(self._content, self.backend)
         for view in self._views.values():
             view.grid(row=0, column=0, sticky="nsew")
@@ -166,17 +157,28 @@ class InstallerApp(tk.Tk):
         self._topbar_title.configure(text=_NAV_TITLES[key])
         self._active = key
 
-    # ---- post-install re-point --------------------------------------------
+    # ---- post-install / config-change re-point ----------------------------
     def _on_installed(self, app_root: Path) -> None:
         """InstallView succeeded: point the whole app (config, backend,
-        Manage + Logs tabs) at the freshly installed root and show Manage."""
+        Manage + Models + Logs tabs) at the freshly installed root and show
+        Manage."""
         self.logger.info("installed: re-pointing app at %s", app_root)
         self.app_root = app_root
-        self.config = load_config(app_root)
-        self.backend = _make_backend(app_root, self.config, self.platform_info)
-        self._views["manage"].set_backend(self.backend, self.config)
-        self._views["logs"].set_backend(self.backend)
+        self.reload_config()
         self._show("manage")
+
+    def reload_config(self) -> None:
+        """Re-read config.toml and rebuild the backend, re-pointing every
+        backend-holding view. Called after install and after the Models tab
+        rewrites llm_model — the backend's AppConfig is a frozen snapshot,
+        so the ensure/prune logic in the next start must get a fresh one."""
+        self.config = load_config(self.app_root)
+        self.logger.info("config reloaded: llm_model=%s embed_model=%s",
+                         self.config.llm_model, self.config.embed_model)
+        self.backend = make_backend(self.app_root, self.config, self.platform_info)
+        self._views["manage"].set_backend(self.backend, self.config)
+        self._views["models"].set_backend(self.backend, self.config, self.app_root)
+        self._views["logs"].set_backend(self.backend)
 
 
 def main() -> None:

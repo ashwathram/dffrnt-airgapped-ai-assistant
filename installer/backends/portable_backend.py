@@ -28,9 +28,9 @@ regardless of the host's Apple Silicon GPU. Instead:
     network mode.
 
 This subclasses DockerComposeBackend and overrides its pathway seams
-(_env/_ollama_cmd/_preflight/_compose_up/_manifest_model_names) plus the
-Ollama-specific status/log handling; the lifecycle flow, model ensure/
-prune, health waits, and reingest are inherited unchanged.
+(_env/_ollama_cmd/_preflight/_compose_up) plus the Ollama-specific
+status/log handling; the lifecycle flow, model ensure/prune/store
+operations, health waits, and reingest are inherited unchanged.
 """
 
 from __future__ import annotations
@@ -89,13 +89,10 @@ class PortableBackend(DockerComposeBackend):
     def _ollama_cmd(self) -> list[str]:
         return [str(self.bin_dir / "ollama")]
 
-    def _manifest_model_names(self) -> list[str]:
-        # Native store on the host filesystem — walk it directly.
-        root = self.app_root / "ollama_models" / "manifests" / "registry.ollama.ai" / "library"
-        if not root.is_dir():
-            return []
-        return [f"{p.parent.name}:{p.name}" for p in root.rglob("*")
-                if p.is_file() and p.parent.parent == root]
+    # _manifest_model_names: inherited. The parent now walks the host-side
+    # store directly (app_root/ollama_models — the same directory OLLAMA_MODELS
+    # points the native process at), so the old host-walk override here became
+    # the shared implementation.
 
     # ---- prerequisites ----------------------------------------------------
     def _check_prerequisites(self) -> list[PrereqCheck]:

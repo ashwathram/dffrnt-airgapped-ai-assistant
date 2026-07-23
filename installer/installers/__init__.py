@@ -1,18 +1,19 @@
-"""The Installer interface — first-run deployment, the GUI counterpart of
-deploy/install.sh (as backends/ is the counterpart of dffrnt_ctrl_panel.sh).
+"""The Installer interface — first-run deployment (the retired
+deploy/install.sh shell script's job, absorbed here; both the GUI Install
+tab and the CLI `install` command drive it).
 
 Same pathway split as backends/: DockerInstaller for the CONTAINER pathway
-(Linux/Windows), PortableInstaller stubbed for macOS. The install flow is
+(Linux/Windows), PortableInstaller for macOS. The install flow is
 distinct from management because it runs BEFORE an app root exists — the
 InstallView owns an Installer, and only after install() succeeds does the
 app construct a Backend against the new app root (see app.py's
 on_installed re-point).
 
 Shipping note: for install-from-scratch to work on a box that has nothing
-yet, this GUI must travel NEXT TO the bundle tarball in dist/ (like
-install.sh does), not inside it — the tarball's contents don't exist until
-install runs. In a dev checkout it can also (re)install over deploy/ from
-a locally packaged dist/.
+yet, the frozen dffrnt-manager binary travels NEXT TO the bundle tarball
+in dist/ (package.sh puts it there), not only inside the bundle — the
+tarball's contents don't exist until install runs. In a dev checkout it
+can also (re)install over deploy/ from a locally packaged dist/.
 """
 
 from __future__ import annotations
@@ -48,7 +49,7 @@ class Installer(ABC):
     @abstractmethod
     def check_prerequisites(self) -> list[PrereqCheck]:
         """Non-mutating. What install() needs before it can run — the
-        install.sh [1/4] gate."""
+        pre-install gate (Docker Engine + Compose v2)."""
 
     @abstractmethod
     def inspect_bundle(self, bundle: Path) -> BundleInfo:
@@ -58,16 +59,29 @@ class Installer(ABC):
     @abstractmethod
     def install(self, bundle: Path, dest: Path, on_output: OutputCallback,
                 *, keep_config: bool = True) -> Path:
-        """Deploy `bundle` into `dest` and return the resulting app root.
-        Mirrors install.sh: stop old stack, preserve (keep_config=True) or
+        """Deploy `bundle` into `dest` and return the resulting app root:
+        stop any old stack, preserve (keep_config=True) or
         archive-and-overwrite the edited config, unpack, load images, first
-        start. The view resolves keep_config with a dialog BEFORE starting,
-        where install.sh prompts mid-run."""
+        start. Callers resolve keep_config BEFORE starting (GUI dialog /
+        CLI flag) — a background job must never block on a question."""
+
+
+def make_installer(platform_info) -> "Installer":
+    """The one place a PlatformInfo picks an Installer implementation,
+    shared by the GUI shell and the CLI (same pattern as
+    backends.make_backend)."""
+    from ..platform_detect import Pathway
+    from .docker_installer import DockerInstaller
+    from .portable_installer import PortableInstaller
+
+    if platform_info.pathway is Pathway.PORTABLE:
+        return PortableInstaller()
+    return DockerInstaller()
 
 
 def find_bundles(search_dirs: list[Path]) -> list[Path]:
-    """dffrnt-*.tar.gz candidates near the app, newest first — the same
-    auto-detection install.sh does for a tarball sitting next to it."""
+    """dffrnt-*.tar.gz candidates near the app, newest first — auto-detects
+    a tarball sitting next to the manager binary or the checkout."""
     seen: dict[Path, None] = {}
     for d in search_dirs:
         if d.is_dir():

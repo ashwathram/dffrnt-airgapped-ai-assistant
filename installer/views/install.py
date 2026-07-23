@@ -1,9 +1,10 @@
 """Install view: first-run deployment from a bundle tarball — the GUI
-equivalent of deploy/install.sh. Pick a bundle (auto-detected like
-install.sh, or Browse), pick a destination, check prerequisites, Install.
+face of the CLI's `install` command. Pick a bundle (auto-detected when one
+sits nearby, or Browse), pick a destination, check prerequisites, Install.
 
-On success it calls the app shell's on_installed(app_root) so the Manage
-and Logs tabs re-point at the newly installed stack without a restart.
+On success it calls the app shell's on_installed(app_root) so the Manage,
+Models, and Logs tabs re-point at the newly installed stack without a
+restart.
 """
 
 from __future__ import annotations
@@ -134,9 +135,9 @@ class InstallView(ttk.Frame):
 
     # ---- bundle selection --------------------------------------------------
     def _autodetect_bundle(self) -> None:
-        # Same spirit as install.sh's "exactly one dffrnt-*.tar.gz next to
-        # me": look next to the app root, in dist/, and in the cwd; take the
-        # newest. The operator can always Browse to override.
+        # "A dffrnt-*.tar.gz sitting near me": look next to the app root,
+        # in dist/, and in the cwd; take the newest. The operator can
+        # always Browse to override.
         candidates = find_bundles([
             self.app_root, self.app_root.parent,
             self.app_root.parent / "dist", Path.cwd(), Path.cwd() / "dist",
@@ -206,8 +207,8 @@ class InstallView(ttk.Frame):
             messagebox.showerror("Invalid bundle", str(exc), parent=self)
             return
 
-        # Resolve the config question up front (install.sh prompts mid-run;
-        # a GUI shouldn't block a background job on a dialog).
+        # Resolve the config question up front — a GUI shouldn't block a
+        # background job on a mid-run dialog.
         keep_config = True
         if (dest / "config.toml").is_file():
             keep_config = not messagebox.askyesno(

@@ -28,6 +28,12 @@ dev = [
     "pytest>=8.0.0",
     "httpx>=0.27.0",
 ]
+# Used only by deploy/package.sh on the (networked) build machine to freeze
+# the control panel (installer/) into the dffrnt-manager binary. Never
+# installed on targets — they receive the finished binary.
+package = [
+    "pyinstaller>=6.16.0",
+]
 
 [build-system]
 requires = ["hatchling"]

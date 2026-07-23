@@ -60,8 +60,8 @@ cut), and chunking strategy/size/overlap/floor.
 
 ```bash
 uv sync
-bash deploy/start.sh     # Qdrant + Ollama
-dffrnt-api               # API + UI at http://localhost:8000
+uv run python -m installer dev   # Qdrant + Ollama, health-waited, models ensured
+dffrnt-api                       # API + UI at http://localhost:8000
 ```
 
 Or use the VSCode launch config `DFFRNT AI Assistant (Dev: host API)`.
@@ -70,8 +70,12 @@ Or use the VSCode launch config `DFFRNT AI Assistant (Dev: host API)`.
 
 ```bash
 docker build -t dffrnt-assistant:latest -f deploy/Dockerfile .
-bash deploy/dffrnt_ctrl_panel.sh start
+uv run python -m installer start
 ```
+
+`python -m installer` with no arguments opens the desktop control panel
+(install/manage/models/logs); every operation is also a headless CLI command
+(`start`, `stop`, `status`, `logs`, `models`, ... — see `installer/cli.py`).
 
 ## Tests
 
@@ -93,7 +97,8 @@ pass takes a while.
 
 ## Deployment
 
-`deploy/package.sh` builds a three-file bundle (tarball + `install.sh` +
-`README.md`) for either an air-gapped target (**OFFLINE**: images and models
-included) or an online one (**AWS**: pulls at deploy time). The target needs
-only Docker. See [deploy/README.md](deploy/README.md).
+`deploy/package.sh` builds a three-file bundle (tarball + the frozen
+`dffrnt-manager` install/manage binary + `README.md`) for either an air-gapped
+target (**OFFLINE**: images and models included) or an online one (**AWS**:
+pulls at deploy time). The target needs only Docker. See
+[deploy/README.md](deploy/README.md).

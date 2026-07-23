@@ -1,14 +1,16 @@
-"""Reads config.toml the same way dffrnt_ctrl_panel.sh's `cfg()` shell
-function does: env var wins, then the file, then a hardcoded default —
-never an error for a missing key. See deploy/dffrnt_ctrl_panel.sh.
-Also reads bundle.conf (the packager's manifest), shared by the management
-backend and the installer.
+"""Reads config.toml with the precedence the whole app observes: env var
+wins, then the file, then a hardcoded default — never an error for a
+missing key (mirrors dffrnt_assistant.config.load_settings). Also reads
+bundle.conf (the packager's manifest) and performs the one config WRITE in
+the codebase (write_config_value, for model switching). Shared by the
+management backends, the installer, the GUI, and the CLI.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,20 +47,28 @@ _DEFAULTS = {
 
 
 def find_app_root() -> Path:
-    """Locates the directory holding docker-compose.yml + config.toml —
-    HERE in dffrnt_ctrl_panel.sh. Two layouts are expected:
+    """Locates the directory holding docker-compose.yml + config.toml.
+    Three layouts are expected:
 
       dev checkout:  repo/installer/  (this package) + repo/deploy/
-      installed bundle: everything (compose file, ctrl panel, config) sits
-        together in one directory, same as today's dffrnt_ctrl_panel.sh.
+      installed bundle: everything (compose file, manager binary, config)
+        sits together in one directory
+      frozen manager NEXT TO a bundle tarball (pre-install): no compose
+        file anywhere yet — the fallback is fine, the Install flow creates
+        the app root
 
-    DFFRNT_APP_ROOT overrides both, mirroring DFFRNT_CONFIG's role for the
-    config file itself.
+    Frozen (PyInstaller) builds must anchor on sys.executable: __file__
+    lives in the one-file bundle's temp extraction dir, which is neither
+    stable nor next to anything. DFFRNT_APP_ROOT overrides everything,
+    mirroring DFFRNT_CONFIG's role for the config file itself.
     """
     env_path = os.environ.get("DFFRNT_APP_ROOT")
     if env_path:
         return Path(env_path)
-    here = Path(__file__).resolve().parent
+    if getattr(sys, "frozen", False):
+        here = Path(sys.executable).resolve().parent
+    else:
+        here = Path(__file__).resolve().parent
     for candidate in (here.parent / "deploy", here, here.parent):
         if (candidate / "docker-compose.yml").is_file():
             return candidate
@@ -68,9 +78,9 @@ def find_app_root() -> Path:
 
 
 def find_config(app_root: Path) -> Path | None:
-    """Mirrors dffrnt_ctrl_panel.sh's CONFIG resolution: $DFFRNT_CONFIG, else
-    <app_root>/config.toml, else <app_root>/../config.toml (bare dev
-    checkout, where deploy/ sits next to the repo-root config.toml).
+    """CONFIG resolution: $DFFRNT_CONFIG, else <app_root>/config.toml, else
+    <app_root>/../config.toml (bare dev checkout, where deploy/ sits next
+    to the repo-root config.toml).
     """
     env_path = os.environ.get("DFFRNT_CONFIG")
     if env_path:
@@ -112,11 +122,37 @@ def load_config(app_root: Path) -> AppConfig:
     )
 
 
+def write_config_value(path: Path, key: str, value: str) -> None:
+    """Rewrite one top-level ``key = "value"`` line in config.toml, leaving
+    every other byte alone — the file is comment-heavy and those comments
+    are load-bearing documentation, so a parse-and-redump (which would need
+    a TOML writer dependency anyway) is off the table. The replaced line's
+    own trailing comment is deliberately dropped: after a model swap a
+    comment describing the OLD value would be a lie.
+
+    Commented-out ``#key = ...`` alternatives never match; a key absent
+    from the file is appended. Atomic (tmp + rename), so a crash mid-write
+    can't truncate the live config.
+    """
+    text = path.read_text(encoding="utf-8")
+    line = f'{key} = "{value}"'
+    pattern = re.compile(rf"^[ \t]*{re.escape(key)}[ \t]*=.*$", re.MULTILINE)
+    if pattern.search(text):
+        text = pattern.sub(line, text, count=1)
+    else:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        text += line + "\n"
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def read_bundle_conf(app_root: Path) -> tuple[str, list[str]]:
-    """Best-effort read of bundle.conf's TARGET_SYSTEM/MODELS — a bash
-    snippet in real deployments (ctrl_panel.sh sources it directly). This
-    is not a shell parser: it only recognizes the simple
-    `KEY="value"` / `KEY=value` lines package.sh actually emits.
+    """Best-effort read of bundle.conf's TARGET_SYSTEM/MODELS — the
+    manifest package.sh writes into every bundle. Not a shell parser: it
+    only recognizes the simple `KEY="value"` / `KEY=value` lines package.sh
+    actually emits.
     """
     bundle_conf = app_root / "bundle.conf"
     target_system, models = "online", []

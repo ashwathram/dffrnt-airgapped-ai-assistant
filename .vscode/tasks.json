@@ -16,20 +16,13 @@
             "presentation": { "reveal": "silent", "panel": "shared" }
         },
         {
+            // Dev loop: qdrant + ollama containers only (GPU-aware, from
+            // config.toml), waits for health and ensures the configured
+            // models are pulled — the API then runs on the host under the
+            // debugger. CLI twin of the manager GUI; see installer/cli.py.
             "label": "Start services (config-driven)",
             "type": "shell",
-            "command": "bash deploy/start.sh; until curl -sf http://localhost:6333/healthz > /dev/null 2>&1 && curl -sf http://localhost:11434 > /dev/null 2>&1; do sleep 1; done",
-            "options": {
-                "cwd": "${workspaceFolder}",
-                "shell": { "executable": "bash", "args": ["-c"] }
-            },
-            "presentation": { "reveal": "silent", "panel": "shared" }
-        },
-        {
-            "label": "Pull Ollama models",
-            "type": "shell",
-            "command": "bash deploy/pull-models.sh",
-            "dependsOn": ["Start services (config-driven)"],
+            "command": "uv run python -m installer dev",
             "options": {
                 "cwd": "${workspaceFolder}",
                 "shell": { "executable": "bash", "args": ["-c"] }
@@ -41,7 +34,7 @@
             "dependsOn": [
                 "Install dependencies",
                 "Create data and log directories",
-                "Pull Ollama models"
+                "Start services (config-driven)"
             ],
             "dependsOrder": "parallel",
             "group": "build"
@@ -58,13 +51,13 @@
             "presentation": { "reveal": "always", "panel": "shared" }
         },
         {
-            // Production: (re)build the image from source, then hand off to
-            // dffrnt_ctrl_panel.sh — the canonical runner — which brings up the
-            // full GPU-aware containerized stack (Qdrant + Ollama + API), ensures
-            // models, and waits for health. Mirrors the deployed artifact.
+            // Production: (re)build the image from source, then bring up the
+            // full GPU-aware containerized stack (Qdrant + Ollama + API) via
+            // the manager CLI — ensures models, prunes, waits for health.
+            // Mirrors the deployed artifact.
             "label": "Run production stack (Docker)",
             "type": "shell",
-            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && bash deploy/dffrnt_ctrl_panel.sh start",
+            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && uv run python -m installer start",
             "options": {
                 "cwd": "${workspaceFolder}",
                 "shell": { "executable": "bash", "args": ["-c"] }
@@ -76,23 +69,7 @@
             // Stop everything (both dev and prod containers).
             "label": "Stop stack (Docker)",
             "type": "shell",
-            "command": "bash deploy/dffrnt_ctrl_panel.sh stop",
-            "options": {
-                "cwd": "${workspaceFolder}",
-                "shell": { "executable": "bash", "args": ["-c"] }
-            },
-            "presentation": { "reveal": "always", "panel": "shared" }
-        },
-        {
-            // Ship the GUI installer (installer/, pure-stdlib source) into dist/
-            // NEXT TO the bundle tarball — it can't live inside the bundle it
-            // unpacks, so it travels alongside like install.sh does. MUST run
-            // AFTER package.sh, which starts by wiping dist/ (rm -rf "$OUT").
-            // On the target: python -m installer  (needs Python 3.14+ with Tk;
-            // install.sh remains the Docker-only fallback).
-            "label": "Package: ship GUI installer into dist",
-            "type": "shell",
-            "command": "rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && echo '>> GUI installer shipped: dist/installer (run: python -m installer)'",
+            "command": "uv run python -m installer stop",
             "options": {
                 "cwd": "${workspaceFolder}",
                 "shell": { "executable": "bash", "args": ["-c"] }
@@ -107,12 +84,31 @@
                 "cwd": "${workspaceFolder}",
                 "shell": { "executable": "bash", "args": ["-c"] }
             },
-            "presentation": { "reveal": "always", "panel": "shared" }
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "group": "build"
         },
         {
+            // package.sh freezes installer/ into the dffrnt-manager binary and
+            // ships it both inside the bundle and next to the tarball — no
+            // separate "ship the installer" step exists anymore.
             "label": "Package: build bundle (OFFLINE)",
             "type": "shell",
             "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "group": "build"
+        },
+        {
+            // macOS only: the Linux-frozen dffrnt-manager binary can't run on
+            // a Mac, so ship the installer package as SOURCE next to the
+            // bundle (target runs: python3 -m installer) until freezing runs
+            // on macOS hardware. MUST follow package.sh (which wipes dist/).
+            "label": "Package: ship installer source (macOS)",
+            "type": "shell",
+            "command": "rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && echo '>> installer source shipped: dist/installer (macOS: python3 -m installer)'",
             "options": {
                 "cwd": "${workspaceFolder}",
                 "shell": { "executable": "bash", "args": ["-c"] }
@@ -135,33 +131,13 @@
             "presentation": { "reveal": "always", "panel": "shared" }
         },
         {
-            // Full AWS package: bundle first (package.sh wipes dist/), then the
-            // GUI installer alongside it.
-            "label": "Package: AWS deployment (bundle + GUI installer)",
-            "dependsOn": [
-                "Package: build bundle (AWS)",
-                "Package: ship GUI installer into dist"
-            ],
-            "dependsOrder": "sequence",
-            "group": "build"
-        },
-        {
-            "label": "Package: Offline deployment (bundle + GUI installer)",
-            "dependsOn": [
-                "Package: build bundle (OFFLINE)",
-                "Package: ship GUI installer into dist"
-            ],
-            "dependsOrder": "sequence",
-            "group": "build"
-        },
-        {
             // Full macOS package: OFFLINE bundle (models cached; build the app
             // image on/for linux/arm64 so it runs in colima's VM on Apple
-            // Silicon), GUI installer, then the portable Ollama+Docker runtime.
-            "label": "Package: macOS deployment (bundle + GUI installer + portable runtime)",
+            // Silicon), installer source, then the portable runtime.
+            "label": "Package: macOS deployment (bundle + installer source + portable runtime)",
             "dependsOn": [
                 "Package: build bundle (OFFLINE)",
-                "Package: ship GUI installer into dist",
+                "Package: ship installer source (macOS)",
                 "Package: fetch macOS portable runtime (Ollama + Docker)"
             ],
             "dependsOrder": "sequence",
