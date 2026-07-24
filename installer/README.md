@@ -37,14 +37,9 @@ The macOS install stages that same source + python + launcher into the
 install directory, so it self-manages afterwards exactly like the frozen
 binary does on Linux/Windows.
 
-**Status: preliminary.** The container pathway (Linux/Windows) is
-implemented; management verified against a real `docker compose` stack and
-the install unpack logic against a synthetic bundle. The portable pathway
-(macOS: native Ollama with Metal + colima-hosted containers) is implemented
-and logic-tested on a Linux box with a faked runtime — it has NOT yet run
-on actual macOS hardware. Host provisioning (Docker Engine / NVIDIA driver
-+ Container Toolkit) is out of scope — the prereq gates tell you exactly
-what's missing but don't install it.
+Host provisioning (Docker Engine / NVIDIA driver + Container Toolkit) is out
+of scope — the prereq gates tell you exactly what's missing but don't install
+it.
 
 ## Running it
 
@@ -220,90 +215,3 @@ colors (green/red/amber) as the web UI's document library. Being real CSS
 this is now a faithful port (rounded cards, shadows — everything ttk
 couldn't do). Fonts use the same Inter/JetBrains Mono stacks with system
 fallbacks; the panel doesn't duplicate the app's woff2 files.
-
-## What isn't here yet
-
-- **On-Mac validation of the portable pathway.** All macOS logic was
-  exercised on Linux with a faked runtime; colima's first boot, the
-  host.docker.internal route from the VM, Metal inference, and the full
-  install flow need a real Apple Silicon machine (see the checklist below).
-- Host provisioning (Docker Engine / NVIDIA driver + toolkit on Linux) —
-  inherently privileged, OS-specific host mutation; the prereq gates
-  report what's missing instead.
-- A frozen single-binary manager for macOS (would need PyInstaller on real
-  Apple hardware + a signing story). Not blocking: the vendored relocatable
-  CPython + source already gives macOS a no-prerequisite manager, and the
-  browser panel removed the Tk dependency that made freezing-for-Mac matter.
-- Offline seeding of colima's guest image (see the air-gap caveat above).
-- The python-build-standalone version pin in `package-macos-portable.sh`
-  has not been fetch-verified from this box — same "a 404 means a pin
-  moved" contract as the script's other pins.
-
-## Manual verification done so far
-
-Exercised at the logic and HTTP layers (plus a real browser for the panel
-where noted):
-
-- `platform_detect.detect()` and `config.load_config()` against this repo's
-  real `deploy/` and `config.toml`.
-- `DockerComposeBackend.check_prerequisites()` / `.status()` against the
-  real Docker daemon on this machine (correctly reports the daemon as
-  unreachable here, and all three services as not running).
-- `DockerComposeBackend.reingest_preview()` against the real daemon with no
-  API container running — correctly raises `BackendError` through the
-  `_require_api_running` guard, and the failure is both logged (with
-  traceback, to `installer.log`) and surfaced as `job.error`.
-- `process.BackgroundJob` success and failure paths (`echo` / `false`).
-- `PortableBackend` / `PortableInstaller` against a faked runtime (shell
-  scripts standing in for ollama/docker/colima/limactl): `_env`
-  containment (PATH, DOCKER_HOST, COLIMA_HOME/LIMA_HOME/DOCKER_CONFIG,
-  CLI-vs-serve OLLAMA_HOST split), manifest walking of a host-side model
-  store including a stale manifest, prereq reporting (incl. the Apple
-  Silicon/Metal line), status degradation when docker is unreachable,
-  `find_portable_runtime` discovery from a dist layout, and the image
-  filter keeping app+qdrant while skipping the ollama container image.
-- The macOS compose stdin override validated against real `docker compose
-  config`: `depends_on: !override` correctly drops the ollama dependency
-  while keeping qdrant's health condition (this test caught that `!reset`
-  silently unsets the whole node — a real bug fixed before shipping),
-  OLLAMA_URL re-pointed at host.docker.internal, extra_hosts host-gateway
-  applied.
-- `logging_setup.configure_logging()`'s file output, inspected directly
-  after the runs above — correct levels (prereq failures as WARNING,
-  lifecycle brackets as INFO, exceptions as ERROR with traceback).
-- `py_compile` + `ast.parse` on every module.
-
-- Install logic without a live run: bundle auto-discovery
-  (`find_bundles`), `inspect_bundle` on a valid synthetic bundle (reads
-  TARGET_SYSTEM) and on garbage (clean `InstallError`), and the
-  strip-components-1 unpack with operator-config preservation.
-- The web panel over real HTTP (`tests/unit/test_web.py` + a live server
-  against this repo's deploy/): token gating (403 without/with a bad
-  token; asset paths collapse to basenames so traversal can't escape),
-  state/status/models payloads, the single-flight job lock (409 while
-  busy), SSE job streaming with full-history replay across reconnects,
-  error surfacing through the `done` event, and a real backend job
-  end-to-end. Headless Firefox rendered the served page (sidebar, cards,
-  buttons, console — the token/CSS/JS pipeline works in an actual
-  browser engine), and the PyInstaller-frozen binary served the same
-  panel from its bundled assets.
-
-**Before relying on this**, open the panel in a real browser and click
-through: Start (full cold-start including model pull/prune), Stop,
-Restart, Status refresh, Logs follow/stop (including switching the service
-dropdown mid-follow), Reingest (both declining and confirming the modal,
-and with the stack stopped to see the "not running" guard), a model
-export → import → switch round-trip, and a full Install from a real
-`package.sh` bundle (fresh dest + update-in-place with an edited
-config.toml) — on both a `gpu = false` and `gpu = true` config.
-
-**macOS checklist** (Apple Silicon, from a dist/ built by the "Package:
-macOS deployment" job): bootstrap with `cd dist && ./dffrnt-manager` (the
-launcher runs the vendored interpreter — panel opens in the
-default browser); Install from scratch (runtime staging, colima
-first boot, image load skipping the ollama tar, first start); confirm
-Metal via the ollama-native.log (`gpu` layers / Metal lines) and that
-query latency matches native expectations; confirm the API container
-answers queries (i.e. host.docker.internal reaches the host Ollama);
-Stop/Start cycle (colima stop/start, native process pidfile); the Logs
-tab's "ollama" selection tailing the native log; and Reingest end-to-end.

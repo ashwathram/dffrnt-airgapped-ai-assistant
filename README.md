@@ -3,103 +3,89 @@
 A private, fully offline RAG assistant for DFFRNT's internal knowledge. It
 ingests company documents (proposals, resumes, policies, spreadsheets, …) and
 answers questions with grounded, citation-backed responses. Everything runs
-locally: **Ollama** serves the LLM (`qwen3` family) and embeddings (`bge-m3`),
-**Qdrant** stores the vectors. No data leaves the machine.
+locally — **Ollama** serves the LLM (`qwen3` family) and embeddings (`bge-m3`),
+**Qdrant** stores the vectors — so no data leaves the machine.
 
-## Features
+## Documentation
 
-- Fully air-gapped: no internet required after setup, stdlib-only LLM client
-- Conversational web UI with streaming answers, an optional reasoning trace,
-  clickable inline `[n]` citations, saved conversations, and answer export
-  (TXT / MD / PDF)
-- Document library with upload (files or folders), duplicate detection,
-  tag taxonomy, and tag-scoped retrieval
-- Ingestion for PDF, DOCX, PPTX, XLSX, CSV, TXT, and Markdown
-- A prompt-injection-resistant system prompt that refuses when the documents
-  don't support an answer
+Detailed documentation lives in [doc/](doc/) and is the source of truth:
 
-## Architecture
+| Guide | For |
+|-------|-----|
+| [Developer Guide](doc/Developer_Guide.md) | Architecture, source layout, dev workflow, config internals, extension recipes, design FAQ |
+| [Installer Guide](doc/Installer_Guide.md) | Deploying a bundle on a target machine, SSH access, troubleshooting |
+| [User Guide](doc/User_Guide.md) | Using the assistant and `dffrnt-manager`, routine tasks, full `config.toml` reference |
 
-```
-Documents ──▶ ingest (loaders ▶ chunker ▶ embed) ──▶ Qdrant (vectors + metadata)
-                                                          ▲
-Question ──▶ retrieve (embed ▶ search ▶ assemble) ──▶ RAG (prompt ▶ generate) ──▶ Answer + sources
-```
+Packaging a deployment bundle is covered in [deploy/README.md](deploy/README.md);
+the manager/control-panel internals in [installer/README.md](installer/README.md).
 
-| Area | Module |
-|------|--------|
-| Configuration (all tunables) | [config.py](dffrnt_assistant/config.py) |
-| Shared payload contract | [schema.py](dffrnt_assistant/schema.py) |
-| Ollama client (LLM + embeddings, stdlib only) | [ollama.py](dffrnt_assistant/ollama.py) |
-| Ingestion | [ingest/](dffrnt_assistant/ingest/) — `loaders`, `chunker`, `tags`, `pipeline`, `backfill` CLI |
-| Retrieval | [retrieval/](dffrnt_assistant/retrieval/) — `store` (vectors), `retriever`, `doc_store` (tags + conversations) |
-| RAG pipeline + prompts | [rag.py](dffrnt_assistant/rag.py) |
-| HTTP API + services | [api/](dffrnt_assistant/api/) — `app`, `services`, `export`, `audit` |
-| Web UI | [ui/](dffrnt_assistant/ui/) — `index.html` + ES modules in `js/`, styles in `styles/` |
+## Set up (clone + VS Code)
 
-## Configuration
-
-[config.py](dffrnt_assistant/config.py) defines every tunable and its default.
-Values come from `config.toml` and environment variables; env beats file beats
-defaults.
+**Prerequisites:** [Git](https://git-scm.com/), [uv](https://docs.astral.sh/uv/)
+(installs and manages Python 3.14 itself), and Docker Engine + Compose v2 (your
+user must run `docker` without sudo). VS Code with the *Python* + *Python
+Debugger* extensions. An NVIDIA GPU is optional (`gpu = true`); CPU works with
+the small model.
 
 ```bash
-cp config.toml.example config.toml   # then edit
-# or per-run:
-API_PORT=9000 TOP_K=8 dffrnt-api
+git clone https://github.com/ashwathram/dffrnt-airgapped-ai-assistant.git
+cd dffrnt-airgapped-ai-assistant
+uv sync                              # creates .venv from uv.lock (incl. dev group)
+cp config.toml.example config.toml   # then review: gpu flag, llm_model size
+code .                               # select the .venv interpreter if not auto-picked
 ```
 
-Highlights: `llm_model` / `embed_model` / `vector_size` (must match the embed
-model's dimension), `llm_num_ctx` (kept above Ollama's 4096 default so RAG
-prompts are never silently truncated), `top_k` + `score_margin` (relevance
-cut), and chunking strategy/size/overlap/floor.
+Pick `llm_model` to match your hardware before first start — the comments in
+`config.toml.example` give VRAM figures per size (`qwen3:4b` is CPU-viable,
+`14b` wants a 16 GB GPU, `30b-a3b` a 24 GB GPU).
 
-## Running
-
-**Development** (host API against containerized Qdrant + Ollama):
+## Run
 
 ```bash
-uv sync
-uv run python -m installer dev   # Qdrant + Ollama, health-waited, models ensured
-dffrnt-api                       # API + UI at http://localhost:8000
+uv run python -m installer dev   # Qdrant + Ollama containers, health-waited, models ensured
+uv run dffrnt-api                # API + UI at http://localhost:8000
 ```
 
-Or use the VSCode launch config `DFFRNT AI Assistant (Dev: host API)`.
-
-**Production** (everything in Docker):
-
-```bash
-docker build -t dffrnt-assistant:latest -f deploy/Dockerfile .
-uv run python -m installer start
-```
-
-`python -m installer` with no arguments serves the browser control panel
-(install/manage/models/logs — rendered by your browser, styled like the app)
-and opens it; every operation is also a headless CLI command
-(`start`, `stop`, `status`, `logs`, `models`, ... — see `installer/cli.py`).
+Or use the VS Code launch profile **DFFRNT AI Assistant (Dev: host API)**, which
+does both. See the [Developer Guide](doc/Developer_Guide.md#4-launch-profiles-vscodelaunchjson)
+for every launch profile.
 
 ## Tests
 
-Three suites, all pytest:
-
 ```bash
-uv run pytest                        # unit + offline chunk-health tests (CI runs these)
-uv run pytest -m eval                # retrieval + answer quality; needs Qdrant + Ollama up
-uv run pytest -m eval --reset-corpus # …first wiping the KB and re-ingesting tests/eval/corpus
-uv run pytest -m integration         # smoke tests against a running API server
+uv run pytest                # unit + offline chunk-health (fast, no stack; this is what CI runs)
+uv run pytest -m eval        # retrieval + answer quality; needs Qdrant + Ollama up
+uv run pytest -m integration # smoke tests against a running API server
 ```
 
-The evaluation suite ([tests/eval/](tests/eval/)) checks retrieval precision/
-recall, answer correctness and citation coverage, and refusal of out-of-scope
-questions, against a synthetic ground-truth corpus
-([corpus_gen.py](tests/eval/corpus_gen.py)). VSCode launch configs `Tests: …`
-run each suite. Answer-quality tests generate with the local LLM, so a full
-pass takes a while.
+Bare `pytest` is always safe offline. The eval suite grades retrieval, answer
+correctness, citation coverage, and refusals against a synthetic corpus — see
+the [Developer Guide](doc/Developer_Guide.md#34-run-the-tests).
 
-## Deployment
+## Deploy
 
 `deploy/package.sh` builds a three-file bundle (tarball + the frozen
-`dffrnt-manager` install/manage binary + `README.md`) for either an air-gapped
-target (**OFFLINE**: images and models included) or an online one (**AWS**:
-pulls at deploy time). The target needs only Docker. See
-[deploy/README.md](deploy/README.md).
+`dffrnt-manager` binary + README) for either an air-gapped target (**OFFLINE**:
+images and models included) or an online one (**AWS**: pulls at deploy time).
+The target needs only Docker. See [deploy/README.md](deploy/README.md).
+
+## Technical caveats
+
+- **No authentication.** Anyone who can reach the API port can query, upload,
+  and delete. Expose it only to trusted networks (fine behind the air gap).
+- **The embed model is a one-way door.** Changing `embed_model` / `vector_size`
+  invalidates every stored vector and requires re-ingesting all documents —
+  which is why the manager swaps the LLM but not the embedder.
+- **`config.toml` is frozen into bundles.** `deploy/package.sh` ships the repo's
+  *live* `config.toml`; its state at package time is exactly what the deployment
+  runs. Check it before packaging.
+- **`llm_num_ctx` matters.** Ollama silently truncates prompts to its context
+  window; the shipped 16384 is sized to worst-case retrieval — re-check the
+  budget if you widen retrieval or lengthen history.
+- **Compose pins Qdrant/Ollama versions on purpose.** Bump them in
+  `deploy/docker-compose.yml` and re-run the eval suite before packaging.
+- **GPU mode needs host support.** `gpu = true` requires the NVIDIA driver +
+  Container Toolkit (Linux/Windows); the manager refuses GPU mode without them.
+  macOS uses Metal automatically via the native-Ollama pathway.
+</content>
+</invoke>
