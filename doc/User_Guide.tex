@@ -1,0 +1,913 @@
+% DFFRNT AI Assistant — User Guide
+% Overleaf-compatible (pdfLaTeX). Styling matches the DFFRNT report theme:
+% Palatino body, garnet (uOttawa-inspired) accent, markdown-style callouts,
+% and the themed table style for the configuration annex.
+\documentclass[11pt,letterpaper]{article}
+
+%------------------------------------------------------------------ encoding --
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+% Silence the harmless "Command \showhyphens has changed" notice microtype
+% emits under recent LaTeX kernels.
+\usepackage{silence}
+\WarningFilter{latex}{Command}
+
+%--------------------------------------------------------------------- fonts --
+\usepackage{mathpazo}                 % Palatino body + matching math
+\usepackage[scaled=0.92]{helvet}      % Helvetica-like sans (headings)
+\usepackage{microtype}                % refined justification & spacing
+\linespread{1.08}
+\renewcommand{\sfdefault}{\rmdefault} % unify on Palatino, matching the report
+
+%-------------------------------------------------------------------- layout --
+\usepackage[letterpaper,margin=1in,headheight=22pt,headsep=18pt,footskip=28pt]{geometry}
+\usepackage{tocloft}                  % load BEFORE parskip
+\usepackage{parskip}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=4pt,parsep=0pt}
+\usepackage{environ}
+
+%--------------------------------------------------------------------- colour --
+\usepackage[table]{xcolor}
+\definecolor{accent}{HTML}{6A24B5}    % DFFRNT brand purple
+\definecolor{accentdk}{HTML}{4E1A86}  % deeper purple (headings / links)
+\definecolor{brandlime}{HTML}{CFEF3C} % chartreuse accent
+\definecolor{pagebg}{HTML}{E7E2F0}    % lavender title-page background
+\definecolor{icnk}{HTML}{171634}      % dark navy icon tile
+\definecolor{blocklt}{HTML}{D9CEEE}   % light lavender text on the purple block
+\definecolor{blocklt2}{HTML}{C7B9E6}  % lighter lavender (block small print)
+\definecolor{ink}{HTML}{1F2933}       % near-black body ink
+\definecolor{inkmute}{HTML}{56616C}   % muted grey for metadata
+\definecolor{rulegrey}{HTML}{C7CDD4}  % hairline rules
+\definecolor{briefbg}{HTML}{F1ECF8}   % light lavender callout / code background
+
+% Admonition palette (markdown-style callouts)
+\definecolor{noteblue}{HTML}{2B6CB0}
+\definecolor{notebg}{HTML}{EEF4FB}
+\definecolor{tipgreen}{HTML}{2F7A55}
+\definecolor{tipbg}{HTML}{EDF6F0}
+\definecolor{warnred}{HTML}{B02A37}
+\definecolor{warnbg}{HTML}{FBEEEF}
+
+%-------------------------------------------------------------------- tables ---
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xltabular}   % page-breakable tabularx (loads longtable + tabularx)
+\definecolor{tablehead}{HTML}{6A24B5}   % header fill (= accent)
+\definecolor{tableshade}{HTML}{F1ECF8}  % alternating-row shade
+
+% Auto-stretching, full-width column types
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+
+% Header-cell text style (white bold sans on the garnet bar)
+\newcommand{\thd}[1]{{\sffamily\bfseries\color{white}#1}}
+
+% ptable: styled non-breaking table body. Argument = column spec.
+\NewEnviron{ptable}[1]{%
+  \par\vspace{4pt}\footnotesize
+  \setlength{\extrarowheight}{3pt}%
+  \arrayrulecolor{rulegrey}%
+  \rowcolors{2}{tableshade}{white}%
+  \begin{tabularx}{\linewidth}{#1}
+  \rowcolor{tablehead}\BODY
+  \end{tabularx}%
+  \arrayrulecolor{black}\par\vspace{6pt}%
+}
+
+% pltable: page-breaking sibling of ptable (header declared with \endhead
+% inside the body so it repeats on every page).
+\NewEnviron{pltable}[1]{%
+  \footnotesize
+  \setlength{\extrarowheight}{3pt}%
+  \arrayrulecolor{rulegrey}%
+  \rowcolors{2}{tableshade}{white}%
+  \begin{xltabular}{\linewidth}{#1}
+  \BODY
+  \end{xltabular}%
+  \arrayrulecolor{black}%
+}
+
+% Re-ingest warning marker for the annex (index-invalidating parameters)
+\newcommand{\warnmark}{{\color{warnred}\sffamily\bfseries\,(!)}}
+
+%------------------------------------------------------------- code listings ---
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{accentdk}\bfseries,
+  commentstyle=\color{inkmute}\itshape,
+  stringstyle=\color{accent},
+  frame=single,
+  rulecolor=\color{rulegrey}, framesep=6pt,
+  showstringspaces=false, breaklines=true, tabsize=2,
+  backgroundcolor=\color{briefbg!40},
+  xleftmargin=4pt,
+}
+
+%---------------------------------------------------- section / TOC styling ---
+\usepackage{titlesec}
+\titleformat{\section}
+  {\sffamily\LARGE\bfseries\color{accentdk}}
+  {\makebox[1.6em][l]{\thesection}}{0em}{}
+  [\vspace{3pt}{\color{accent}\titlerule[1pt]}]
+\titleformat{\subsection}
+  {\sffamily\Large\bfseries\color{ink}}
+  {\makebox[2.0em][l]{\thesubsection}}{0em}{}
+\titleformat{\subsubsection}
+  {\sffamily\large\bfseries\color{ink}}
+  {\thesubsubsection}{0.6em}{}
+% FAQ questions & bolded Q-style leads: garnet, run-in
+\titleformat{\paragraph}[runin]
+  {\sffamily\bfseries\color{accentdk}}{}{0em}{}
+\titlespacing*{\section}      {0pt}{0pt}{14pt}
+\titlespacing*{\subsection}   {0pt}{16pt}{6pt}
+\titlespacing*{\subsubsection}{0pt}{12pt}{4pt}
+\titlespacing*{\paragraph}    {0pt}{8pt}{0.7em}
+
+\renewcommand{\thesection}{\arabic{section}}
+\renewcommand*\contentsname{Table of Contents}
+\renewcommand{\cfttoctitlefont}{\sffamily\LARGE\bfseries\color{accentdk}}
+\renewcommand{\cftsecfont}{\sffamily\bfseries\color{ink}}
+\renewcommand{\cftsecpagefont}{\sffamily\bfseries\color{ink}}
+\renewcommand{\cftsubsecfont}{\color{inkmute}}
+\renewcommand{\cftsubsecpagefont}{\color{inkmute}}
+\setlength{\cftbeforesecskip}{6pt}
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+
+%-------------------------------------------------------- header / footer -----
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{rulegrey}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\footrulewidth}{0pt}
+\renewcommand{\sectionmark}[1]{\markboth{\thesection\quad #1}{}}
+\fancyhead[L]{\footnotesize\sffamily\color{inkmute}User Guide}
+\fancyhead[R]{\footnotesize\sffamily\color{inkmute}\nouppercase{\leftmark}}
+\fancyfoot[R]{\footnotesize\sffamily\color{inkmute}Page \thepage}
+\fancyfoot[L]{\footnotesize\sffamily\color{inkmute}DFFRNT Air-Gapped AI Assistant}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \fancyfoot[R]{\footnotesize\sffamily\color{inkmute}Page \thepage}%
+  \fancyfoot[L]{\footnotesize\sffamily\color{inkmute}DFFRNT Air-Gapped AI Assistant}%
+}
+
+%------------------------------------------------------- hyperlinks (late) ----
+\usepackage[colorlinks=true,linkcolor=accentdk,urlcolor=accent,
+            citecolor=accentdk,linktoc=all]{hyperref}
+\usepackage{url}
+\urlstyle{sf}
+
+%------------------------------------------------ markdown-style callouts ------
+\usepackage[most]{tcolorbox}
+\usetikzlibrary{shapes.geometric}   % 4-point "sparkle" star on the title page
+\usepackage{graphicx}
+\graphicspath{{./}{doc/}}
+% Lime-tile icon. Uses the real DFFRNT PNG logo when `dffrnt-icon.png` is present
+% beside this file; otherwise falls back to a vector sparkle so the page always
+% renders. Drop the PNG in to get the true logo; delete this macro's fallback
+% branch (leaving just the circle) to have empty tiles instead.
+\newcommand{\dffrntlogo}[1]{%
+  \IfFileExists{dffrnt-icon.png}
+    {\node at (#1) {\includegraphics[width=15mm]{dffrnt-icon.png}};}
+    {\node[icontile] at (#1) {};
+     \node[sparkle]  at (#1) {};
+     \node[star, star points=4, star point ratio=0.34, fill=brandlime,
+           minimum size=2.6mm, inner sep=0] at ([xshift=-3.9mm,yshift=-3.4mm]#1) {};}%
+}
+\newtcolorbox{gnote}{
+  enhanced, breakable,
+  colback=notebg, colframe=noteblue,
+  boxrule=0pt, leftrule=3.5pt, sharp corners,
+  left=12pt, right=12pt, top=8pt, bottom=8pt,
+  before skip=10pt, after skip=12pt,
+  fontupper=\small\color{ink},
+  before upper={{\sffamily\bfseries\color{noteblue}Note}\par\smallskip},
+}
+\newtcolorbox{gtip}{
+  enhanced, breakable,
+  colback=tipbg, colframe=tipgreen,
+  boxrule=0pt, leftrule=3.5pt, sharp corners,
+  left=12pt, right=12pt, top=8pt, bottom=8pt,
+  before skip=10pt, after skip=12pt,
+  fontupper=\small\color{ink},
+  before upper={{\sffamily\bfseries\color{tipgreen}Tip}\par\smallskip},
+}
+\newtcolorbox{gwarn}{
+  enhanced, breakable,
+  colback=warnbg, colframe=warnred,
+  boxrule=0pt, leftrule=3.5pt, sharp corners,
+  left=12pt, right=12pt, top=8pt, bottom=8pt,
+  before skip=10pt, after skip=12pt,
+  fontupper=\small\color{ink},
+  before upper={{\sffamily\bfseries\color{warnred}Warning}\par\smallskip},
+}
+
+\setcounter{tocdepth}{2}
+\setcounter{secnumdepth}{3}
+
+% Start each major section a little lower.
+\let\oldsection\section
+\renewcommand{\section}{\vspace{1em}\oldsection}
+
+%==============================================================================
+\begin{document}
+%==============================================================================
+
+%--------------------------------------------------------------- TITLE PAGE ----
+\begin{titlepage}
+\thispagestyle{empty}
+\begin{tikzpicture}[remember picture, overlay,
+    icontile/.style={fill=icnk, rounded corners=2mm, minimum size=15mm, inner sep=0},
+    sparkle/.style={star, star points=4, star point ratio=0.36, fill=brandlime,
+                    minimum size=8mm, inner sep=0}]
+  % page background
+  \fill[pagebg] (current page.north west) rectangle (current page.south east);
+
+  % --- decorative circle cluster (top) ---
+  \fill[accent]    ([xshift=83mm, yshift=-40mm]current page.north west) circle (17mm);
+  \fill[accent]    ([xshift=167mm,yshift=-43mm]current page.north west) circle (17mm);
+  \fill[accent]    ([xshift=131mm,yshift=-85mm]current page.north west) circle (15mm);
+  \fill[accent]    ([xshift=170mm,yshift=-122mm]current page.north west) circle (14mm);
+  \coordinate (limeA) at ([xshift=128mm,yshift=-38mm]current page.north west);
+  \coordinate (limeB) at ([xshift=172mm,yshift=-86mm]current page.north west);
+  \fill[brandlime] (limeA) circle (17mm);
+  \fill[brandlime] (limeB) circle (17mm);
+  \dffrntlogo{limeA}
+  \dffrntlogo{limeB}
+
+  % --- product title + tagline ---
+  \node[anchor=west, text=accentdk,
+        font=\fontfamily{phv}\bfseries\fontsize{40}{46}\selectfont]
+    at ([xshift=26mm,yshift=-152mm]current page.north west) {DFFRNT};
+  \node[anchor=west, text=accentdk,
+        font=\fontfamily{phv}\bfseries\fontsize{40}{46}\selectfont]
+    at ([xshift=26mm,yshift=-168mm]current page.north west) {AI Assistant};
+  \node[anchor=north west, text=accent, font=\fontfamily{phv}\selectfont\large]
+    at ([xshift=26mm,yshift=-180mm]current page.north west)
+    {\parbox{155mm}{A fully air-gapped, private knowledge and content AI assistant}};
+
+  % --- guide block ---
+  \fill[accent, rounded corners=5mm]
+    ([xshift=20mm,yshift=-190mm]current page.north west)
+    rectangle ([xshift=196mm,yshift=-258mm]current page.north west);
+  \node[anchor=west, text=brandlime,
+        font=\fontfamily{phv}\bfseries\fontsize{42}{46}\selectfont]
+    at ([xshift=32mm,yshift=-212mm]current page.north west) {USER GUIDE};
+  \node[anchor=north west, text=blocklt, font=\fontfamily{phv}\selectfont\large]
+    at ([xshift=32mm,yshift=-222mm]current page.north west)
+    {\parbox{152mm}{Managing the stack and working in the assistant}};
+  \node[anchor=north west, text=blocklt2, font=\fontfamily{phv}\selectfont\footnotesize]
+    at ([xshift=32mm,yshift=-234mm]current page.north west)
+    {\parbox{152mm}{Everyday use of the assistant: the dffrnt-manager control
+     panel and CLI, the chat interface, the document library and tagging system,
+     routine tasks such as swapping models, and a full config.toml reference.}};
+  \node[anchor=west, text=brandlime, font=\fontfamily{phv}\bfseries\selectfont\small]
+    at ([xshift=32mm,yshift=-252mm]current page.north west) {\today};
+\end{tikzpicture}
+\end{titlepage}
+
+%---------------------------------------------------------- FRONT MATTER -------
+\pagenumbering{roman}
+\setcounter{page}{1}
+\pagestyle{fancy}
+
+{\hypersetup{linkcolor=ink}\tableofcontents}
+\clearpage
+
+%------------------------------------------------------------- MAIN MATTER ------
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+This guide covers everyday use of the DFFRNT Air-Gapped AI Assistant:
+managing the stack with \texttt{dffrnt-manager}, working in the assistant
+application itself (chat, document library, tags), performing routine tasks
+like swapping models, and --- in the annex --- a full reference for every
+\texttt{config.toml} parameter.
+
+For getting the software onto a machine in the first place, see the companion
+\emph{Installer Guide}.
+
+\section{The dffrnt-manager application}
+
+\texttt{dffrnt-manager} is the single control surface for the whole stack. It
+lives in the install folder (e.g.\ \texttt{dffrnt/}) and has two faces: a
+\textbf{browser control panel} and an identical \textbf{command-line
+interface}. Everything the panel can do, the CLI can do, and vice versa.
+
+\subsection{Launching}
+
+\textbf{Browser panel} --- from the install folder:
+
+\begin{lstlisting}
+cd dffrnt
+./dffrnt-manager
+\end{lstlisting}
+
+This starts a small local web server and opens the panel in your default
+browser. The URL looks odd on purpose: it serves on \texttt{127.0.0.1} (this
+machine only) and carries a random per-session token, so nothing on the
+network --- and no other user on the machine --- can reach the management
+functions.
+
+\textbf{Remote / headless machines} --- the panel can't open a browser over
+SSH, so print the URL instead and tunnel to it:
+
+\begin{lstlisting}
+./dffrnt-manager panel --no-browser     # prints the URL (note the port + token)
+# on your own machine:
+ssh -L 8901:127.0.0.1:8901 user@target  # then open the printed URL locally
+\end{lstlisting}
+
+\textbf{CLI} --- any argument makes it run headless:
+
+\begin{lstlisting}
+./dffrnt-manager status
+\end{lstlisting}
+
+\subsection{The panel views}
+
+\begin{ptable}{>{\sffamily\bfseries}p{2.2cm} L}
+\thd{View} & \thd{What it does}\\
+Install & First-run deployment: pick the \texttt{dffrnt-*.tar.gz} bundle
+(auto-detected when next to the manager) and a destination, pass the
+prerequisite check, unpack, load images, first start. After installation
+you'll normally never need this view again.\\
+Manage & Start / stop / restart the stack, live service + API health, and
+force a re-ingest of every stored document.\\
+Models & See the model store (names, sizes, roles), switch the active LLM,
+and move models on/off an air-gapped machine as tarballs (import/export).\\
+Logs & Follow the containers' logs live (all services or one at a time) ---
+the first place to look when something misbehaves.\\
+\end{ptable}
+
+Only one operation runs at a time --- if a button reports ``busy'', another
+job (perhaps started from a second browser tab) is still in progress. Job
+output survives a page reload; you can close the tab and come back
+mid-install.
+
+\subsection{Command reference}
+
+All commands run from the install folder.
+
+\begin{pltable}{>{\ttfamily\footnotesize}p{6.4cm} L}
+\rowcolor{tablehead}\thd{Command} & \thd{What it does}\\
+\endfirsthead
+\rowcolor{tablehead}\thd{Command} & \thd{What it does}\\
+\endhead
+./dffrnt-manager & \normalfont Serve + open the browser panel\\
+./dffrnt-manager panel --no-browser & \normalfont Serve the panel, print the
+URL only (SSH tunnels); \texttt{--port N} fixes the port\\
+./dffrnt-manager install [BUNDLE] [--dest DIR] [--overwrite-config] &
+\normalfont Deploy a bundle (auto-detects one next to the binary)\\
+./dffrnt-manager start & \normalfont Bring the whole stack up (Qdrant +
+Ollama + API)\\
+./dffrnt-manager stop & \normalfont Stop all services\\
+./dffrnt-manager restart & \normalfont Stop, then start --- required after
+editing \texttt{config.toml}\\
+./dffrnt-manager status & \normalfont Per-service + API health; exits
+non-zero if degraded (script-friendly)\\
+./dffrnt-manager logs [all|qdrant|ollama|api] & \normalfont Follow service
+logs (Ctrl-C to stop)\\
+./dffrnt-manager audit & \normalfont Follow the application audit trail
+(\texttt{logs/audit.jsonl})\\
+./dffrnt-manager reingest [--dry-run] [--yes] & \normalfont Force re-ingest
+of every stored document (previews first)\\
+./dffrnt-manager models & \normalfont List the model store with sizes and
+roles\\
+./dffrnt-manager models use NAME & \normalfont Switch the active LLM and
+restart\\
+./dffrnt-manager models pull [NAME...] & \normalfont Pull model(s) from the
+internet (online machines)\\
+./dffrnt-manager models rm NAME & \normalfont Delete a model from the store\\
+./dffrnt-manager models export NAME DEST.tar & \normalfont Pack a model into
+a tarball (for USB transfer)\\
+./dffrnt-manager models import TARBALL & \normalfont Load a model tarball
+into the store (checksum-verified)\\
+\end{pltable}
+
+\subsection{Manager FAQ}
+
+\paragraph{Do I have to keep the panel open?}
+No. The panel is only a remote control --- closing the tab (or the whole
+manager) leaves the assistant running. The stack keeps serving until you
+\texttt{stop} it.
+
+\paragraph{The panel URL stopped working after I restarted the manager.}
+That's expected: the token in the URL is minted per session. Run
+\texttt{./dffrnt-manager} again and use the newly printed/opened URL.
+
+\paragraph{Can two people manage at once?}
+The panel accepts one mutating operation at a time; a second request gets a
+``busy'' response until the first finishes. Status and log views are
+read-only and always available.
+
+\paragraph{Where does the manager itself log?}
+\texttt{logs/installer.log} in the install folder records every manager
+operation; \texttt{./dffrnt-manager logs} follows the \emph{services'} logs
+instead.
+
+\paragraph{Does the CLI have anything the panel doesn't?}
+\texttt{audit} (following the app audit trail) and \texttt{dev} (a
+development mode for source checkouts) are CLI-only. Everything an operator
+needs day-to-day is in both.
+
+\subsection{Manager troubleshooting}
+
+\begin{itemize}
+  \item \textbf{``busy'' that never clears} --- a long job (model pull,
+        re-ingest) is still running; watch it in Logs. If the manager truly
+        died mid-job, restart the panel process and check
+        \texttt{./dffrnt-manager status}.
+  \item \textbf{Panel opens but every action fails} --- usually Docker
+        stopped underneath it. Check \texttt{docker ps}; start Docker
+        (Desktop or \texttt{systemctl start docker}) and retry.
+  \item \textbf{\texttt{status} exits degraded right after \texttt{start}}
+        --- services take a moment to pass health checks, and the models take
+        longer to warm. Wait a minute and re-run.
+  \item For permissions problems, missing bundles, and port conflicts, see
+        the Installer Guide's troubleshooting section --- those issues are
+        identical post-install.
+\end{itemize}
+
+\section{The DFFRNT Assistant application}
+
+Open \url{http://localhost:8000} in a browser (any modern browser on the
+machine, or on the network if the port is exposed --- remember the app has no
+login). The window has two areas:
+
+\begin{itemize}
+  \item a \textbf{sidebar} on the left --- brand, \emph{New chat},
+        \emph{Document Library}, a search box, and your recent conversations
+        (collapsible via the toggle at the top);
+  \item the \textbf{main area} --- either the chat panel or the Document
+        Library.
+\end{itemize}
+
+The assistant answers \textbf{only from the documents in its library}. If the
+documents don't contain the answer, it says so rather than guessing --- that
+is deliberate. So the workflow is: upload documents $\rightarrow$ organise
+them with tags $\rightarrow$ ask questions.
+
+\subsection{The chat interface}
+
+Type a question into the composer (``Ask anything about your
+documents\ldots'') and press \textbf{Enter} (or the send button). The answer
+streams in token by token.
+
+\paragraph{Thinking.}
+The models are reasoning models: they ``think'' before answering. The
+\textbf{Thinking on/off} pill above the composer controls whether that
+reasoning is shown as a live block above the answer or folded away behind a
+``Thinking\ldots'' label. It's a display choice only --- the model reasons
+either way --- and it persists across sessions.
+
+\paragraph{Citations and sources.}
+Every claim in an answer carries an inline bracketed citation like
+\texttt{[1]} or \texttt{[2][3]}. The numbers map to the source list shown
+with the answer; clicking a citation highlights the matching source. This is
+your audit trail --- the disclaimer under the composer means what it says:
+\emph{verify important information from source documents}.
+
+\paragraph{Message actions.}
+Hovering a message reveals its actions:
+
+\begin{itemize}
+  \item \textbf{Copy} --- copy the message text to the clipboard.
+  \item \textbf{Retry} --- regenerate the assistant's answer to the same
+        question (useful after changing scope or uploading more documents).
+  \item \textbf{Download} --- save an answer as \textbf{Plain text (.txt)},
+        \textbf{Markdown (.md)}, or \textbf{PDF (.pdf)}.
+  \item \textbf{Stop} --- while an answer is streaming, stop generation.
+\end{itemize}
+
+\paragraph{Refusals.}
+``The available documents do not contain enough information to answer
+this.''\ is the assistant declining to guess. If you believe the answer
+\emph{is} in the library, rephrase with the document's own vocabulary, widen
+or clear the retrieval scope (\S\ref{sec:scope}), or check the document
+actually ingested (Library $\rightarrow$ does it appear, with the right
+tags?).
+
+\subsection{Conversations}
+
+Every chat is saved automatically and appears under \textsc{Recent} in the
+sidebar:
+
+\begin{itemize}
+  \item click a conversation to reopen it --- the full history, sources
+        included;
+  \item \emph{Search chats\ldots} filters the list as you type;
+  \item the trash button next to \textsc{Recent} clears all conversations
+        (confirmation asked);
+  \item \emph{New chat} starts a fresh conversation --- the assistant carries
+        recent turns of the \emph{current} conversation as context, so start
+        a new chat when you change topic to keep answers sharp.
+\end{itemize}
+
+\subsection{Retrieval scope (searching within tags)}
+\label{sec:scope}
+
+Above the messages sits the \textbf{scope bar}. Expand it to see the tag
+taxonomy grouped by type, and click tags to restrict retrieval: the assistant
+will then search \textbf{only documents carrying at least one selected tag}
+(OR semantics). The bar shows how many documents are currently in scope.
+
+Typical uses: scope to \emph{Resumes} before asking ``which candidates know
+Figma?'', or to a project tag before asking for a timeline summary. Clear the
+scope to search the whole library again. Scope applies per conversation and
+is sent with every question while active.
+
+\subsection{The Document Library}
+
+Sidebar $\rightarrow$ \textbf{Document Library}. This is the assistant's
+knowledge base --- a table of every ingested document with its type, size,
+tags, description, and upload info, plus a storage summary.
+
+\begin{itemize}
+  \item \textbf{Search documents\ldots} --- free-text filter on name and
+        description.
+  \item \textbf{Tag filter} --- click tag chips to filter the table (multiple
+        tags narrow it down: a document must carry all of them).
+  \item \textbf{Inline editing} --- each row lets you edit the document's
+        tags and its description in place.
+  \item \textbf{Delete} --- the row menu (\ldots) removes a document from the
+        knowledge base (with confirmation). Its chunks leave the vector
+        store; answers will no longer draw on it.
+\end{itemize}
+
+\subsection{Uploading documents}
+
+Library $\rightarrow$ \textbf{Upload} opens the upload modal. Add individual
+files or an entire \textbf{folder} (folder uploads group under the folder's
+name and can share one set of tags and a description, applied to every file
+inside).
+
+\begin{itemize}
+  \item \textbf{Supported formats:} PDF, DOCX, PPTX, XLSX, CSV, TXT, and
+        Markdown.
+  \item \textbf{Size limit:} 50\,MB per file. Oversized or unsupported files
+        are flagged in the queue and skipped; remove them with the
+        $\times$.
+  \item \textbf{Tags at upload:} assign tags per file (or per folder) before
+        uploading --- cheaper than retagging later.
+  \item \textbf{Duplicates:} if the server already holds a file with the same
+        name, the queue flags it and you resolve it inline:
+        \textbf{Replace} the stored copy, \textbf{Keep both}, or
+        \textbf{Remove} it from the queue.
+\end{itemize}
+
+Upload streams progress per file; each document is chunked, embedded, and
+searchable as soon as its ingestion finishes.
+
+\subsection{The tagging system}
+
+Tags are the library's organising principle, and they do double duty: they
+group and filter documents in the library, \textbf{and} they scope retrieval
+in chat (\S\ref{sec:scope}).
+
+The taxonomy has two levels, managed in Library $\rightarrow$ \textbf{Manage
+Tags}:
+
+\begin{itemize}
+  \item \textbf{Tag types} --- categories such as \emph{Document kind},
+        \emph{Project}, or \emph{Department}, each with a colour. A tag's
+        colour comes from its type, so chips are visually scannable
+        everywhere (library rows, scope bar, upload queue).
+  \item \textbf{Tags} --- the values inside a type (e.g.\ \emph{Resume},
+        \emph{Proposal}, \emph{Policy} under \emph{Document kind}).
+\end{itemize}
+
+In the Tag Manager you can create, rename, recolour, and delete types, and
+add or delete tags within them. Deleting is confirmed first; a tag removed
+from the taxonomy disappears from scope selection, and documents still
+carrying an unknown tag show it in neutral grey.
+
+\begin{gtip}
+Design the taxonomy before bulk-uploading. A small, consistent set of types
+(kind / project / team) beats dozens of ad-hoc tags --- scoped questions like
+``summarise the \emph{Aurora} correspondence'' only work if the documents
+were tagged consistently.
+\end{gtip}
+
+\section{Routine tasks and troubleshooting}
+
+\subsection{Swapping the active model}
+
+The stack ships several \texttt{qwen3} sizes trading speed for capability.
+To switch:
+
+\begin{itemize}
+  \item \textbf{Panel:} Models view $\rightarrow$ pick the model
+        $\rightarrow$ \emph{Use}.
+  \item \textbf{CLI:} \texttt{./dffrnt-manager models use qwen3:8b}
+\end{itemize}
+
+Switching rewrites \texttt{llm\_model} in \texttt{config.toml} and restarts
+the stack. To keep disk usage flat, the previously configured model is
+removed from the cache --- except imported models, which are protected until
+you switch to or delete them.
+
+\textbf{On an air-gapped machine} the model must first be brought over as a
+tarball:
+
+\begin{enumerate}
+  \item On any networked machine with this app:
+\begin{lstlisting}
+./dffrnt-manager models export qwen3:8b /media/usb/qwen3-8b.ollama.tar
+\end{lstlisting}
+        (pulls first if absent; the USB drive must not be FAT32 --- its
+        4\,GB file limit is smaller than most models).
+  \item On the air-gapped machine:
+\begin{lstlisting}
+./dffrnt-manager models import /media/usb/qwen3-8b.ollama.tar
+./dffrnt-manager models use qwen3:8b
+\end{lstlisting}
+        (the import is checksum-verified).
+\end{enumerate}
+
+Both steps are also available in the panel's Models view.
+
+\begin{gwarn}
+The \emph{embedding} model is deliberately not swappable by command.
+Changing it changes the vector dimension, which invalidates the entire index
+and requires re-uploading or re-ingesting every document. If you must change
+it, edit \texttt{embed\_model} \textbf{and} \texttt{vector\_size} in
+\texttt{config.toml}, restart, and run \texttt{./dffrnt-manager reingest}.
+\end{gwarn}
+
+\subsection{Changing configuration}
+
+Edit \texttt{config.toml} in the install folder (see
+Annex~\ref{sec:annex} for every parameter), then:
+
+\begin{lstlisting}
+./dffrnt-manager restart
+\end{lstlisting}
+
+The config file survives reinstalls (only \texttt{install
+--overwrite-config} replaces it, archiving the old file as
+\texttt{config.toml.old}).
+
+\subsection{Re-ingesting the library}
+
+After changing chunking settings, or if a document seems poorly indexed:
+
+\begin{lstlisting}
+./dffrnt-manager reingest --dry-run   # preview what would be processed
+./dffrnt-manager reingest             # asks for confirmation, then runs
+\end{lstlisting}
+
+Re-ingestion re-chunks and re-embeds every stored document from the original
+uploaded files. It can take a while for large libraries (each chunk is
+embedded by the local model).
+
+\subsection{Backing up}
+
+Everything lives in the install folder --- stop the stack, copy the folder,
+start again:
+
+\begin{lstlisting}
+./dffrnt-manager stop
+cp -r dffrnt /backup/dffrnt-$(date +%F)
+./dffrnt-manager start
+\end{lstlisting}
+
+The critical subfolders are \texttt{data/} (original uploaded documents),
+\texttt{qdrant\_storage/} (the vector index, tags, and saved conversations),
+and \texttt{config.toml}. \texttt{ollama\_models/} is bulky and reproducible
+(re-pull or re-import), so you may back it up less often.
+
+\subsection{The audit trail}
+
+\texttt{./dffrnt-manager audit} follows \texttt{logs/audit.jsonl}, the
+application's append-only record of queries, uploads, and deletions ---
+useful for reviewing how the knowledge base is being used on a shared
+machine.
+
+\subsection{Troubleshooting}
+
+\paragraph{The first answer after a start is slow.}
+On every start the models are pre-loaded into memory in the background; the
+first question may land before warmup finishes. Subsequent answers run at
+full speed. (On a fresh online install the very first warmup also waits for
+the model download.)
+
+\paragraph{Answers are slow in general.}
+Model size vs.\ hardware. On CPU-only machines use a smaller model
+(\texttt{models use qwen3:4b}). On NVIDIA machines make sure
+\texttt{gpu = true} is set and the NVIDIA Container Toolkit is installed ---
+the manager refuses GPU mode and says so when it isn't. On Apple Silicon the
+GPU (Metal) is used automatically.
+
+\paragraph{The assistant refuses although the answer is in a document.}
+Check scope, rephrase with the document's vocabulary, confirm the document
+ingested. If retrieval consistently misses, \texttt{top\_k} and
+\texttt{score\_margin} in the annex are the tuning knobs (re-run the
+evaluation suite before trusting changes).
+
+\paragraph{Answers cite the wrong or outdated documents.}
+Delete superseded documents from the library, or keep both but tag them so
+scope can separate them. The system prompt prefers the latest agreed state
+when documents contradict each other, but it can only work with what's
+ingested.
+
+\paragraph{An upload stays ``processing'' or fails.}
+Check \texttt{./dffrnt-manager logs api}. Common causes: a corrupt or
+password-protected file, or a file over 50\,MB. Fix the file and re-upload;
+a failed file can simply be uploaded again.
+
+\paragraph{A service is unhealthy / the UI won't load.}
+\texttt{./dffrnt-manager status} to identify the service,
+\texttt{logs <service>} to read its output, \texttt{restart} to recover. See
+the Installer Guide for the full troubleshooting checklist (Docker down,
+port conflicts, permissions).
+
+\paragraph{Streaming looks ``chunky'' behind a reverse proxy.}
+The API streams answers token by token and marks the responses no-buffering;
+an intermediate nginx/CDN can still buffer them into bursts. Disable proxy
+buffering for the \texttt{/api/*/stream} routes (details in the deployment
+README).
+
+%==============================================================================
+\clearpage
+\appendix
+\renewcommand{\thesection}{\Alph{section}}
+
+\section{Annex --- config.toml reference}
+\label{sec:annex}
+
+\texttt{config.toml} in the install folder is the single source of truth for
+every tunable. Values can also be set as \texttt{UPPER\_SNAKE\_CASE}
+environment variables; precedence is \textbf{environment $>$ config.toml $>$
+built-in default}. After any change: \texttt{./dffrnt-manager restart}.
+
+\begin{gwarn}
+Parameters marked \warnmark\ invalidate the existing vector index ---
+changing them requires re-uploading or re-ingesting every document.
+\end{gwarn}
+
+\subsection{Deployment}
+
+\begin{pltable}{>{\ttfamily\footnotesize}p{3.6cm} >{\ttfamily\footnotesize}p{1.9cm} L}
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endfirsthead
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endhead
+gpu & false & \normalfont Enable NVIDIA GPU acceleration for Ollama
+(Linux/Windows container pathway). Requires the NVIDIA driver \textbf{and}
+Container Toolkit on the host; the manager refuses to start GPU mode without
+them. \textbf{Ignored on macOS}, where native Ollama uses Metal
+automatically.\\
+\end{pltable}
+
+\subsection{Ollama --- models and generation}
+
+\begin{pltable}{>{\ttfamily\footnotesize}p{3.6cm} >{\ttfamily\footnotesize}p{1.9cm} L}
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endfirsthead
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endhead
+ollama\_url & \footnotesize http://localhost:11434 & \normalfont Host-side
+URL of the Ollama server. Only the \textbf{port} is honoured across
+deployment pathways --- keep the host \texttt{localhost}; the manager injects
+the right in-container address itself.\\
+llm\_model & qwen3:14b & \normalfont The chat LLM. Ships in three sizes:
+\texttt{qwen3:4b} ($\sim$2.6\,GB, CPU-viable), \texttt{qwen3:14b}
+($\sim$9.3\,GB, fits a 16\,GB GPU alongside the embedder),
+\texttt{qwen3:30b-a3b} ($\sim$19\,GB, needs a 24\,GB GPU). Normally changed
+via \texttt{models use}, not by hand.\\
+embed\_model \warnmark & bge-m3 & \normalfont The embedding model that turns
+text into vectors. Changing it changes the vector dimension --- deliberately
+not switchable by command.\\
+vector\_size \warnmark & 1024 & \normalfont Dimension of the embedding
+vectors. \textbf{Must match the embed model's output dimension} (1024 for
+bge-m3).\\
+llm\_temperature & 0.1 & \normalfont Sampling temperature. Low = factual and
+repeatable, which suits a grounded assistant; raise only if answers feel too
+rigid.\\
+llm\_timeout & 600 & \normalfont Seconds before a generation request is
+abandoned. Local generation can legitimately be slow on big prompts.\\
+llm\_num\_ctx & 16384 & \normalfont Context window in tokens. Ollama's own
+default (4096) silently truncates RAG prompts once retrieved documents +
+history grow; 16384 covers worst-case aggregate retrieval plus
+\texttt{llm\_num\_predict}. Larger costs GPU memory ($\sim$1.4\,GB KV cache
+at 16k for qwen3:14b).\\
+llm\_top\_p & 0.95 & \normalfont Nucleus sampling cut-off (qwen3's
+recommended value).\\
+llm\_top\_k & 20 & \normalfont Sampling candidate cut-off (qwen3's
+recommended value).\\
+llm\_repeat\_penalty & 1.1 & \normalfont Penalises repetition. At
+\texttt{1.0} the reasoning model can loop the same reasoning block forever on
+ambiguous questions; \texttt{1.1} (qwen3's thinking-mode recommendation) lets
+it converge.\\
+llm\_num\_predict & 5000 & \normalfont Hard cap on generated tokens (thinking
++ answer) --- the runaway-generation safety net. Too low guillotines the
+answer mid-thought; keep well under \texttt{llm\_num\_ctx} minus the prompt.
+\texttt{-1} = unlimited (not recommended).\\
+embed\_query\_prefix \warnmark & "" & \normalfont Task prefix prepended to
+\emph{queries} before embedding (some models want
+\texttt{"search\_query: "}). bge-m3 uses none --- leave blank.\\
+embed\_document\_prefix \warnmark & "" & \normalfont Task prefix prepended to
+\emph{documents} before embedding. bge-m3 uses none --- leave blank.\\
+embed\_on\_cpu & false & \normalfont Pin the embedder to CPU. Set
+\texttt{true} when the GPU can't hold the LLM and embedder at once --- keeps
+the LLM resident instead of thrashing (evict-to-embed, reload-to-generate).
+Ingestion gets slower; chat stays warm.\\
+\end{pltable}
+
+\subsection{Qdrant --- vector store and retrieval}
+
+\begin{pltable}{>{\ttfamily\footnotesize}p{3.6cm} >{\ttfamily\footnotesize}p{1.9cm} L}
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endfirsthead
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endhead
+qdrant\_url & \footnotesize http://localhost:6333 & \normalfont URL of the
+Qdrant server.\\
+collection\_name & \footnotesize dffrnt\_documents & \normalfont Collection
+holding the document chunks.\\
+summary\_collection\_name & \footnotesize dffrnt\_document\_ summaries &
+\normalfont Collection holding per-document summaries (used for routing
+aggregate queries).\\
+tags\_collection\_name & \footnotesize dffrnt\_tags & \normalfont Collection
+persisting the tag taxonomy.\\
+conversations\_ collection\_name & \footnotesize dffrnt\_conversations &
+\normalfont Collection persisting saved conversations.\\
+distance & cosine & \normalfont Vector similarity metric: \texttt{cosine}
+\textbar\ \texttt{dot} \textbar\ \texttt{euclid}. Leave at \texttt{cosine}
+for bge-m3.\\
+top\_k & 8 & \normalfont Retrieved-chunk candidates fetched per query.
+Higher = wider evidence but longer prompts (mind
+\texttt{llm\_num\_ctx}).\\
+score\_margin & 0.20 & \normalfont Relative relevance cut: drop hits scoring
+more than this below the best hit, so weak chunks never reach the prompt.
+\texttt{0} disables. Corpus-dependent --- re-run the evaluation suite
+(\texttt{pytest -m eval}) before changing.\\
+aggregate\_group\_limit & 24 & \normalfont For aggregate (``all
+candidates'', tag-scoped) queries: additionally fetch the best chunk(s) from
+each of up to this many documents, merged into the candidate pool so
+roll-ups cover every relevant document. \texttt{0} disables.\\
+aggregate\_group\_size & 1 & \normalfont Chunks kept per document in that
+grouped search.\\
+\end{pltable}
+
+\subsection{Chunking (\warnmark\ all four --- re-ingest after changing)}
+
+\begin{pltable}{>{\ttfamily\footnotesize}p{3.6cm} >{\ttfamily\footnotesize}p{1.9cm} L}
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endfirsthead
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endhead
+chunk\_strategy & recursive & \normalfont How documents are split:
+\texttt{fixed} \textbar\ \texttt{sentence} \textbar\ \texttt{paragraph}
+\textbar\ \texttt{recursive}. Recursive respects structure (paragraphs, then
+sentences) while targeting the size below.\\
+chunk\_size & 512 & \normalfont Target chunk size in characters. Small
+chunks favour precise retrieval --- the priority for this application.\\
+chunk\_overlap & 64 & \normalfont Characters shared between consecutive
+chunks, so facts on a boundary aren't split away from their context.\\
+chunk\_floor & 128 & \normalfont Chunks smaller than this are merged
+forward, so headings and single-line fragments are never stored as useless
+standalone chunks. \texttt{0} disables.\\
+\end{pltable}
+
+\subsection{Retrieval / prompting}
+
+\begin{pltable}{>{\ttfamily\footnotesize}p{3.6cm} >{\ttfamily\footnotesize}p{1.9cm} L}
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endfirsthead
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endhead
+history\_turns & 6 & \normalfont How many recent conversation turns
+accompany each question as context. More = better follow-ups, longer
+prompts.\\
+system\_prompt & "" & \normalfont The assistant's standing instructions
+(audience, tone, citation rules, refusal rule). Blank uses the built-in
+default; the shipped \texttt{config.toml} carries DFFRNT's tuned prompt.
+Edit with care --- the citation and refusal behaviour lives here.\\
+\end{pltable}
+
+\subsection{API / paths}
+
+\begin{pltable}{>{\ttfamily\footnotesize}p{3.6cm} >{\ttfamily\footnotesize}p{1.9cm} L}
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endfirsthead
+\rowcolor{tablehead}\thd{Parameter} & \thd{Default} & \thd{Meaning}\\
+\endhead
+api\_host & 0.0.0.0 & \normalfont Interface the API binds to.
+\texttt{0.0.0.0} = every interface (needed inside the container).\\
+api\_port & 8000 & \normalfont Host-side port for the API + UI. The
+container always serves 8000 internally; this moves only the published
+port.\\
+data\_dir & data & \normalfont Where original uploaded files are stored
+(relative to the install folder).\\
+audit\_log\_path & \footnotesize logs/audit.jsonl & \normalfont Location of
+the append-only audit trail.\\
+\end{pltable}
+
+\end{document}

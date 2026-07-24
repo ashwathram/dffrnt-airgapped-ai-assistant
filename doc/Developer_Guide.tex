@@ -1,0 +1,802 @@
+% DFFRNT AI Assistant — Developer Guide
+% Overleaf-compatible (pdfLaTeX). Styling matches the DFFRNT report theme:
+% Palatino body, garnet (uOttawa-inspired) accent, markdown-style callouts,
+% themed tables.
+\documentclass[11pt,letterpaper]{article}
+
+%------------------------------------------------------------------ encoding --
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+% Silence the harmless "Command \showhyphens has changed" notice microtype
+% emits under recent LaTeX kernels.
+\usepackage{silence}
+\WarningFilter{latex}{Command}
+
+%--------------------------------------------------------------------- fonts --
+\usepackage{mathpazo}                 % Palatino body + matching math
+\usepackage[scaled=0.92]{helvet}      % Helvetica-like sans (headings)
+\usepackage{microtype}                % refined justification & spacing
+\linespread{1.08}
+\renewcommand{\sfdefault}{\rmdefault} % unify on Palatino, matching the report
+
+%-------------------------------------------------------------------- layout --
+\usepackage[letterpaper,margin=1in,headheight=22pt,headsep=18pt,footskip=28pt]{geometry}
+\usepackage{tocloft}                  % load BEFORE parskip
+\usepackage{parskip}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=4pt,parsep=0pt}
+\usepackage{environ}
+
+%--------------------------------------------------------------------- colour --
+\usepackage[table]{xcolor}
+\definecolor{accent}{HTML}{6A24B5}    % DFFRNT brand purple
+\definecolor{accentdk}{HTML}{4E1A86}  % deeper purple (headings / links)
+\definecolor{brandlime}{HTML}{CFEF3C} % chartreuse accent
+\definecolor{pagebg}{HTML}{E7E2F0}    % lavender title-page background
+\definecolor{icnk}{HTML}{171634}      % dark navy icon tile
+\definecolor{blocklt}{HTML}{D9CEEE}   % light lavender text on the purple block
+\definecolor{blocklt2}{HTML}{C7B9E6}  % lighter lavender (block small print)
+\definecolor{ink}{HTML}{1F2933}       % near-black body ink
+\definecolor{inkmute}{HTML}{56616C}   % muted grey for metadata
+\definecolor{rulegrey}{HTML}{C7CDD4}  % hairline rules
+\definecolor{briefbg}{HTML}{F1ECF8}   % light lavender callout / code background
+
+% Admonition palette (markdown-style callouts)
+\definecolor{noteblue}{HTML}{2B6CB0}
+\definecolor{notebg}{HTML}{EEF4FB}
+\definecolor{tipgreen}{HTML}{2F7A55}
+\definecolor{tipbg}{HTML}{EDF6F0}
+\definecolor{warnred}{HTML}{B02A37}
+\definecolor{warnbg}{HTML}{FBEEEF}
+
+%-------------------------------------------------------------------- tables ---
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xltabular}   % page-breakable tabularx (loads longtable + tabularx)
+\definecolor{tablehead}{HTML}{6A24B5}   % header fill (= accent)
+\definecolor{tableshade}{HTML}{F1ECF8}  % alternating-row shade
+
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+\newcommand{\thd}[1]{{\sffamily\bfseries\color{white}#1}}
+
+% ptable: styled non-breaking table body. Argument = column spec.
+\NewEnviron{ptable}[1]{%
+  \par\vspace{4pt}\footnotesize
+  \setlength{\extrarowheight}{3pt}%
+  \arrayrulecolor{rulegrey}%
+  \rowcolors{2}{tableshade}{white}%
+  \begin{tabularx}{\linewidth}{#1}
+  \rowcolor{tablehead}\BODY
+  \end{tabularx}%
+  \arrayrulecolor{black}\par\vspace{6pt}%
+}
+
+% pltable: page-breaking sibling (header declared with \endhead in the body).
+\NewEnviron{pltable}[1]{%
+  \footnotesize
+  \setlength{\extrarowheight}{3pt}%
+  \arrayrulecolor{rulegrey}%
+  \rowcolors{2}{tableshade}{white}%
+  \begin{xltabular}{\linewidth}{#1}
+  \BODY
+  \end{xltabular}%
+  \arrayrulecolor{black}%
+}
+
+%------------------------------------------------------------- code listings ---
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{accentdk}\bfseries,
+  commentstyle=\color{inkmute}\itshape,
+  stringstyle=\color{accent},
+  frame=single,
+  rulecolor=\color{rulegrey}, framesep=6pt,
+  showstringspaces=false, breaklines=true, tabsize=2,
+  backgroundcolor=\color{briefbg!40},
+  xleftmargin=4pt,
+}
+% Directory trees / diagrams: smaller, no frame colouring changes needed
+\lstdefinestyle{tree}{basicstyle=\ttfamily\footnotesize}
+
+%---------------------------------------------------- section / TOC styling ---
+\usepackage{titlesec}
+\titleformat{\section}
+  {\sffamily\LARGE\bfseries\color{accentdk}}
+  {\makebox[1.6em][l]{\thesection}}{0em}{}
+  [\vspace{3pt}{\color{accent}\titlerule[1pt]}]
+\titleformat{\subsection}
+  {\sffamily\Large\bfseries\color{ink}}
+  {\makebox[2.0em][l]{\thesubsection}}{0em}{}
+\titleformat{\subsubsection}
+  {\sffamily\large\bfseries\color{ink}}
+  {\thesubsubsection}{0.6em}{}
+% FAQ questions: garnet, run-in
+\titleformat{\paragraph}[runin]
+  {\sffamily\bfseries\color{accentdk}}{}{0em}{}
+\titlespacing*{\section}      {0pt}{0pt}{14pt}
+\titlespacing*{\subsection}   {0pt}{16pt}{6pt}
+\titlespacing*{\subsubsection}{0pt}{12pt}{4pt}
+\titlespacing*{\paragraph}    {0pt}{8pt}{0.7em}
+
+\renewcommand{\thesection}{\arabic{section}}
+\renewcommand*\contentsname{Table of Contents}
+\renewcommand{\cfttoctitlefont}{\sffamily\LARGE\bfseries\color{accentdk}}
+\renewcommand{\cftsecfont}{\sffamily\bfseries\color{ink}}
+\renewcommand{\cftsecpagefont}{\sffamily\bfseries\color{ink}}
+\renewcommand{\cftsubsecfont}{\color{inkmute}}
+\renewcommand{\cftsubsecpagefont}{\color{inkmute}}
+\setlength{\cftbeforesecskip}{6pt}
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+
+%-------------------------------------------------------- header / footer -----
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{rulegrey}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\footrulewidth}{0pt}
+\renewcommand{\sectionmark}[1]{\markboth{\thesection\quad #1}{}}
+\fancyhead[L]{\footnotesize\sffamily\color{inkmute}Developer Guide}
+\fancyhead[R]{\footnotesize\sffamily\color{inkmute}\nouppercase{\leftmark}}
+\fancyfoot[R]{\footnotesize\sffamily\color{inkmute}Page \thepage}
+\fancyfoot[L]{\footnotesize\sffamily\color{inkmute}DFFRNT Air-Gapped AI Assistant}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \fancyfoot[R]{\footnotesize\sffamily\color{inkmute}Page \thepage}%
+  \fancyfoot[L]{\footnotesize\sffamily\color{inkmute}DFFRNT Air-Gapped AI Assistant}%
+}
+
+%------------------------------------------------------- hyperlinks (late) ----
+\usepackage[colorlinks=true,linkcolor=accentdk,urlcolor=accent,
+            citecolor=accentdk,linktoc=all]{hyperref}
+\usepackage{url}
+\urlstyle{sf}
+
+%------------------------------------------------ markdown-style callouts ------
+\usepackage[most]{tcolorbox}
+\usetikzlibrary{shapes.geometric}   % 4-point "sparkle" star on the title page
+\usepackage{graphicx}
+\graphicspath{{./}{doc/}}
+% Lime-tile icon. Uses the real DFFRNT PNG logo when `dffrnt-icon.png` is present
+% beside this file; otherwise falls back to a vector sparkle so the page always
+% renders. Drop the PNG in to get the true logo; delete this macro's fallback
+% branch (leaving just the circle) to have empty tiles instead.
+\newcommand{\dffrntlogo}[1]{%
+  \IfFileExists{dffrnt-icon.png}
+    {\node at (#1) {\includegraphics[width=15mm]{dffrnt-icon.png}};}
+    {\node[icontile] at (#1) {};
+     \node[sparkle]  at (#1) {};
+     \node[star, star points=4, star point ratio=0.34, fill=brandlime,
+           minimum size=2.6mm, inner sep=0] at ([xshift=-3.9mm,yshift=-3.4mm]#1) {};}%
+}
+\newtcolorbox{gnote}{
+  enhanced, breakable,
+  colback=notebg, colframe=noteblue,
+  boxrule=0pt, leftrule=3.5pt, sharp corners,
+  left=12pt, right=12pt, top=8pt, bottom=8pt,
+  before skip=10pt, after skip=12pt,
+  fontupper=\small\color{ink},
+  before upper={{\sffamily\bfseries\color{noteblue}Note}\par\smallskip},
+}
+\newtcolorbox{gtip}{
+  enhanced, breakable,
+  colback=tipbg, colframe=tipgreen,
+  boxrule=0pt, leftrule=3.5pt, sharp corners,
+  left=12pt, right=12pt, top=8pt, bottom=8pt,
+  before skip=10pt, after skip=12pt,
+  fontupper=\small\color{ink},
+  before upper={{\sffamily\bfseries\color{tipgreen}Tip}\par\smallskip},
+}
+\newtcolorbox{gwarn}{
+  enhanced, breakable,
+  colback=warnbg, colframe=warnred,
+  boxrule=0pt, leftrule=3.5pt, sharp corners,
+  left=12pt, right=12pt, top=8pt, bottom=8pt,
+  before skip=10pt, after skip=12pt,
+  fontupper=\small\color{ink},
+  before upper={{\sffamily\bfseries\color{warnred}Warning}\par\smallskip},
+}
+
+\setcounter{tocdepth}{2}
+\setcounter{secnumdepth}{3}
+
+% Start each major section a little lower.
+\let\oldsection\section
+\renewcommand{\section}{\vspace{1em}\oldsection}
+
+%==============================================================================
+\begin{document}
+%==============================================================================
+
+%--------------------------------------------------------------- TITLE PAGE ----
+\begin{titlepage}
+\thispagestyle{empty}
+\begin{tikzpicture}[remember picture, overlay,
+    icontile/.style={fill=icnk, rounded corners=2mm, minimum size=15mm, inner sep=0},
+    sparkle/.style={star, star points=4, star point ratio=0.36, fill=brandlime,
+                    minimum size=8mm, inner sep=0}]
+  % page background
+  \fill[pagebg] (current page.north west) rectangle (current page.south east);
+
+  % --- decorative circle cluster (top) ---
+  \fill[accent]    ([xshift=83mm, yshift=-40mm]current page.north west) circle (17mm);
+  \fill[accent]    ([xshift=167mm,yshift=-43mm]current page.north west) circle (17mm);
+  \fill[accent]    ([xshift=131mm,yshift=-85mm]current page.north west) circle (15mm);
+  \fill[accent]    ([xshift=170mm,yshift=-122mm]current page.north west) circle (14mm);
+  \coordinate (limeA) at ([xshift=128mm,yshift=-38mm]current page.north west);
+  \coordinate (limeB) at ([xshift=172mm,yshift=-86mm]current page.north west);
+  \fill[brandlime] (limeA) circle (17mm);
+  \fill[brandlime] (limeB) circle (17mm);
+  \dffrntlogo{limeA}
+  \dffrntlogo{limeB}
+
+  % --- product title + tagline ---
+  \node[anchor=west, text=accentdk,
+        font=\fontfamily{phv}\bfseries\fontsize{40}{46}\selectfont]
+    at ([xshift=26mm,yshift=-152mm]current page.north west) {DFFRNT};
+  \node[anchor=west, text=accentdk,
+        font=\fontfamily{phv}\bfseries\fontsize{40}{46}\selectfont]
+    at ([xshift=26mm,yshift=-168mm]current page.north west) {AI Assistant};
+  \node[anchor=north west, text=accent, font=\fontfamily{phv}\selectfont\large]
+    at ([xshift=26mm,yshift=-180mm]current page.north west)
+    {\parbox{155mm}{A fully air-gapped, private knowledge and content AI assistant}};
+
+  % --- guide block ---
+  \fill[accent, rounded corners=5mm]
+    ([xshift=20mm,yshift=-190mm]current page.north west)
+    rectangle ([xshift=196mm,yshift=-258mm]current page.north west);
+  \node[anchor=west, text=brandlime,
+        font=\fontfamily{phv}\bfseries\fontsize{42}{46}\selectfont]
+    at ([xshift=32mm,yshift=-212mm]current page.north west) {DEVELOPER GUIDE};
+  \node[anchor=north west, text=blocklt, font=\fontfamily{phv}\selectfont\large]
+    at ([xshift=32mm,yshift=-222mm]current page.north west)
+    {\parbox{152mm}{Architecture, source tour, and extension guidance for
+     future development teams}};
+  \node[anchor=north west, text=blocklt2, font=\fontfamily{phv}\selectfont\footnotesize]
+    at ([xshift=32mm,yshift=-234mm]current page.north west)
+    {\parbox{152mm}{The technical companion to the Installer and User Guides:
+     how the RAG pipeline is built, why the stack looks the way it does, how to
+     set up a development environment, and where to put new capabilities.}};
+  \node[anchor=west, text=brandlime, font=\fontfamily{phv}\bfseries\selectfont\small]
+    at ([xshift=32mm,yshift=-252mm]current page.north west) {\today};
+\end{tikzpicture}
+\end{titlepage}
+
+%---------------------------------------------------------- FRONT MATTER -------
+\pagenumbering{roman}
+\setcounter{page}{1}
+\pagestyle{fancy}
+
+{\hypersetup{linkcolor=ink}\tableofcontents}
+\clearpage
+
+%------------------------------------------------------------- MAIN MATTER ------
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+This guide is for developers --- in particular future grad-student teams ---
+picking up the DFFRNT Air-Gapped AI Assistant to extend its capabilities. It
+assumes general software-engineering background but \textbf{zero familiarity
+with this codebase}. Read it top to bottom once; afterwards the per-module
+docstrings and the two companion documents (Installer Guide, User Guide)
+fill in the operational details.
+
+\section{Architecture and tech stack}
+
+\subsection{What the system is}
+
+A fully offline Retrieval-Augmented Generation (RAG) assistant. Company
+documents are ingested into a local vector database; questions are answered
+by a locally served LLM, grounded in retrieved document chunks, with inline
+\texttt{[n]} citations. The defining constraint is the \textbf{air gap}:
+after deployment, nothing may require internet access --- which drives
+almost every technology choice below.
+
+\subsection{The pipeline}
+
+\begin{lstlisting}[style=tree]
+              +---------- INGESTION -----------+
+Documents --> loaders --> chunker --> embed (bge-m3) --> Qdrant
+(PDF, DOCX,..) (text +    (512-char    via Ollama       (chunks + payload
+                sections)  recursive)                    + per-doc summaries)
+
+              +---------- QUERY ---------------+
+Question --> embed --> Qdrant search --> context assembly --> LLM (qwen3)
+                       (top-k + margin cut         |            via Ollama
+                        + aggregate grouping)      v
+                                  prompt: system + <documents> + history
+                                                   |
+                                                   v
+                                streamed answer + [n] citations + sources
+\end{lstlisting}
+
+\emph{Ingestion:} a format-specific \textbf{loader} produces clean text with
+section metadata (page numbers, slide indexes, headings); the
+\textbf{chunker} splits it (recursive strategy, 512 chars, 64 overlap, 128
+floor); each chunk is \textbf{embedded} by \texttt{bge-m3} through Ollama
+and stored in \textbf{Qdrant} with a rich payload (see
+\texttt{schema.py}). A per-document \textbf{summary} is also generated and
+stored in a second collection --- it routes aggregate queries and briefs the
+prompt.
+
+\emph{Query:} the question is embedded, Qdrant returns the \texttt{top\_k}
+nearest chunks, a \textbf{score-margin cut} drops weak hits, and --- for
+aggregate questions (``compare all candidates'') or tag-scoped queries ---
+a \textbf{grouped search} additionally fetches the best chunk per document
+so roll-ups cover every relevant file. The chunks are rendered into a
+\texttt{<documents>} block, combined with the system prompt and recent
+conversation history, and streamed through the LLM. The UI renders the
+stream (optionally including the model's reasoning), maps \texttt{[n]}
+citations to sources, and persists the conversation.
+
+\subsection{Runtime topology}
+
+Three services, wired by Docker Compose
+(\texttt{deploy/docker-compose.yml}):
+
+\begin{ptable}{>{\ttfamily}p{1.6cm} p{4.4cm} L >{\ttfamily}p{1.2cm}}
+\thd{Service} & \thd{Image} & \thd{Role} & \thd{Port}\\
+qdrant & qdrant/qdrant (pinned) & Vector store + document/tag/conversation
+persistence & 6333\\
+ollama & ollama/ollama (pinned) & Serves the LLM and the embedder & 11434\\
+api & dffrnt-assistant:latest (built from deploy/Dockerfile) & FastAPI app +
+static UI & 8000\\
+\end{ptable}
+
+In \textbf{development} the API usually runs on the host
+(debugger-friendly) against containerized Qdrant + Ollama. In
+\textbf{production} all three are containers (\texttt{prod} compose
+profile).
+
+There are two deployment \emph{pathways}, abstracted behind an interface
+(\S\ref{sec:structure}, \texttt{installer/backends/}):
+
+\begin{itemize}
+  \item \textbf{CONTAINER} (Linux, Windows) --- everything as above.
+  \item \textbf{PORTABLE} (macOS) --- Docker's Linux VM has no Metal GPU
+        passthrough, so Ollama runs as a \textbf{native host process}
+        (Metal is automatic on Apple Silicon) while Qdrant + API run in a
+        bundled portable container runtime (colima + lima + static docker
+        CLI).
+\end{itemize}
+
+\subsection{Tech stack}
+
+\begin{pltable}{p{3.1cm} p{4.6cm} L}
+\rowcolor{tablehead}\thd{Layer} & \thd{Technology} & \thd{Notes}\\
+\endfirsthead
+\rowcolor{tablehead}\thd{Layer} & \thd{Technology} & \thd{Notes}\\
+\endhead
+Language & Python $\geq$ 3.14 & stdlib \texttt{tomllib} for config, modern
+typing\\
+Package manager & uv & lockfile (\texttt{uv.lock}), dependency groups\\
+API & FastAPI + uvicorn & thin HTTP layer; logic lives in services\\
+Vector DB & Qdrant (\texttt{qdrant-client}) & also (ab)used as a plain
+document store\\
+LLM serving & Ollama & \texttt{qwen3} family (LLM) + \texttt{bge-m3}
+(embeddings)\\
+Ollama client & \textbf{stdlib \texttt{urllib}} (\texttt{ollama.py}) &
+deliberately no SDK --- see FAQ\\
+Document parsing & PyMuPDF, python-docx, python-pptx, openpyxl, stdlib
+\texttt{csv} & one library per format; \textbf{no LangChain /
+unstructured}\\
+Answer $\rightarrow$ PDF & mistune (MD$\rightarrow$HTML) + PyMuPDF Story
+(HTML$\rightarrow$PDF) & no extra PDF engine\\
+Web UI & Vanilla HTML/CSS/JS, native ES modules & \textbf{no npm, no
+framework, no build step}\\
+Manager UI & stdlib \texttt{http.server} + static HTML/JS & the browser is
+the GUI toolkit\\
+Packaging & Docker + PyInstaller (\texttt{dffrnt-manager}) & macOS ships
+source + vendored CPython instead\\
+Tests & pytest (3 suites: unit / eval / integration) & plus a synthetic
+eval corpus generator\\
+\end{pltable}
+
+The unifying philosophy: \textbf{minimum dependency surface}. Every
+dependency must earn its place, because everything has to ship inside an
+offline bundle and keep working with no ability to \texttt{pip install} a
+fix on the target.
+
+\section{Source code structure}
+\label{sec:structure}
+
+\begin{lstlisting}[style=tree]
+dffrnt-airgapped-ai-assistant/
+  config.toml             live config -- ALSO frozen into bundles at package time
+  config.toml.example     annotated template (fallback for a bare checkout)
+  conftest.py             pytest path setup + --reset-corpus option
+  pyproject.toml          deps, dependency groups (dev/package), pytest config
+  uv.lock                 locked dependency versions (committed)
+
+  dffrnt_assistant/       === THE APPLICATION ===
+    config.py             Settings dataclass: every tunable, env>TOML>default
+    schema.py             THE shared payload contract (chunk fields, helpers)
+    ollama.py             stdlib-only Ollama client (embed + generate/stream)
+    rag.py                RAG pipeline: retrieve -> prompt -> generate
+    ingest/
+      loaders.py          per-format loaders -> text + section metadata
+      chunker.py          fixed / sentence / paragraph / recursive splitting
+      tags.py             hierarchical tag normalization
+      pipeline.py         load->summarize->chunk->embed->store; SUPPORTED_EXTENSIONS
+      backfill.py         maintenance CLI: summary backfill, bulk (re-)ingest
+    retrieval/
+      store.py            the one Qdrant wrapper (vector collection)
+      retriever.py        query embedding, top-k + margin + aggregate grouping
+      doc_store.py        Qdrant as plain storage: tag taxonomy + conversations
+    api/
+      app.py              FastAPI wiring only; startup builds the singletons
+      services.py         ALL business logic (upload/query/library/delete)
+      export.py           answer Markdown -> PDF (mistune + PyMuPDF Story)
+      audit.py            append-only JSONL audit log
+    ui/                   vanilla JS web app (no build step)
+      index.html
+      js/                 ES modules: api, chat, library, upload, tags, scope, ...
+      styles/             plain CSS: theme, layout, chat, library, tags, ...
+
+  installer/              === THE MANAGER (control panel + CLI) ===
+    __main__.py           python -m installer: no args -> panel, args -> CLI
+    cli.py                argparse CLI: install/start/stop/status/logs/models/...
+    web/server.py         stdlib HTTP server: 127.0.0.1, token-gated, SSE jobs
+    backends/             Backend interface + DockerCompose / Portable backends
+    installers/           Installer interface + Docker / Portable installers
+    model_store.py        filesystem ops on the Ollama store (list/export/import)
+    platform_detect.py    OS/arch/GPU detection -> picks the pathway
+    process.py            subprocess plumbing; BackgroundJob (thread + queue)
+    config.py             app-root/config discovery, config.toml rewriting
+    logging_setup.py      logs/installer.log
+
+  deploy/                 === PACKAGING (build machine only) ===
+    Dockerfile            builds the app image with uv
+    docker-compose.yml    qdrant + ollama + api stack; PINNED versions
+    package.sh            builds dist/: bundle tarball + frozen manager + README
+    package-macos-portable.sh   vendored CPython + portable runtime for macOS
+    data/                 sample documents (also handy in dev)
+    ollama_models/        containerized Ollama model store (bind-mounted)
+    qdrant_storage/       dev/prod Qdrant data
+
+  tests/
+    unit/                 fast, offline: chunker, loaders, retriever, CLI, web, ...
+    eval/                 quality suite (pytest -m eval): needs live stack
+      corpus_gen.py       generates the synthetic ground-truth corpus
+      cases.py            the graded question/answer cases
+      test_retrieval.py   precision / recall on retrieval
+      test_answers.py     answer correctness, citations, refusals
+      test_chunking.py    offline chunk-health checks (run in CI too)
+    test_system.py        integration smoke tests (pytest -m integration)
+
+  .vscode/                launch profiles + tasks (Section 4)
+\end{lstlisting}
+
+Two files deserve special attention before you change anything:
+
+\begin{itemize}
+  \item \textbf{\texttt{schema.py}} is the single shared contract: every
+        chunk stored in Qdrant uses exactly those payload fields, and every
+        consumer reads them through its helpers. It is what keeps ingestion
+        and retrieval from drifting apart. Extend it deliberately; never
+        write ad-hoc payload keys.
+  \item \textbf{\texttt{config.py}} defines every tunable and its default.
+        Anything configurable goes here (and in
+        \texttt{config.toml.example}), never as a scattered constant.
+        Precedence: environment variable $>$ \texttt{config.toml} $>$
+        dataclass default.
+\end{itemize}
+
+Layering rules worth preserving: \texttt{app.py} contains HTTP wiring only
+--- business logic goes in \texttt{services.py}. The manager's UI layers
+(\texttt{web/server.py}, \texttt{cli.py}) talk only to the
+\texttt{Backend}/\texttt{Installer} interfaces, never to \texttt{docker
+compose} directly --- that is what lets the same code manage both
+deployment pathways with no OS conditionals in the UI.
+
+\section{Getting set up (Git + VS Code)}
+
+\subsection{Prerequisites}
+
+\begin{itemize}
+  \item \textbf{Git}, \textbf{VS Code} (with the \emph{Python} +
+        \emph{Python Debugger} extensions)
+  \item \textbf{uv} --- the only Python tooling you need (it
+        installs/manages Python 3.14 itself)
+  \item \textbf{Docker Engine + Compose v2} --- for Qdrant/Ollama in dev
+        and everything in prod. Your user must be able to run
+        \texttt{docker} without sudo.
+  \item Optional but recommended: an NVIDIA GPU (set \texttt{gpu = true});
+        CPU works with the small model.
+\end{itemize}
+
+\subsection{Clone and bootstrap}
+
+\begin{lstlisting}
+git clone https://github.com/ashwathram/dffrnt-airgapped-ai-assistant.git
+cd dffrnt-airgapped-ai-assistant
+uv sync                        # creates .venv from uv.lock (incl. dev group)
+cp config.toml.example config.toml   # then review: gpu flag, llm_model size
+\end{lstlisting}
+
+Pick \texttt{llm\_model} to match your hardware before first start --- the
+comments in \texttt{config.toml.example} give VRAM figures per size
+(\texttt{qwen3:4b} is CPU-viable; \texttt{14b} wants a 16\,GB GPU;
+\texttt{30b-a3b} a 24\,GB GPU).
+
+Branch workflow: \texttt{main} is the default branch and PR target; feature
+work happens on branches (e.g.\ \texttt{dev-installer-integration}). Open
+VS Code with \texttt{code .} and select the \texttt{.venv} interpreter if
+it isn't picked up automatically.
+
+\subsection{Run the dev loop}
+
+\begin{lstlisting}
+uv run python -m installer dev   # Qdrant + Ollama containers, health-waited,
+                                 # configured models pulled/ensured
+uv run dffrnt-api                # API + UI on the host -> http://localhost:8000
+\end{lstlisting}
+
+Or just use the VS Code launch profile \textbf{DFFRNT AI Assistant (Dev:
+host API)}, which does both (\S\ref{sec:launch}). Code changes to the
+Python API require a restart (no auto-reload is configured); UI changes
+(\texttt{dffrnt\_assistant/ui/}) are plain static files --- refresh the
+browser.
+
+\subsection{Run the tests}
+
+\begin{lstlisting}
+uv run pytest                        # unit + offline chunk-health (fast, no stack)
+uv run pytest -m eval                # quality suite; needs the dev stack up
+uv run pytest -m eval --reset-corpus # ...wiping the KB, re-ingesting tests/eval/corpus
+uv run pytest -m integration         # smoke tests against a RUNNING API server
+\end{lstlisting}
+
+The default \texttt{addopts} in \texttt{pyproject.toml} excludes
+\texttt{integration} and \texttt{eval}, so bare \texttt{pytest} is always
+safe offline --- that's also what CI runs. The eval suite grades retrieval
+precision/recall, answer correctness, citation coverage, and refusal
+behaviour against a synthetic corpus generated by
+\texttt{tests/eval/corpus\_gen.py}. Answer tests generate with the local
+LLM, so a full pass takes a while.
+
+\begin{gnote}
+Eval scores are only comparable against the same model and settings. If you
+change \texttt{llm\_model}, \texttt{llm\_num\_ctx}, chunking, or
+\texttt{score\_margin}, re-run the suite to establish a fresh baseline
+before judging your change.
+\end{gnote}
+
+\section{Launch profiles (.vscode/launch.json)}
+\label{sec:launch}
+
+\begin{pltable}{p{5.2cm} L}
+\rowcolor{tablehead}\thd{Profile} & \thd{What it does}\\
+\endfirsthead
+\rowcolor{tablehead}\thd{Profile} & \thd{What it does}\\
+\endhead
+DFFRNT AI Assistant (Dev: host API) & The everyday profile. Pre-launch task
+brings up Qdrant + Ollama (via \texttt{python -m installer dev}), then runs
+the API on the host under \texttt{debugpy} --- breakpoints anywhere in
+\texttt{dffrnt\_assistant/}.\\
+DFFRNT AI Assistant (Prod: Docker container) & Rebuilds the app image from
+source, then starts the full containerized prod stack via the manager
+(\texttt{installer start}). Detached --- stop with \texttt{uv run python -m
+installer stop}. Use to verify container behaviour.\\
+DFFRNT Control Panel (browser) & Runs the manager's browser panel under the
+debugger --- for developing the installer/manager itself. Deliberately has
+\textbf{no} pre-launch task: the panel manages the stack, so nothing may
+pre-start it.\\
+Tests: unit & \texttt{pytest -v} (the offline default suite) under the
+debugger.\\
+Tests: evaluation (live stack) & The eval suite with the stack auto-started
+by the pre-launch task. Skips with instructions if stack/corpus is
+missing.\\
+Tests: evaluation (reset corpus first) & Same, but
+\texttt{--reset-corpus}: wipes the document/summary collections and
+re-ingests \texttt{tests/eval/corpus} first. \textbf{Destructive to your
+dev KB.}\\
+Package: AWS deployment & \texttt{deploy/package.sh TARGET\_SYSTEM=AWS} ---
+small online bundle into \texttt{dist/}.\\
+Package: Offline deployment & \texttt{deploy/package.sh
+TARGET\_SYSTEM=OFFLINE} --- air-gapped bundle (images + model store
+included).\\
+Package: macOS deployment & OFFLINE bundle +
+\texttt{package-macos-portable.sh arm64}: vendored CPython, manager as
+source, portable container runtime. The app image must be linux/arm64 for
+Apple Silicon.\\
+\end{pltable}
+
+The pre-launch task \textbf{Setup: All prerequisites}
+(\texttt{.vscode/tasks.json}) runs three tasks in parallel: \texttt{uv
+sync}, \texttt{mkdir -p data logs}, and \texttt{uv run python -m installer
+dev} (GPU-aware, health-waited, models ensured).
+
+\section{Things future developers should know}
+
+\begin{itemize}
+  \item \textbf{The payload schema is load-bearing.} All retrieval
+        filtering (tags, filenames, summaries) works off payload fields
+        defined in \texttt{schema.py}. Adding a feature that needs new
+        per-chunk data means: extend \texttt{PAYLOAD\_FIELDS}, write it in
+        \texttt{pipeline.build\_payload}, read it through a
+        \texttt{schema.py} helper, and re-ingest.
+  \item \textbf{\texttt{llm\_num\_ctx} is not a detail.} Ollama silently
+        truncates prompts to its context window; the 4096 default eats RAG
+        prompts whole. The shipped 16384 was sized to worst-case retrieval
+        + \texttt{llm\_num\_predict}. If you widen retrieval
+        (\texttt{top\_k}, aggregates) or lengthen history, re-check the
+        budget.
+  \item \textbf{The embed model is a one-way door.} Changing
+        \texttt{embed\_model} / \texttt{vector\_size} / prefixes
+        invalidates every stored vector --- that's why the manager exposes
+        LLM swapping but deliberately not embedder swapping. After any such
+        change: \texttt{dffrnt-manager reingest} (or \texttt{python -m
+        dffrnt\_assistant.ingest.backfill --ingest-missing --force}).
+  \item \textbf{Generation settings encode hard-won lessons.}
+        \texttt{repeat\_penalty = 1.1} stops the reasoning model looping
+        the same thought until timeout; \texttt{num\_predict = 5000} is the
+        runaway cap that still leaves room for thinking \emph{and} answer
+        (3000 guillotined answers). Change them only with the eval suite in
+        hand.
+  \item \textbf{\texttt{config.toml} is frozen into bundles.}
+        \texttt{deploy/package.sh} ships the repo's \emph{live}
+        \texttt{config.toml} --- its state at package time (model choice,
+        \texttt{gpu} flag, prompt) is exactly what a deployment runs. Check
+        it before packaging.
+  \item \textbf{Compose pins versions on purpose.} Qdrant/Ollama image
+        tags in \texttt{docker-compose.yml} are pinned; bump them there and
+        re-run the eval suite before packaging.
+  \item \textbf{The system prompt is a security boundary.} Retrieved
+        documents are wrapped in \texttt{<documents>} and the prompt
+        instructs the model to treat their contents as data --- the
+        prompt-injection defence. Keep that instruction (and the exact
+        refusal sentence, which the UI/tests rely on) when editing prompts,
+        and keep \texttt{config.toml}'s prompt in sync with
+        \texttt{DEFAULT\_SYSTEM\_PROMPT} in \texttt{rag.py}.
+  \item \textbf{The API has no authentication.} Anyone who can reach port
+        8000 can read, upload, and delete. Fine on a trusted LAN behind the
+        air gap; adding auth is an obvious extension point (do it in
+        FastAPI middleware, and gate the destructive endpoints first).
+  \item \textbf{Long-running work must not block.} In the manager,
+        anything that runs a subprocess to completion goes through
+        \texttt{process.BackgroundJob} (worker thread + output queue; the
+        web panel drains it over SSE, the CLI passes \texttt{print}).
+        Follow that pattern for new verbs.
+  \item \textbf{The Ollama model store is just files.}
+        \texttt{manifests/\ldots/<name>/<tag>} JSON plus content-addressed
+        \texttt{blobs/sha256-*}. \texttt{model\_store.py} manipulates it
+        directly (list/export/import work with the stack down); only
+        pull/delete talk to the running Ollama.
+  \item \textbf{Logs to know:} \texttt{logs/installer.log} (manager
+        operations), \texttt{logs/audit.jsonl} (app audit trail),
+        \texttt{dffrnt-manager logs <svc>} (containers).
+\end{itemize}
+
+\section{Extension recipes}
+
+\paragraph{Add a document format.}
+Write a loader in \texttt{ingest/loaders.py} returning the standard
+Document dict (text + sections with page/heading metadata), register the
+extension in \texttt{load\_file}'s dispatch and in
+\texttt{SUPPORTED\_EXTENSIONS} (\texttt{ingest/pipeline.py}), add a unit
+test with a fixture file, and (optionally) surface the extension in the UI
+upload validator (\texttt{ui/js/upload.js}).
+
+\paragraph{Add an API endpoint.}
+Put the logic in \texttt{api/services.py} (raise \texttt{UserError(status,
+detail)} for client errors), add the route in \texttt{api/app.py} as a thin
+adapter, wire the UI call in \texttt{ui/js/api.js}, and consider whether
+the action belongs in the audit log.
+
+\paragraph{Add a manager verb.}
+Implement it on the \texttt{Backend} interface (both pathways if
+applicable), expose it in \texttt{cli.py} (argparse) and
+\texttt{web/server.py} (plus the panel UI in
+\texttt{installer/web/static/}), and run it through
+\texttt{BackgroundJob} if it can take more than a moment.
+
+\paragraph{Tune retrieval quality.}
+The knobs are \texttt{top\_k}, \texttt{score\_margin},
+\texttt{aggregate\_group\_limit/size}, and the chunking block. The workflow
+is: change one thing $\rightarrow$ \texttt{pytest -m eval --reset-corpus}
+$\rightarrow$ compare. Never tune by vibes; the margin cut especially is
+corpus-dependent.
+
+\section{FAQ --- design choices and trade-offs}
+
+\paragraph{Why no LangChain / LlamaIndex / RAG framework?}
+The pipeline is $\sim$a dozen small modules; a framework would add hundreds
+of transitive dependencies to an air-gapped bundle, obscure the retrieval
+logic this project exists to tune, and churn APIs faster than a
+student-team handover cycle. Trade-off: we reimplement loaders and prompt
+assembly ourselves --- accepted, because those are exactly the parts we
+want control over (and they're covered by unit + eval tests).
+
+\paragraph{Why a stdlib-only Ollama client (\texttt{urllib})?}
+One fewer dependency to vendor, and the Ollama HTTP API is small (two
+endpoints used). Trade-off: no connection pooling or typed responses;
+mitigated by the client being $\sim$200 lines with tests.
+
+\paragraph{Why Ollama rather than vLLM / llama.cpp directly?}
+Ollama gives model lifecycle management (pull, quantized model store,
+keep-alive), a stable HTTP API, and one identical serving story on Linux
+containers \emph{and} native macOS with Metal. Trade-off: less throughput
+tuning than vLLM --- irrelevant at single-office concurrency.
+
+\paragraph{Why Qdrant?}
+Runs as a single small container fully offline, has payload filtering (tag
+scoping needs it), grouped search (the aggregate-query feature), and
+persistent named collections. Trade-off: heavier than an embedded library
+(e.g.\ sqlite-vec), but it's also reused as the app's only datastore ---
+see next question.
+
+\paragraph{Why are tags and conversations stored in Qdrant with dummy vectors?}
+\texttt{doc\_store.py} attaches a throwaway 1-D vector because Qdrant
+requires one, then only ever upserts/fetches by id. This keeps the
+deployment at \textbf{zero additional databases} --- no SQLite file to
+migrate, no second container. Trade-off: mildly unidiomatic; documented in
+the module docstring.
+
+\paragraph{Why a vanilla-JS UI with no build step?}
+An air-gapped target can't \texttt{npm install}, and a build pipeline is
+one more thing a future team must resurrect before touching the UI. Native
+ES modules + plain CSS mean ``edit file, refresh browser'' forever.
+Trade-off: no reactivity framework --- state is managed manually in
+\texttt{js/state.js}, which is fine at this UI's size but would strain if
+the UI grew much larger.
+
+\paragraph{Why is the model qwen3 and the embedder bge-m3?}
+\texttt{qwen3} ships in sizes spanning CPU-only to 24\,GB GPU with strong
+multilingual + reasoning behaviour under Ollama; \texttt{bge-m3} is a
+robust multilingual embedder with 1024-dim vectors and no task prefixes.
+Both are swappable in config --- but swapping the embedder invalidates the
+index (Section~5), and eval baselines are per-model.
+
+\paragraph{Why does the manager render in a browser instead of Tk/Qt?}
+The browser is the one GUI runtime every target already has. A Tk build
+needs per-platform freezing and made macOS support painful; a localhost web
+panel is identical everywhere, works over SSH tunnels, and shares its
+plumbing with the headless CLI. Trade-off: a local HTTP server needs a
+security model --- hence loopback-only binding + per-session token.
+
+\paragraph{Why is dffrnt-manager a PyInstaller binary on Linux/Windows but source + vendored CPython on macOS?}
+Targets must not need Python. PyInstaller freezes per-platform, and the
+team had no Mac in the build loop --- so the macOS bundle carries the
+manager as source plus a relocatable CPython (python-build-standalone) and
+a shell launcher. Same UX (\texttt{./dffrnt-manager}), no Mac needed to
+build.
+
+\paragraph{Why Python $\geq$ 3.14?}
+Recent stdlib carries weight here: \texttt{tomllib} (config), modern
+typing, and current security fixes for a long-lived offline install. uv
+makes the interpreter version a non-issue for developers.
+
+\paragraph{Why FastAPI?}
+Streaming responses (ndjson token streams), static file mounts for the UI,
+pydantic validation at the edge, and wide familiarity for onboarding teams.
+The app deliberately keeps it to a thin adapter so a framework swap would
+be contained to \texttt{app.py}.
+
+\paragraph{Why is there a separate summaries collection?}
+Chunk-level search alone misses ``about-ness'': aggregate questions
+(``compare all proposals'') need to know \emph{which documents} are
+relevant, not just which 512-char chunks. Per-document summaries give a
+routing signal and prompt briefing. Trade-off: summaries are LLM-generated
+at ingest time (slower ingestion) and must be backfilled for pre-existing
+docs (\texttt{ingest/backfill.py}).
+
+\paragraph{Why does bare pytest skip the interesting tests?}
+So CI and any offline checkout stay green with no stack. The quality suite
+is opt-in (\texttt{-m eval}) because it needs Qdrant + Ollama and real
+generation time. The skip messages tell you exactly how to bring the stack
+up.
+
+\paragraph{Where would authentication go if we added it?}
+FastAPI dependency/middleware in \texttt{app.py} gating the mutating routes
+first (upload/delete/tags), then the query routes. The manager panel
+already has its token model and needs nothing. Remember the UI's
+\texttt{js/api.js} is the single place all fetches go through --- one spot
+to attach credentials.
+
+\end{document}

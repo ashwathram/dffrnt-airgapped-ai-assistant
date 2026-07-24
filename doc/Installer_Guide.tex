@@ -1,0 +1,770 @@
+% DFFRNT AI Assistant — Installer Guide
+% Overleaf-compatible (pdfLaTeX). Styling adapted from the DFFRNT Beta
+% Prototype Report theme: Palatino body, garnet (uOttawa-inspired) accent,
+% with markdown-style Note / Tip / Warning callouts for a user-guide feel.
+\documentclass[11pt,letterpaper]{article}
+
+%------------------------------------------------------------------ encoding --
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+% Silence the harmless "Command \showhyphens has changed" notice microtype
+% emits under recent LaTeX kernels.
+\usepackage{silence}
+\WarningFilter{latex}{Command}
+
+%--------------------------------------------------------------------- fonts --
+\usepackage{mathpazo}                 % Palatino body + matching math
+\usepackage[scaled=0.92]{helvet}      % Helvetica-like sans (headings)
+\usepackage{microtype}                % refined justification & spacing
+\linespread{1.08}
+\renewcommand{\sfdefault}{\rmdefault} % unify on Palatino, matching the report
+
+%-------------------------------------------------------------------- layout --
+\usepackage[letterpaper,margin=1in,headheight=22pt,headsep=18pt,footskip=28pt]{geometry}
+\usepackage{tocloft}                  % load BEFORE parskip
+\usepackage{parskip}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=4pt,parsep=0pt}
+
+%--------------------------------------------------------------------- colour --
+\usepackage[table]{xcolor}
+\definecolor{accent}{HTML}{6A24B5}    % DFFRNT brand purple
+\definecolor{accentdk}{HTML}{4E1A86}  % deeper purple (headings / links)
+\definecolor{brandlime}{HTML}{CFEF3C} % chartreuse accent
+\definecolor{pagebg}{HTML}{E7E2F0}    % lavender title-page background
+\definecolor{icnk}{HTML}{171634}      % dark navy icon tile
+\definecolor{blocklt}{HTML}{D9CEEE}   % light lavender text on the purple block
+\definecolor{blocklt2}{HTML}{C7B9E6}  % lighter lavender (block small print)
+\definecolor{ink}{HTML}{1F2933}       % near-black body ink
+\definecolor{inkmute}{HTML}{56616C}   % muted grey for metadata
+\definecolor{rulegrey}{HTML}{C7CDD4}  % hairline rules
+\definecolor{briefbg}{HTML}{F1ECF8}   % light lavender callout / code background
+
+% Admonition palette (markdown-style callouts)
+\definecolor{noteblue}{HTML}{2B6CB0}
+\definecolor{notebg}{HTML}{EEF4FB}
+\definecolor{tipgreen}{HTML}{2F7A55}
+\definecolor{tipbg}{HTML}{EDF6F0}
+\definecolor{warnred}{HTML}{B02A37}
+\definecolor{warnbg}{HTML}{FBEEEF}
+
+%------------------------------------------------------------- code listings ---
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{accentdk}\bfseries,
+  commentstyle=\color{inkmute}\itshape,
+  stringstyle=\color{accent},
+  frame=single,
+  rulecolor=\color{rulegrey}, framesep=6pt,
+  showstringspaces=false, breaklines=true, tabsize=2,
+  backgroundcolor=\color{briefbg!40},
+  xleftmargin=4pt,
+}
+
+%---------------------------------------------------- section / TOC styling ---
+\usepackage{titlesec}
+\titleformat{\section}
+  {\sffamily\LARGE\bfseries\color{accentdk}}
+  {\makebox[1.6em][l]{\thesection}}{0em}{}
+  [\vspace{3pt}{\color{accent}\titlerule[1pt]}]
+\titleformat{\subsection}
+  {\sffamily\Large\bfseries\color{ink}}
+  {\makebox[2.0em][l]{\thesubsection}}{0em}{}
+\titleformat{\subsubsection}
+  {\sffamily\large\bfseries\color{ink}}
+  {\thesubsubsection}{0.6em}{}
+% FAQ questions: garnet, run-in
+\titleformat{\paragraph}[runin]
+  {\sffamily\bfseries\color{accentdk}}{}{0em}{}
+\titlespacing*{\section}      {0pt}{0pt}{14pt}
+\titlespacing*{\subsection}   {0pt}{16pt}{6pt}
+\titlespacing*{\subsubsection}{0pt}{12pt}{4pt}
+\titlespacing*{\paragraph}    {0pt}{8pt}{0.7em}
+
+\renewcommand{\thesection}{\arabic{section}}
+\renewcommand*\contentsname{Table of Contents}
+\renewcommand{\cfttoctitlefont}{\sffamily\LARGE\bfseries\color{accentdk}}
+\renewcommand{\cftsecfont}{\sffamily\bfseries\color{ink}}
+\renewcommand{\cftsecpagefont}{\sffamily\bfseries\color{ink}}
+\renewcommand{\cftsubsecfont}{\color{inkmute}}
+\renewcommand{\cftsubsecpagefont}{\color{inkmute}}
+\setlength{\cftbeforesecskip}{6pt}
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+
+%-------------------------------------------------------- header / footer -----
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{rulegrey}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\footrulewidth}{0pt}
+\renewcommand{\sectionmark}[1]{\markboth{\thesection\quad #1}{}}
+\fancyhead[L]{\footnotesize\sffamily\color{inkmute}Installer Guide}
+\fancyhead[R]{\footnotesize\sffamily\color{inkmute}\nouppercase{\leftmark}}
+\fancyfoot[R]{\footnotesize\sffamily\color{inkmute}Page \thepage}
+\fancyfoot[L]{\footnotesize\sffamily\color{inkmute}DFFRNT Air-Gapped AI Assistant}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \fancyfoot[R]{\footnotesize\sffamily\color{inkmute}Page \thepage}%
+  \fancyfoot[L]{\footnotesize\sffamily\color{inkmute}DFFRNT Air-Gapped AI Assistant}%
+}
+
+%------------------------------------------------------- hyperlinks (late) ----
+\usepackage[colorlinks=true,linkcolor=accentdk,urlcolor=accent,
+            citecolor=accentdk,linktoc=all]{hyperref}
+\usepackage{url}
+\urlstyle{sf}
+
+%------------------------------------------------ markdown-style callouts ------
+\usepackage[most]{tcolorbox}
+\usetikzlibrary{shapes.geometric}   % 4-point "sparkle" star on the title page
+\usepackage{graphicx}
+\graphicspath{{./}{doc/}}
+% Lime-tile icon. Uses the real DFFRNT PNG logo when `dffrnt-icon.png` is present
+% beside this file; otherwise falls back to a vector sparkle so the page always
+% renders. Drop the PNG in to get the true logo; delete this macro's fallback
+% branch (leaving just the circle) to have empty tiles instead.
+\newcommand{\dffrntlogo}[1]{%
+  \IfFileExists{dffrnt-icon.png}
+    {\node at (#1) {\includegraphics[width=15mm]{dffrnt-icon.png}};}
+    {\node[icontile] at (#1) {};
+     \node[sparkle]  at (#1) {};
+     \node[star, star points=4, star point ratio=0.34, fill=brandlime,
+           minimum size=2.6mm, inner sep=0] at ([xshift=-3.9mm,yshift=-3.4mm]#1) {};}%
+}
+
+\newtcolorbox{gnote}{
+  enhanced, breakable,
+  colback=notebg, colframe=noteblue,
+  boxrule=0pt, leftrule=3.5pt, sharp corners,
+  left=12pt, right=12pt, top=8pt, bottom=8pt,
+  before skip=10pt, after skip=12pt,
+  fontupper=\small\color{ink},
+  before upper={{\sffamily\bfseries\color{noteblue}Note}\par\smallskip},
+}
+\newtcolorbox{gtip}{
+  enhanced, breakable,
+  colback=tipbg, colframe=tipgreen,
+  boxrule=0pt, leftrule=3.5pt, sharp corners,
+  left=12pt, right=12pt, top=8pt, bottom=8pt,
+  before skip=10pt, after skip=12pt,
+  fontupper=\small\color{ink},
+  before upper={{\sffamily\bfseries\color{tipgreen}Tip}\par\smallskip},
+}
+\newtcolorbox{gwarn}{
+  enhanced, breakable,
+  colback=warnbg, colframe=warnred,
+  boxrule=0pt, leftrule=3.5pt, sharp corners,
+  left=12pt, right=12pt, top=8pt, bottom=8pt,
+  before skip=10pt, after skip=12pt,
+  fontupper=\small\color{ink},
+  before upper={{\sffamily\bfseries\color{warnred}Warning}\par\smallskip},
+}
+
+\setcounter{tocdepth}{2}
+\setcounter{secnumdepth}{3}
+
+% Start each major section a little lower.
+\let\oldsection\section
+\renewcommand{\section}{\vspace{1em}\oldsection}
+
+%==============================================================================
+\begin{document}
+%==============================================================================
+
+%--------------------------------------------------------------- TITLE PAGE ----
+\begin{titlepage}
+\thispagestyle{empty}
+\begin{tikzpicture}[remember picture, overlay,
+    icontile/.style={fill=icnk, rounded corners=2mm, minimum size=15mm, inner sep=0},
+    sparkle/.style={star, star points=4, star point ratio=0.36, fill=brandlime,
+                    minimum size=8mm, inner sep=0}]
+  % page background
+  \fill[pagebg] (current page.north west) rectangle (current page.south east);
+
+  % --- decorative circle cluster (top) ---
+  \fill[accent]    ([xshift=83mm, yshift=-40mm]current page.north west) circle (17mm);
+  \fill[accent]    ([xshift=167mm,yshift=-43mm]current page.north west) circle (17mm);
+  \fill[accent]    ([xshift=131mm,yshift=-85mm]current page.north west) circle (15mm);
+  \fill[accent]    ([xshift=170mm,yshift=-122mm]current page.north west) circle (14mm);
+  \coordinate (limeA) at ([xshift=128mm,yshift=-38mm]current page.north west);
+  \coordinate (limeB) at ([xshift=172mm,yshift=-86mm]current page.north west);
+  \fill[brandlime] (limeA) circle (17mm);
+  \fill[brandlime] (limeB) circle (17mm);
+  \dffrntlogo{limeA}
+  \dffrntlogo{limeB}
+
+  % --- product title + tagline ---
+  \node[anchor=west, text=accentdk,
+        font=\fontfamily{phv}\bfseries\fontsize{40}{46}\selectfont]
+    at ([xshift=26mm,yshift=-152mm]current page.north west) {DFFRNT};
+  \node[anchor=west, text=accentdk,
+        font=\fontfamily{phv}\bfseries\fontsize{40}{46}\selectfont]
+    at ([xshift=26mm,yshift=-168mm]current page.north west) {AI Assistant};
+  \node[anchor=north west, text=accent, font=\fontfamily{phv}\selectfont\large]
+    at ([xshift=26mm,yshift=-180mm]current page.north west)
+    {\parbox{155mm}{A fully air-gapped, private knowledge and content AI assistant}};
+
+  % --- guide block ---
+  \fill[accent, rounded corners=5mm]
+    ([xshift=20mm,yshift=-190mm]current page.north west)
+    rectangle ([xshift=196mm,yshift=-258mm]current page.north west);
+  \node[anchor=west, text=brandlime,
+        font=\fontfamily{phv}\bfseries\fontsize{42}{46}\selectfont]
+    at ([xshift=32mm,yshift=-212mm]current page.north west) {INSTALLER GUIDE};
+  \node[anchor=north west, text=blocklt, font=\fontfamily{phv}\selectfont\large]
+    at ([xshift=32mm,yshift=-222mm]current page.north west)
+    {\parbox{152mm}{Deploying the assistant on a target machine}};
+  \node[anchor=north west, text=blocklt2, font=\fontfamily{phv}\selectfont\footnotesize]
+    at ([xshift=32mm,yshift=-234mm]current page.north west)
+    {\parbox{152mm}{A private, fully offline RAG assistant that ingests company
+     documents and answers questions with grounded, citation-backed responses.
+     Everything runs locally --- no data leaves the machine.}};
+  \node[anchor=west, text=brandlime, font=\fontfamily{phv}\bfseries\selectfont\small]
+    at ([xshift=32mm,yshift=-252mm]current page.north west) {\today};
+\end{tikzpicture}
+\end{titlepage}
+
+%---------------------------------------------------------- FRONT MATTER -------
+\pagenumbering{roman}
+\setcounter{page}{1}
+\pagestyle{fancy}
+
+{\hypersetup{linkcolor=ink}\tableofcontents}
+\clearpage
+
+%------------------------------------------------------------- MAIN MATTER ------
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+This guide walks you through installing the DFFRNT Air-Gapped AI Assistant on
+a target machine, from receiving the installer bundle to a running system. It
+is written for a general audience --- no prior experience with Docker or the
+command line is assumed beyond being able to open a terminal and type
+commands.
+
+\section{Concepts and technologies}
+
+You do not need to master any of these to install the assistant, but knowing
+what each piece does makes the process (and any error messages) much less
+mysterious.
+
+\subsection{The assistant itself}
+
+The DFFRNT AI Assistant is a private, fully offline ``RAG''
+(Retrieval-Augmented Generation) system. It ingests company documents
+(proposals, resumes, policies, spreadsheets, \ldots) and answers questions
+about them with citation-backed responses through a web page in your browser.
+
+\begin{gnote}
+Everything runs locally: the language model, the document index, and the
+application. \textbf{No data ever leaves the machine.} That is the whole point
+of the air-gapped design --- the assistant makes no external calls once it is
+running.
+\end{gnote}
+
+\subsection{Docker}
+
+\href{https://www.docker.com/}{Docker} is software that runs applications
+inside \textbf{containers} --- self-contained boxes that carry everything an
+application needs (its code, libraries, and settings). Because a container
+ships with everything included, the assistant behaves identically on any
+machine, and the target machine needs almost nothing pre-installed ---
+\textbf{only Docker itself}. No Python, no packages, no scripts.
+
+Related terms you will encounter:
+
+\begin{itemize}
+  \item \textbf{Image} --- a frozen snapshot of an application, like an
+        installation CD. The bundle ships images; installing ``loads'' them
+        into Docker.
+  \item \textbf{Container} --- a running copy of an image. Stopping the stack
+        stops the containers; the images stay behind for the next start.
+  \item \textbf{Docker Compose} --- a Docker feature that starts and connects
+        several containers together as one ``stack''. The assistant's stack
+        has three services: Qdrant, Ollama, and the API/UI.
+\end{itemize}
+
+\subsection{Ollama}
+
+\href{https://ollama.com/}{Ollama} is a local server for large language
+models (LLMs). It hosts two models for the assistant: the chat model (the
+\texttt{qwen3} family) that writes the answers, and an embedding model
+(\texttt{bge-m3}) that turns text into vectors for searching. Ollama runs in
+its own container and is not visible to you day-to-day.
+
+\subsection{Qdrant}
+
+\href{https://qdrant.tech/}{Qdrant} is a \textbf{vector database}. When
+documents are ingested, they are split into chunks and each chunk is stored
+as a vector (a list of numbers capturing its meaning). When you ask a
+question, Qdrant finds the chunks whose meaning is closest to the question,
+and those chunks become the evidence the model answers from. Qdrant also runs
+in its own container.
+
+\subsection{dffrnt-manager}
+
+\texttt{dffrnt-manager} is the single tool you interact with. It is one
+self-contained program with two faces:
+
+\begin{itemize}
+  \item Run it \textbf{with no arguments} and it opens a control panel in
+        your web browser (Install / Manage / Models / Logs tabs). This is the
+        recommended path for most users.
+  \item Run it \textbf{with a command} (\texttt{install}, \texttt{start},
+        \texttt{status}, \ldots) and it does the same job headlessly in the
+        terminal --- useful over SSH or on servers.
+\end{itemize}
+
+\subsection{OFFLINE vs.\ online (AWS) bundles}
+
+The bundle comes in two flavours, chosen when it was built:
+
+\begin{itemize}
+  \item \textbf{OFFLINE} --- carries every container image \emph{and} the AI
+        models inside the bundle. Installing needs \textbf{no internet at
+        all}. This is the flavour for air-gapped machines. The bundle is
+        large (several GB).
+  \item \textbf{AWS / online} --- ships only the application image and
+        downloads the rest (Qdrant, Ollama, models) from the internet during
+        installation. Smaller bundle, but the target must be online for the
+        first install.
+\end{itemize}
+
+The README inside the bundle states which flavour you have.
+
+\section{Step-by-step installation}
+
+\subsection{What you should end up with}
+
+The installer is distributed as a single \texttt{.tar} archive. Unpacking it
+yields exactly \textbf{three files, which must stay together in the same
+folder}:
+
+\begin{lstlisting}
+dffrnt-offline.tar.gz    (or dffrnt-aws.tar.gz -- the application bundle)
+dffrnt-manager           (the installer + control panel, one program)
+README.md                (target-side notes generated at build time)
+\end{lstlisting}
+
+\subsection{Step 0 --- Check the prerequisites}
+
+The target machine needs:
+
+\begin{enumerate}
+  \item \textbf{Docker Engine with the Compose v2 plugin.}
+    \begin{itemize}
+      \item Linux: install \texttt{docker} and
+            \texttt{docker-compose-plugin} from your distribution or from
+            \url{https://docs.docker.com/engine/install/}.
+      \item Windows / macOS: install \textbf{Docker Desktop} and make sure it
+            is running (whale icon in the system tray / menu bar).
+      \item Verify with: \texttt{docker --version} and
+            \texttt{docker compose version}.
+    \end{itemize}
+  \item \textbf{Disk space} --- allow at least 25\,GB free for an OFFLINE
+        install (images, models, and your document index all live on disk).
+  \item On Linux, your user should be able to run Docker without
+        \texttt{sudo} (see Section~\ref{sec:troubleshooting} if
+        \texttt{docker ps} says ``permission denied'').
+\end{enumerate}
+
+\begin{gtip}
+Don't worry about getting this perfect --- the installer checks all
+prerequisites first and reports exactly what is missing if a check fails,
+\emph{without changing anything on the machine}. It is always safe to run and
+re-run.
+\end{gtip}
+
+\subsection{Step 1 --- Get the archive onto the machine}
+
+\textbf{Option A --- download from a GitHub release (online machine):}
+
+\begin{lstlisting}
+curl -L -o dffrnt-installer.tar \
+  https://github.com/ashwathram/dffrnt-airgapped-ai-assistant/releases/download/<TAG>/dffrnt-installer.tar
+\end{lstlisting}
+
+Replace \texttt{<TAG>} with the release version you were given (e.g.\
+\texttt{v1.0.0}). You can also simply download it from the release page in a
+browser.
+
+\textbf{Option B --- USB thumb drive (air-gapped machine):}
+
+\begin{enumerate}
+  \item On a networked machine, download the \texttt{.tar} as above and copy
+        it to the drive.
+  \item Plug the drive into the target machine and copy the \texttt{.tar} to
+        somewhere like your home folder or Desktop.
+\end{enumerate}
+
+\begin{gwarn}
+The USB drive must \textbf{not} be FAT32-formatted. FAT32 cannot hold files
+larger than 4\,GB, and an OFFLINE bundle is bigger than that --- the copy will
+fail partway. Use exFAT or NTFS (most drives sold as ``64\,GB or larger'' are
+already exFAT).
+\end{gwarn}
+
+\subsection{Step 2 --- Unpack the archive}
+
+In a terminal, in the folder holding the \texttt{.tar}:
+
+\begin{lstlisting}
+mkdir dffrnt-installer
+tar -xf dffrnt-installer.tar -C dffrnt-installer
+cd dffrnt-installer
+ls
+\end{lstlisting}
+
+\texttt{ls} should show the three files listed above. If your archive
+unpacked into a nested subfolder, \texttt{cd} into it --- the point is to run
+the next command from the folder that directly contains
+\texttt{dffrnt-manager} and the \texttt{.tar.gz}.
+
+On Windows or macOS you can instead right-click the archive and choose
+``Extract'' --- then open a terminal in the extracted folder.
+
+\subsection{Step 3 --- Run the installer}
+
+\textbf{Browser (recommended):}
+
+\begin{lstlisting}
+./dffrnt-manager
+\end{lstlisting}
+
+This opens the control panel in your browser (it serves only to this machine
+--- nothing is exposed to the network). Go to the \textbf{Install} tab: it
+auto-detects the \texttt{.tar.gz} sitting next to it; you pick the
+destination folder and click Install.
+
+\textbf{Terminal (headless / SSH):}
+
+\begin{lstlisting}
+./dffrnt-manager install                     # installs to ./dffrnt
+./dffrnt-manager install --dest /opt/dffrnt  # or choose the destination
+\end{lstlisting}
+
+Either way, the installer:
+
+\begin{enumerate}
+  \item checks the prerequisites (and stops with a clear message if one
+        fails),
+  \item unpacks the application bundle into the destination folder,
+  \item loads the container image(s) into Docker,
+  \item starts the stack --- Qdrant, Ollama, and the API/UI.
+\end{enumerate}
+
+An OFFLINE install runs entirely from the bundle. An online (AWS) install
+pulls the base images and models from the internet at this point, so the
+first install can take a while depending on your connection.
+
+\subsection{Step 4 --- Verify}
+
+\begin{lstlisting}
+cd dffrnt                    # or the destination you chose
+./dffrnt-manager status
+\end{lstlisting}
+
+\texttt{status} reports the health of each service. When everything is up,
+open \url{http://localhost:8000} in a browser --- that is the assistant.
+
+\begin{gnote}
+On every start the assistant pre-loads the models into memory in the
+background. The very first question after a start may take a little longer
+while that warmup finishes --- and on a fresh \emph{online} install, the first
+warmup also waits for the model download, which can take a few minutes.
+\end{gnote}
+
+\subsection{Step 5 --- Day-to-day management}
+\label{sec:daytoday}
+
+A copy of \texttt{dffrnt-manager} was placed in the install folder; it
+manages the stack from there. Running it with no arguments opens the panel
+(Manage / Models / Logs tabs); the same verbs work in the terminal:
+
+\begin{lstlisting}
+cd dffrnt
+./dffrnt-manager             # browser control panel
+./dffrnt-manager start       # bring the stack up
+./dffrnt-manager stop        # stop all containers
+./dffrnt-manager restart
+./dffrnt-manager status      # service + API health
+./dffrnt-manager logs        # follow container logs (or: logs api)
+./dffrnt-manager audit       # follow the app's audit trail
+./dffrnt-manager reingest    # force re-ingest of every stored document
+./dffrnt-manager models      # list / switch / import / export models
+\end{lstlisting}
+
+\section{Accessing the control panel over SSH (AWS)}
+
+\textbf{You only need this section for a remote, headless box you administer
+over SSH --- in practice, an AWS instance.} On any local machine --- a Linux,
+Windows, or macOS desktop sitting in front of you --- running
+\texttt{./dffrnt-manager} opens the panel in your browser directly, and none
+of this applies.
+
+Even on AWS it is \textbf{optional}: every management action is also a
+headless CLI command (see Step~5, \S\ref{sec:daytoday}), so you can run the
+whole deployment over a plain SSH session without ever opening the panel. Use
+the tunnel below only if you prefer the graphical Install / Manage / Models /
+Logs views.
+
+\subsection{Why a tunnel is needed}
+
+For safety the panel binds to \textbf{127.0.0.1 only} (the machine's own
+loopback) and puts a random per-session token in the URL it prints.
+Loopback-only means it is deliberately \emph{not} reachable across the network
+--- so on a remote box you reach it by forwarding your local traffic into that
+loopback over the SSH connection you already have.
+
+\begin{gwarn}
+Do \textbf{not} open port 8901 (or 8000) in the AWS security group for this.
+The tunnel rides entirely inside SSH (port 22); the panel stays invisible to
+the internet. Opening those ports would expose the unauthenticated management
+surface and the app --- exactly what the loopback binding prevents.
+\end{gwarn}
+
+\subsection{Using a SOCKS proxy (\texttt{ssh -D})}
+
+A dynamic SOCKS proxy is the tidiest option, because it lets your browser use
+the \emph{exact} \texttt{http://127.0.0.1:PORT/\ldots} URL the panel prints ---
+unchanged, token and all. The browser hands \texttt{127.0.0.1} to the proxy,
+and SSH resolves it on the \emph{remote} loopback, which is where the panel
+lives.
+
+\textbf{1. On the AWS box}, start the panel without opening a browser, on a
+fixed port so it's predictable:
+
+\begin{lstlisting}
+./dffrnt-manager panel --no-browser --port 8901
+\end{lstlisting}
+
+Copy the full URL it prints --- it includes the token, e.g.\
+\texttt{http://127.0.0.1:8901/?token=ab12cd34\ldots}
+
+\textbf{2. On your own machine}, open a SOCKS proxy over SSH and leave it
+running:
+
+\begin{lstlisting}
+ssh -D 1080 -N user@your-aws-host
+\end{lstlisting}
+
+\texttt{-D 1080} opens a SOCKS proxy on local port 1080; \texttt{-N} says
+``just forward, don't run a remote shell''. (Add \texttt{-f} to push it into
+the background.)
+
+\textbf{3. Point your browser at the proxy:}
+
+\begin{itemize}
+  \item \textbf{Firefox:} Settings $\rightarrow$ Network Settings $\rightarrow$
+        \emph{Manual proxy configuration} $\rightarrow$ SOCKS Host
+        \texttt{127.0.0.1}, Port \texttt{1080}, select \textbf{SOCKS v5}, and
+        tick \textbf{Proxy DNS when using SOCKS v5}.
+  \item \textbf{Chrome / Chromium:} launch it with
+        \texttt{-{}-proxy-server="socks5://127.0.0.1:1080"}, or use a
+        proxy-switcher extension so you don't reroute your everyday browsing.
+\end{itemize}
+
+\textbf{4. Open the panel.} Paste the exact URL the box printed
+(\texttt{http://127.0.0.1:8901/?token=\ldots}) into that browser. The request
+tunnels to AWS, where \texttt{127.0.0.1:8901} is the panel --- you now have the
+full control panel as if you were sitting at the machine.
+
+When you're done, remove the browser's proxy setting and stop the SSH session
+(Ctrl-C, or \texttt{kill} it if you used \texttt{-f}).
+
+\begin{gnote}
+The SOCKS proxy reroutes \emph{all} of that browser's traffic through the AWS
+box while it's set. Use a separate browser profile or a proxy-switcher
+extension, and remember to turn the proxy off afterwards --- otherwise normal
+browsing will stall once the tunnel closes.
+\end{gnote}
+
+\subsection{Alternative: local port forwarding (\texttt{ssh -L})}
+
+If you'd rather not touch any browser proxy setting, forward a single local
+port to the panel instead:
+
+\begin{lstlisting}
+ssh -L 8901:127.0.0.1:8901 -N user@your-aws-host
+\end{lstlisting}
+
+Then open \texttt{http://127.0.0.1:8901/?token=\ldots} (the same printed URL)
+in your normal browser --- no proxy configuration needed. The catch is that
+the local port must match the panel's port, which is why we fixed it with
+\texttt{-{}-port 8901} above.
+
+\section{FAQ}
+
+\paragraph{Do I need to know Docker to use this?}
+No. \texttt{dffrnt-manager} drives Docker for you --- install, start, stop,
+status, and logs are all one command or one click. Docker just needs to be
+installed and running.
+
+\paragraph{How do I see what's running?}
+\texttt{./dffrnt-manager status} is the friendly view. If you're curious
+about the underlying containers, \texttt{docker ps} lists them (you'll see
+three: qdrant, ollama, and the api), and Docker Desktop shows the same thing
+graphically on Windows/macOS. You should not need to touch containers
+directly --- always prefer the manager, which starts and stops them in the
+right order.
+
+\paragraph{Does the machine need internet?}
+For an \textbf{OFFLINE} bundle: no, not even during install. For an
+\textbf{AWS/online} bundle: yes, once, during install (and when pulling a new
+model later). After that, the assistant itself never calls out --- everything
+runs locally.
+
+\paragraph{Where do my documents and data live?}
+Inside the install folder: the vector index in \texttt{qdrant\_storage/}, the
+AI models in \texttt{ollama\_models/}, uploaded documents and app data in
+\texttt{data/}, and logs in \texttt{logs/}. Deleting the install folder
+deletes your data.
+
+\paragraph{How do I stop it / start it after a reboot?}
+\texttt{./dffrnt-manager stop} and \texttt{./dffrnt-manager start} from the
+install folder. The stack does not start automatically on boot unless you set
+that up yourself.
+
+\paragraph{What is the address the panel opens, and why does it look odd?}
+The control panel serves on \texttt{127.0.0.1} (this machine only) with a
+one-time token in the URL --- that's a safety measure so nothing on the
+network can reach the management functions. The assistant itself is the
+friendlier \url{http://localhost:8000}.
+
+\paragraph{Can other people on the network use the assistant?}
+If they can reach port 8000 on this machine, yes.
+
+\begin{gwarn}
+The assistant has \textbf{no login}. Anyone who can reach port 8000 can query,
+upload, and delete documents. Only expose it to networks you trust --- on a
+server, restrict the firewall / security group for port 8000 to your VPN or
+office network, or put an authenticating reverse proxy in front. Never open it
+to the whole internet.
+\end{gwarn}
+
+\paragraph{How do I change the AI model?}
+Panel $\rightarrow$ \textbf{Models} tab, or \texttt{./dffrnt-manager models
+use qwen3:8b}. On an air-gapped machine, first bring the model over as a
+tarball: \texttt{models export} on any networked machine with this app, then
+\texttt{models import} here. Both are in the Models tab too.
+
+\paragraph{Can I change settings?}
+Yes --- \texttt{config.toml} in the install folder holds every setting
+(models, ports, GPU on/off, retrieval tuning). Edit it, then
+\texttt{./dffrnt-manager restart}.
+
+\paragraph{Will reinstalling wipe my settings?}
+No. An existing edited \texttt{config.toml} is kept by default; the installer
+only replaces it if you explicitly pass \texttt{--overwrite-config} (the old
+file is then archived as \texttt{config.toml.old}).
+
+\paragraph{Does anything get sent to the cloud?}
+No. The models run locally under Ollama, the index is local Qdrant, and the
+app makes no external calls. That is the point of the air-gapped design.
+
+\section{Troubleshooting}
+\label{sec:troubleshooting}
+
+\subsection{``permission denied'' when the installer (or \texttt{docker ps}) talks to Docker}
+
+On Linux, your user isn't in the \texttt{docker} group. Fix:
+
+\begin{lstlisting}
+sudo usermod -aG docker $USER
+\end{lstlisting}
+
+then \textbf{log out and back in} (or run \texttt{newgrp docker} in the
+current terminal). Verify with \texttt{docker ps} --- it should list
+containers (or print an empty table) without \texttt{sudo}.
+
+\subsection{\texttt{./dffrnt-manager: Permission denied}}
+
+The executable bit was lost in transfer (common when the file passed through
+a FAT32 drive or some download tools). Fix:
+
+\begin{lstlisting}
+chmod +x dffrnt-manager
+\end{lstlisting}
+
+\subsection{\texttt{cannot execute binary file} or \texttt{Exec format error}}
+
+The bundle was built for a different OS or CPU architecture than this machine
+(e.g.\ an x86\_64 build on an ARM machine). Bundles are platform-specific ---
+ask for a build matching the target and check with \texttt{uname -m}.
+
+\subsection{macOS blocks the program (``cannot be opened because the developer cannot be verified'')}
+
+macOS quarantines files that arrived from the internet. Clear it with:
+
+\begin{lstlisting}
+xattr -d com.apple.quarantine dffrnt-manager
+\end{lstlisting}
+
+or right-click $\rightarrow$ Open the first time.
+
+\subsection{``No bundle found'' / installer can't find the tarball}
+
+The three files must sit \textbf{together in the same folder}, and you must
+run \texttt{./dffrnt-manager} from that folder. Check with \texttt{ls} that
+you see the \texttt{dffrnt-*.tar.gz} next to \texttt{dffrnt-manager} --- if
+extraction created a nested subfolder, \texttt{cd} into it. You can also name
+the bundle explicitly:
+\texttt{./dffrnt-manager install path/to/dffrnt-offline.tar.gz}.
+
+\subsection{A prerequisite check fails}
+
+The message names exactly what's missing --- most commonly Docker isn't
+installed, isn't running (start Docker Desktop, or \texttt{sudo systemctl
+start docker} on Linux), or the Compose v2 plugin is absent (\texttt{docker
+compose version} should print a version). Install/start the missing piece and
+re-run; the check changed nothing, so it's safe to retry.
+
+\subsection{Port 8000 is already in use}
+
+Another program on the machine owns port 8000. Edit \texttt{api\_port} in
+\texttt{config.toml} in the install folder (e.g.\ \texttt{api\_port = 8080}),
+then \texttt{./dffrnt-manager restart}, and use
+\url{http://localhost:8080}.
+
+\subsection{\texttt{status} says a service is unhealthy / the UI won't load}
+
+Give it a minute after \texttt{start} --- the models take time to load. Then:
+
+\begin{lstlisting}
+./dffrnt-manager status      # which service is degraded?
+./dffrnt-manager logs api    # read that service's log (also: logs ollama, logs qdrant)
+./dffrnt-manager restart     # often clears one-off startup races
+\end{lstlisting}
+
+\subsection{GPU mode refuses to start}
+
+\texttt{gpu = true} in \texttt{config.toml} requires the NVIDIA driver
+\textbf{and} the NVIDIA Container Toolkit on the host; the manager checks and
+refuses with a message if either is missing. Install them (e.g.\
+\texttt{nvidia-container-toolkit} from your distro or NVIDIA's repository),
+or set \texttt{gpu = false} to run on CPU.
+
+\subsection{The USB drive won't take the bundle / a model export}
+
+The drive is FAT32, whose 4\,GB per-file limit is smaller than the bundle and
+most models. Reformat the drive as exFAT (both Windows and macOS/Linux can
+read and write it) and copy again.
+
+\subsection{Disk fills up over time}
+
+Model switching is designed not to accumulate: switching removes the
+previously configured model from the cache. If space runs low anyway, check
+\texttt{./dffrnt-manager models} for unused models (\texttt{models rm NAME})
+and \texttt{docker system df} for Docker's own usage.
+
+\subsection{Something else}
+
+\texttt{./dffrnt-manager logs} (all services) and
+\texttt{logs/installer.log} in the install folder record what happened ---
+include the relevant lines when asking for help.
+
+\end{document}
