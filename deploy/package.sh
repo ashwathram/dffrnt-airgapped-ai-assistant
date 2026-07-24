@@ -2,14 +2,20 @@
 #
 # Packager — build a self-contained deployment bundle (containerized).
 #
-# The app ships as a Docker image, so the target needs only Docker — no Python,
-# uv or pip. Produces THREE files in the output dir and nothing else:
-#   <name>.tar.gz   the bundle (app image + runner + compose + config; plus the
-#                   Qdrant/Ollama images and the Ollama model store for OFFLINE)
-#   install.sh      the single installer (deploys straight from the tarball)
-#   README.md       install + run instructions
+# The app ships as a Docker image and is managed by dffrnt-manager, a frozen
+# (PyInstaller) build of the installer/ control panel — GUI on a desktop, full
+# CLI headless (install/start/stop/status/logs/models/...). The target needs
+# only Docker: no Python, uv, pip, or shell scripts. Produces THREE files in
+# the output dir and nothing else:
+#   <name>.tar.gz    the bundle (app image + manager + compose + config; plus
+#                    the Qdrant/Ollama images and Ollama model store for OFFLINE)
+#   dffrnt-manager   the installer/control panel binary (run it next to the
+#                    tarball to deploy; a copy inside the bundle manages the
+#                    installed stack)
+#   README.md        install + run instructions
 #
-# Run on a NETWORKED machine whose OS/arch matches the target.
+# Run on a NETWORKED machine whose OS/arch matches the target (the frozen
+# binary is platform-specific, like the container images).
 #
 # Usage:
 #   deploy/package.sh <models_dir> <TARGET_SYSTEM>
@@ -38,7 +44,19 @@ for arg in "$@"; do
        fi ;;
   esac
 done
-MODELS_DIR="${MODELS_DIR:-${OLLAMA_MODELS_DIR:-$HOME/.ollama/models}}"
+# Where the OFFLINE model store lives. An explicit arg / OLLAMA_MODELS_DIR env
+# wins. Otherwise prefer a NATIVE store (~/.ollama/models) when it actually
+# holds models, else fall back to this repo's CONTAINERIZED store
+# (deploy/ollama_models) — where `docker exec ollama ollama pull` lands them,
+# and the only place they exist on a box with no native Ollama installed.
+MODELS_DIR="${MODELS_DIR:-${OLLAMA_MODELS_DIR:-}}"
+if [ -z "$MODELS_DIR" ]; then
+  if [ -d "$HOME/.ollama/models/manifests" ]; then
+    MODELS_DIR="$HOME/.ollama/models"
+  else
+    MODELS_DIR="$ROOT/deploy/ollama_models"
+  fi
+fi
 TARGET="${TARGET:-${TARGET_SYSTEM:-OFFLINE}}"
 
 case "$(printf '%s' "$TARGET" | tr '[:lower:]' '[:upper:]')" in
@@ -76,10 +94,28 @@ echo ">> Baking $(basename "$CONFIG") into the bundle: models=[$MODELS] gpu=$GPU
 rm -rf "$OUT"
 mkdir -p "$STAGE/images"
 
-echo ">> [1/3] Building the application image ($APP_IMAGE)"
+echo ">> [1/4] Freezing the control panel (dffrnt-manager)"
+# One self-contained binary from installer/__main__.py: bare launch serves
+# the BROWSER control panel (installer/web — the view layer is the target's
+# own browser, so no GUI toolkit is bundled), any argument = headless CLI.
+# The same artifact installs over SSH on a displayless AWS box and manages
+# an air-gapped desktop. The `package` dependency group (pyproject.toml)
+# exists solely for this step.
+uv run --group package pyinstaller \
+  --noconfirm --clean --onefile \
+  --name dffrnt-manager \
+  --paths "$ROOT" \
+  --add-data "$ROOT/installer/assets/icon.png:installer/assets" \
+  --add-data "$ROOT/installer/web/static:installer/web/static" \
+  --distpath "$OUT/.pyi/dist" --workpath "$OUT/.pyi/build" --specpath "$OUT/.pyi" \
+  "$ROOT/installer/__main__.py"
+MANAGER="$OUT/.pyi/dist/dffrnt-manager"
+[ -f "$MANAGER" ] || { echo "!! PyInstaller produced no binary at $MANAGER" >&2; exit 1; }
+
+echo ">> [2/4] Building the application image ($APP_IMAGE)"
 docker build -t "$APP_IMAGE" -f "$ROOT/deploy/Dockerfile" "$ROOT"
 
-echo ">> [2/3] Saving images"
+echo ">> [3/4] Saving images"
 # The app image is custom (not on a public registry), so it ships in every build.
 docker save "$APP_IMAGE" -o "$STAGE/images/app.tar"
 if [ "$MODE" = offline ]; then
@@ -94,17 +130,34 @@ else
   echo "   (online — pinned Qdrant/Ollama base images pulled at deploy time)"
 fi
 
-echo ">> [3/3] Bundling models + runtime files"
+echo ">> [4/4] Bundling models + runtime files"
 if [ "$MODE" = offline ]; then
-  [ -d "$MODELS_DIR" ] || { echo "!! $MODELS_DIR not found — pull models first (ollama pull $MODELS)" >&2; exit 1; }
+  if [ ! -d "$MODELS_DIR/manifests" ]; then
+    echo "!! No Ollama model store at $MODELS_DIR (expected a manifests/ directory)." >&2
+    echo "   This box has no native Ollama, so pull the models config.toml wants into" >&2
+    echo "   the containerized store first (the ollama container must be running):" >&2
+    for m in $MODELS; do echo "     docker exec ollama ollama pull $m" >&2; done
+    echo "   …or point the packager at an existing store: deploy/package.sh <models_dir> OFFLINE" >&2
+    exit 1
+  fi
+  echo "   Bundling model store from $MODELS_DIR"
   mkdir -p "$STAGE/ollama_models"
+  # deploy/ollama_models is root-owned (the containerized Ollama runs as root),
+  # but its files are world-readable, so `cp -a` reads them fine and — unable to
+  # chown-to-root as our non-root user — simply copies them owned by us. That's
+  # correct: the target container re-owns the store on first run.
   cp -a "$MODELS_DIR/." "$STAGE/ollama_models/"
 else
   echo "   (online — models pulled at deploy time: $MODELS)"
 fi
 
-cp "$ROOT/deploy/docker-compose.yml" "$ROOT/deploy/dffrnt_ctrl_panel.sh" "$STAGE/"
-chmod +x "$STAGE/dffrnt_ctrl_panel.sh"
+cp "$ROOT/deploy/docker-compose.yml" "$STAGE/"
+# The manager travels twice: inside the bundle (managing the installed stack
+# from the app root) and next to the tarball below (bootstrapping the install
+# on a box where nothing exists yet — the tarball's copy isn't reachable
+# until it is unpacked).
+cp "$MANAGER" "$STAGE/dffrnt-manager"
+chmod +x "$STAGE/dffrnt-manager"
 cp "$CONFIG" "$STAGE/config.toml"
 cat > "$STAGE/bundle.conf" <<EOF
 TARGET_SYSTEM=$MODE
@@ -115,11 +168,11 @@ EOF
 # ---- assemble the three deliverables ---------------------------------------
 mkdir -p "$OUT"
 tar -czf "$OUT/$NAME.tar.gz" -C "$OUT/.stage" dffrnt
-cp "$ROOT/deploy/install.sh" "$OUT/install.sh"
-chmod +x "$OUT/install.sh"
+cp "$MANAGER" "$OUT/dffrnt-manager"
+chmod +x "$OUT/dffrnt-manager"
 sed "s/@NAME@/$NAME/g; s/@MODE@/$MODE/g; s/@MODELS@/$MODELS/g" \
   "$ROOT/deploy/README.target.md" > "$OUT/README.md"
 
-rm -rf "$OUT/.stage"
+rm -rf "$OUT/.stage" "$OUT/.pyi"
 echo ">> Done. $OUT now contains:"
 ls -1 "$OUT"

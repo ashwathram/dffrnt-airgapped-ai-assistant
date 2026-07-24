@@ -81,7 +81,7 @@ _STREAM_HEADERS = {"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
 def _warmup_worker():
     """Preload the LLM + embedder so the first user query skips the model-load
     stall. Runs in a daemon thread at every API start — including container
-    restarts after a host reboot, which bypass dffrnt_ctrl_panel.sh — and
+    restarts after a host reboot, which bypass the control panel — and
     retries while the stack boots (on a first online deploy the models may
     still be pulling). Gives up quietly after ~10 minutes; the app works
     either way, the first query just pays the load."""

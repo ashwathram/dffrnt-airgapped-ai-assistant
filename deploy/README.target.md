@@ -3,25 +3,35 @@
 This folder contains everything needed to deploy the assistant:
 
 - `@NAME@.tar.gz` — the application bundle
-- `install.sh` — the installer
+- `dffrnt-manager` — the installer + control panel (one binary; browser UI and CLI)
 - `README.md` — this file
 
 Target: **@MODE@**  ·  Models: **@MODELS@**
 
 The app runs as a Docker container, so the target needs **only Docker** (Engine +
-the Compose v2 plugin) — no Python, uv or pip.
+the Compose v2 plugin) — no Python, uv, pip, or shell scripts. `dffrnt-manager`
+is self-contained: launched with no arguments it serves the control panel to
+your browser (127.0.0.1 only, token-gated URL) and opens it; given any command
+it runs fully headless, so it works identically over SSH on a displayless box
+(`panel --no-browser` prints the URL for an SSH tunnel).
 
 ## Install
 
+In a browser: run `./dffrnt-manager` and use the **Install** tab (it auto-detects
+the tarball next to it, and you pick the destination).
+
+Headless / SSH:
+
 ```bash
-./install.sh                 # unpacks to ./dffrnt and brings the stack up
-./install.sh /opt/dffrnt     # ...or choose an install directory
+./dffrnt-manager install                    # auto-detects the tarball, installs to ./dffrnt
+./dffrnt-manager install --dest /opt/dffrnt # ...or choose an install directory
 ```
 
-The installer checks prerequisites and reports exactly what is missing if a check
+Install checks prerequisites and reports exactly what is missing if a check
 fails. It then unpacks the bundle, loads the container image(s), and starts the
-Qdrant + Ollama + API stack — pulling the base images and models the first time on
-an online build.
+Qdrant + Ollama + API stack — pulling the base images and models the first time
+on an online build. An existing edited `config.toml` is kept by default
+(`--overwrite-config` replaces it, archiving the old file as `config.toml.old`).
 
 > **@MODE@ build.** An OFFLINE bundle carries every image and the Ollama model
 > store, so install needs no internet. An AWS bundle ships only the app image and
@@ -30,39 +40,63 @@ an online build.
 
 ## Run
 
-A `dffrnt_ctrl_panel.sh` is placed in the install directory. Run it with no
-argument for an interactive menu, or pass a command directly — it manages the
-runtime the same way the VS Code tasks do (the containers plus the API):
+A copy of `dffrnt-manager` is placed in the install directory. No arguments
+serves the browser panel (Manage / Models / Logs tabs); commands run headless:
 
 ```bash
-cd dffrnt                       # or your chosen install dir
-./dffrnt_ctrl_panel.sh          # interactive menu
-./dffrnt_ctrl_panel.sh start    # bring the whole stack up
-./dffrnt_ctrl_panel.sh stop     # stop all containers
-./dffrnt_ctrl_panel.sh restart
-./dffrnt_ctrl_panel.sh status   # container + API health
-./dffrnt_ctrl_panel.sh logs     # follow container logs (optionally: ./dffrnt_ctrl_panel.sh logs api)
-./dffrnt_ctrl_panel.sh audit    # follow the app audit trail (logs/audit.jsonl)
-./dffrnt_ctrl_panel.sh reingest # force re-ingest every stored document in the live API
+cd dffrnt                      # or your chosen install dir
+./dffrnt-manager               # browser control panel (prints + opens a local URL)
+./dffrnt-manager start         # bring the whole stack up
+./dffrnt-manager stop          # stop all containers
+./dffrnt-manager restart
+./dffrnt-manager status        # service + API health (exit 1 if degraded)
+./dffrnt-manager logs          # follow container logs (optionally: logs api)
+./dffrnt-manager audit         # follow the app audit trail (logs/audit.jsonl)
+./dffrnt-manager reingest      # force re-ingest every stored document (previews first)
 ```
 
 The UI is at <http://localhost:8000>.
 
+## Models
+
+The active LLM can be switched without editing any file:
+
+```bash
+./dffrnt-manager models                      # list the store (sizes + roles)
+./dffrnt-manager models use qwen3:8b         # switch the LLM + restart
+```
+
+Switching rewrites `llm_model` in `config.toml` and restarts; the previously
+configured model is removed from the cache so disk usage doesn't grow with
+every switch.
+
+**Getting a new model onto an OFFLINE machine** (no internet to pull from): on
+any networked machine with this app,
+`./dffrnt-manager models export qwen3:8b /media/usb/qwen3-8b.ollama.tar`
+(pulls first if absent; the drive must not be FAT32 — its 4 GiB file limit is
+smaller than most models). Then on this machine:
+
+```bash
+./dffrnt-manager models import /media/usb/qwen3-8b.ollama.tar   # checksum-verified
+./dffrnt-manager models use qwen3:8b
+```
+
+Both operations are also available in the panel's **Models** tab. Imported models
+are protected from the disk-reclaim sweep until you switch to or delete them.
+
 ## Configuration
 
-Edit `config.toml` in the install directory, then `./dffrnt_ctrl_panel.sh restart`. It is the
-single source of truth for the LLM/embed models, prompt, and retrieval settings,
-and it drives the host ports and GPU acceleration (`gpu = true` — requires the
-NVIDIA driver + Container Toolkit on the host; `install-prerequisites.sh` sets
-both up on a fresh Ubuntu box, and the control panel refuses to start GPU mode
-without them). The API container always serves on port 8000 internally; editing
-`api_port` moves only the host-side port.
+Everything else is `config.toml` in the install directory, then
+`./dffrnt-manager restart`. It is the single source of truth for the models,
+prompt, and retrieval settings, and it drives the host ports and GPU
+acceleration (`gpu = true` — requires the NVIDIA driver + Container Toolkit on
+the host, e.g. `nvidia-container-toolkit` from your distro or NVIDIA's repo;
+the manager refuses to start GPU mode without them and says so). The API
+container always serves on port 8000 internally; editing `api_port` moves only
+the host-side port.
 
-Switching `llm_model`/`embed_model` and restarting pulls the new model (online
-builds) and removes the previously configured model from the cache, so disk
-usage doesn't grow with every switch. An OFFLINE bundle must have already
-vendored the new model at package time (`deploy/package.sh`) — offline installs
-have no internet to pull one on demand.
+Switching `embed_model` is deliberately NOT exposed as a command: it changes
+the vector dimension and requires re-uploading/re-ingesting every document.
 
 On every start the API pre-loads the LLM and embedder into memory in the
 background (they then stay resident), so the first query answers at full speed

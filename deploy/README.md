@@ -1,8 +1,9 @@
 # Deployment
 
-Package the app into a single tarball + installer + README, copy those three files
-to the target, and install. The app ships as a Docker image, so the target needs
-**only Docker** — no Python, uv or pip. Two flavours:
+Package the app into a single tarball + the `dffrnt-manager` binary + README,
+copy those three files to the target, and install. The app ships as a Docker
+image and the manager is a frozen binary, so the target needs **only Docker** —
+no Python, uv, pip, or shell scripts. Two flavours:
 
 - **OFFLINE** — for an air-gapped box. Caches the app image, the Qdrant/Ollama
   base images, and the Ollama model store, so installing needs no internet.
@@ -12,17 +13,21 @@ to the target, and install. The app ships as a Docker image, so the target needs
 ## 1. Build (networked machine, matching the target OS/arch)
 
 ```bash
-# OFFLINE: vendor the models first, then point the packager at the model store
-ollama pull qwen3:14b && ollama pull bge-m3
-deploy/package.sh ~/.ollama/models OFFLINE
+# OFFLINE: the model store is auto-detected — a native ~/.ollama/models if it
+# holds models, otherwise this repo's containerized store (deploy/ollama_models,
+# where `docker exec ollama ollama pull` lands them). So on a box with no native
+# Ollama, just make sure the models are in the container's store, then:
+deploy/package.sh OFFLINE
 
 # AWS / online: no local model store needed
 deploy/package.sh TARGET_SYSTEM=AWS
 ```
 
-Both parameters accept positional or `KEY=VALUE` form, in any order:
+Point it at a specific store when the auto-detection isn't what you want
+(positional or `KEY=VALUE`, in any order):
 
 ```bash
+deploy/package.sh ~/.ollama/models OFFLINE
 deploy/package.sh OLLAMA_MODELS_DIR=deploy/ollama_models TARGET_SYSTEM=OFFLINE
 ```
 
@@ -38,7 +43,7 @@ exactly three files to `dist/` and nothing else:
 ```
 dist/
   dffrnt-offline.tar.gz   (or dffrnt-aws.tar.gz)
-  install.sh
+  dffrnt-manager          (frozen installer + control panel; browser UI and headless CLI)
   README.md
 ```
 
@@ -52,9 +57,14 @@ transfer, etc.), keeping them together.
 ## 3. Install & run (target)
 
 ```bash
-./install.sh                 # checks prereqs, unpacks, loads images, starts the stack
-cd dffrnt && ./dffrnt_ctrl_panel.sh status # UI at http://localhost:8000
+./dffrnt-manager install           # checks prereqs, unpacks, loads images, starts the stack
+cd dffrnt && ./dffrnt-manager status   # UI at http://localhost:8000
 ```
+
+Headless boxes get the full CLI (`install`, `start`, `stop`, `status`, `logs`,
+`audit`, `reingest`, `models ...`); running `./dffrnt-manager` with no
+arguments serves the browser control panel on 127.0.0.1 and opens it
+(`panel --no-browser` prints the URL instead — SSH tunnels).
 
 See the generated `README.md` next to the tarball for the target-side details.
 
@@ -62,9 +72,7 @@ See the generated `README.md` next to the tarball for the target-side details.
 
 | File | Role |
 |------|------|
-| `package.sh` | Packager — builds the bundle + installer + README into `dist/` |
-| `install.sh` | Installer — deploys from the tarball (shipped in `dist/`) |
-| `dffrnt_ctrl_panel.sh` | Control panel — menu/CLI managing the containers + API, incl. force-reingest (shipped inside the tarball) |
+| `package.sh` | Packager — freezes `dffrnt-manager` (from `installer/`) and builds the bundle + README into `dist/` |
 | `Dockerfile` | Builds the app image (`dffrnt-assistant:latest`) with uv |
 | `docker-compose.yml` | Qdrant + Ollama + API (`prod` profile) stack |
 | `README.target.md` | Template for the target-side `README.md` (filled in by `package.sh`) |

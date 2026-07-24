@@ -7,13 +7,22 @@
 # freezes the repo's config.toml into the bundle, so the state of this file when
 # you package is exactly what a deployment runs (and which models it carries).
 
-# Ollama GPU acceleration. Requires the NVIDIA driver + Container Toolkit on the
-# host (deploy/install-prerequisites.sh installs both); dffrnt_ctrl_panel.sh
-# refuses to start in GPU mode when the toolkit is missing. Defaults to false so
-# a fresh checkout runs anywhere; set true on any NVIDIA-equipped machine.
+# Ollama GPU acceleration — Linux/Windows (container pathway) only. Requires the
+# NVIDIA driver + Container Toolkit on the host (install both from your distro /
+# NVIDIA's repo); the control panel (dffrnt-manager) refuses to start in GPU
+# mode when the toolkit is missing and says so. Defaults to false so a fresh
+# checkout runs anywhere; set true on any NVIDIA-equipped machine.
+# macOS (portable pathway): this flag is IGNORED. Ollama runs as a native host
+# process and uses Metal automatically on Apple Silicon — there is no NVIDIA
+# runtime to gate on, and nothing to configure for GPU inference.
 gpu = true
 
 # --- Ollama (LLM + embeddings) ---
+# Host-side URL (health checks, dev API). Inside the API container the control
+# panel injects the right value per pathway: http://ollama:11434 on the compose
+# network (Linux/Windows), http://host.docker.internal:<port> on macOS where
+# Ollama is a native process outside the VM. Only the PORT here is honored
+# cross-pathway; keep the host "localhost".
 ollama_url = "http://localhost:11434"
 
 # LLM served by Ollama (used everywhere). VRAM figures assume the q8_0 KV cache

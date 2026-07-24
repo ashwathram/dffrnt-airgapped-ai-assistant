@@ -18,6 +18,8 @@ dist
 deploy/qdrant_storage
 deploy/ollama_models
 
-# Dev-only trees.
+# Dev-only trees. The manager (installer/) never ships inside the image —
+# it runs on the host and is frozen/shipped by deploy/package.sh instead.
 tests
 conftest.py
+installer

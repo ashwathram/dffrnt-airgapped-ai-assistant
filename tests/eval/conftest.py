@@ -56,9 +56,9 @@ def stack(settings, request):
     evaluation corpus is not in the knowledge base (unless ``--reset-corpus``).
     """
     if not _reachable(settings.qdrant_url + "/healthz"):
-        pytest.skip(f"Qdrant not reachable at {settings.qdrant_url} — run deploy/start.sh")
+        pytest.skip(f"Qdrant not reachable at {settings.qdrant_url} — run: uv run python -m installer dev")
     if not _reachable(settings.ollama_url):
-        pytest.skip(f"Ollama not reachable at {settings.ollama_url} — run deploy/start.sh")
+        pytest.skip(f"Ollama not reachable at {settings.ollama_url} — run: uv run python -m installer dev")
 
     store = VectorStore(
         settings.qdrant_url, settings.collection_name, settings.vector_size, settings.distance
