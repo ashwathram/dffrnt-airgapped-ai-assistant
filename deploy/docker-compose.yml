@@ -11,7 +11,10 @@
 #
 # Do not run `docker compose` against this file directly. Use the control panel
 # (dffrnt-manager / python -m installer, GUI or CLI), which reads config.toml
-# and injects the GPU reservation + ports dynamically.
+# and injects the GPU reservation + ports dynamically, plus HOST_CONFIG (the
+# ABSOLUTE path to config.toml for the api bind mount below). The `../config.toml`
+# fallback only fits the dev checkout, where deploy/ sits next to the repo-root
+# config; the flat installed layout relies on HOST_CONFIG being set.
 #
 # macOS (portable pathway): the GUI control panel starts ONLY qdrant + api from
 # this file — the ollama service below never runs there. Ollama runs natively on

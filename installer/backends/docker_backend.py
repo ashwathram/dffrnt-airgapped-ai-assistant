@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Iterable
 
 from .. import model_store, process
-from ..config import AppConfig, read_bundle_conf
+from ..config import AppConfig, find_config, read_bundle_conf
 from ..logging_setup import get_logger, with_logging
 from . import Backend, BackendError, OutputCallback, PrereqCheck, ServiceStatus
 
@@ -73,11 +74,28 @@ class DockerComposeBackend(Backend):
     # seams; keep pathway differences INSIDE them so the lifecycle flow in
     # start()/stop()/reingest stays single-sourced.
 
-    def _env(self) -> dict | None:
-        """Process environment for every docker/ollama invocation. None =
-        inherit. The portable pathway injects its bundled bin dir + the
-        colima DOCKER_HOST here."""
-        return None
+    def _env(self) -> dict:
+        """Process environment for every docker/ollama invocation: the
+        inherited environment plus HOST_CONFIG, the ABSOLUTE path to the
+        config.toml that the compose api service bind-mounts to
+        /app/config.toml.
+
+        Why HOST_CONFIG must be pinned explicitly: the compose default is
+        `${HOST_CONFIG:-../config.toml}`, resolved relative to the compose
+        file's directory. In the flat installed layout (docker-compose.yml and
+        config.toml sit side by side in app_root) that default points one level
+        too high, so Docker auto-creates an empty DIRECTORY at the missing path
+        and bind-mounts it — the container then sees /app/config.toml as a
+        directory and dies with IsADirectoryError. Passing the resolved
+        absolute path is correct in BOTH the installed bundle and the dev
+        checkout (where deploy/ sits next to the repo-root config.toml).
+
+        The portable pathway extends this dict with its bundled bin dir + the
+        colima DOCKER_HOST (see PortableBackend._env)."""
+        env = dict(os.environ)
+        config_path = find_config(self.app_root) or (self.app_root / "config.toml")
+        env["HOST_CONFIG"] = str(config_path.resolve())
+        return env
 
     def _ollama_cmd(self) -> list[str]:
         """How to invoke the ollama CLI against the serving instance:

@@ -70,7 +70,7 @@ class PortableBackend(DockerComposeBackend):
 
     # ---- pathway seams (see DockerComposeBackend) -------------------------
     def _env(self) -> dict:
-        env = dict(os.environ)
+        env = super()._env()  # inherited env + HOST_CONFIG (see DockerComposeBackend)
         env["PATH"] = f"{self.bin_dir}{os.pathsep}{env.get('PATH', '')}"
         # Contain ALL runtime state under portable/ instead of $HOME, so an
         # install is self-delimiting and two installs can't fight over state.
