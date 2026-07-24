@@ -1,10 +1,13 @@
 """PORTABLE-pathway installer (macOS): deploys the bundle AND the portable
 runtime it needs — no Docker Desktop, no Homebrew, nothing system-wide.
 
-The macOS dist/ layout (produced by the VS Code packaging jobs) is:
+The macOS dist/ layout (produced by deploy/package-macos-portable.sh) is:
 
     dist/
       dffrnt-offline.tar.gz     the ordinary bundle (package.sh)
+      dffrnt-manager            a shell launcher -> the vendored python (macOS
+                                can't run the Linux-frozen binary), for the
+                                bootstrap install; replaces package.sh's ELF
       installer/                the manager, shipped as source next to the bundle
       portable/macos/           deploy/package-macos-portable.sh output:
         bin/ollama              native Ollama (Metal automatic on Apple Silicon)
@@ -13,11 +16,15 @@ The macOS dist/ layout (produced by the VS Code packaging jobs) is:
         python/                 relocatable CPython that runs the manager
 
 install() extends the container-pathway flow at its seams: after unpacking
-the bundle it copies portable/macos into <dest>/portable, wires the compose
-plugin into a contained DOCKER_CONFIG, boots colima, then loads only the
-Qdrant + app images (the containerized-Ollama image is skipped — Ollama
-runs natively for Metal; see backends/portable_backend.py). First start is
-PortableBackend.start(), the same code path the Manage tab uses.
+the bundle it copies portable/macos into <dest>/portable (bin + share +
+python), wires the compose plugin into a contained DOCKER_CONFIG, boots
+colima, then loads only the Qdrant + app images (the containerized-Ollama
+image is skipped — Ollama runs natively for Metal; see
+backends/portable_backend.py). It also stages the manager source +
+a launcher into <dest> so the install self-manages (see _stage_manager),
+matching the frozen binary that lives in <dest> on the other pathways.
+First start is PortableBackend.start(), the same code path Manage's Start
+uses.
 """
 
 from __future__ import annotations
@@ -123,19 +130,22 @@ class PortableInstaller(DockerInstaller):
 
         target = dest / "portable"
         # copy bin/ + share/ (lima guest assets resolve relative to limactl:
-        # bin/../share/lima), preserving an existing colima/lima state dir on
-        # an update — wiping it would orphan a running VM.
-        for sub in ("bin", "share"):
+        # bin/../share/lima) + python/ (the vendored CPython that runs the
+        # manager). symlinks=True keeps python-build-standalone's internal
+        # links (python3 -> python3.14) as links. colima/lima state dirs are
+        # preserved across an update — wiping them would orphan a running VM.
+        for sub in ("bin", "share", "python"):
             src = runtime / sub
             if not src.is_dir():
                 continue
             dst = target / sub
             if dst.exists():
                 shutil.rmtree(dst)
-            shutil.copytree(src, dst)
+            shutil.copytree(src, dst, symlinks=True)
         for binary in (target / "bin").iterdir():
             binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         out(f"   runtime staged into {target}")
+        self._stage_manager(dest, runtime, out)
 
         # The docker CLI discovers the compose plugin via $DOCKER_CONFIG/
         # cli-plugins; DOCKER_CONFIG is contained under portable/ (see
@@ -149,3 +159,45 @@ class PortableInstaller(DockerInstaller):
         # daemon. Reuses the exact code path Manage's Start uses.
         self._staged_backend = self._backend_for(dest)
         self._staged_backend._ensure_colima(out)
+
+    def _stage_manager(self, dest: Path, runtime: Path, out: OutputCallback) -> None:
+        """Make the install directory self-manage: copy the manager SOURCE
+        into <dest>/installer (Linux/Windows get a frozen binary; macOS runs
+        from source on the vendored CPython — see package-macos-portable.sh),
+        then replace the tarball's Linux-frozen dffrnt-manager — which can't
+        execute on macOS — with a shell launcher that runs the vendored
+        interpreter against that source, rooted at this install. Parity with
+        the frozen binary that lives in <dest> on the other pathways."""
+        if not (runtime / "python").is_dir():
+            out("   ⚠ no vendored python in the portable runtime — the manager "
+                "can't run from the install dir. Manage this install from the "
+                "original dist/ folder, or re-package with a current "
+                "package-macos-portable.sh.")
+            return
+
+        # The manager source is the package this code lives in (macOS runs
+        # unfrozen from source, so __file__ is a real path). parents[1] is the
+        # installer/ package dir (…/installers/portable_installer.py -> …/).
+        src = Path(__file__).resolve().parents[1]
+        if not (src / "__main__.py").is_file():
+            out(f"   ⚠ manager source not found at {src} — skipping in-dest manager.")
+            return
+        dst = dest / "installer"
+        if dst.exists():
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+
+        launcher = dest / "dffrnt-manager"
+        launcher.write_text(
+            "#!/bin/sh\n"
+            "# DFFRNT control panel (macOS) — runs the vendored CPython against\n"
+            "# the staged manager source, managing THIS install directory.\n"
+            "# Replaces the Linux-frozen binary the bundle unpacked (which can't\n"
+            "# run on macOS). No arguments = browser panel; any command = CLI.\n"
+            'HERE="$(cd "$(dirname "$0")" && pwd)"\n'
+            'export DFFRNT_APP_ROOT="${DFFRNT_APP_ROOT:-$HERE}"\n'
+            'exec env PYTHONPATH="$HERE" "$HERE/portable/python/bin/python3" '
+            '-m installer "$@"\n'
+        )
+        launcher.chmod(0o755)
+        out(f"   manager staged — run ./dffrnt-manager in {dest} to manage this install")

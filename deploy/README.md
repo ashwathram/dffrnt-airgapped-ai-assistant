@@ -13,17 +13,21 @@ no Python, uv, pip, or shell scripts. Two flavours:
 ## 1. Build (networked machine, matching the target OS/arch)
 
 ```bash
-# OFFLINE: vendor the models first, then point the packager at the model store
-ollama pull qwen3:14b && ollama pull bge-m3
-deploy/package.sh ~/.ollama/models OFFLINE
+# OFFLINE: the model store is auto-detected — a native ~/.ollama/models if it
+# holds models, otherwise this repo's containerized store (deploy/ollama_models,
+# where `docker exec ollama ollama pull` lands them). So on a box with no native
+# Ollama, just make sure the models are in the container's store, then:
+deploy/package.sh OFFLINE
 
 # AWS / online: no local model store needed
 deploy/package.sh TARGET_SYSTEM=AWS
 ```
 
-Both parameters accept positional or `KEY=VALUE` form, in any order:
+Point it at a specific store when the auto-detection isn't what you want
+(positional or `KEY=VALUE`, in any order):
 
 ```bash
+deploy/package.sh ~/.ollama/models OFFLINE
 deploy/package.sh OLLAMA_MODELS_DIR=deploy/ollama_models TARGET_SYSTEM=OFFLINE
 ```
 

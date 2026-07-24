@@ -103,17 +103,16 @@
             "cwd": "${workspaceFolder}"
         },
         {
-            // macOS target: OFFLINE bundle + installer as SOURCE (a Linux-
-            // frozen dffrnt-manager can't run on a Mac; the target runs it with
-            // the vendored relocatable python: portable/macos/python/bin/python3
-            // -m installer — browser UI, so no Tk needed) + the portable runtime
-            // (native Ollama with Metal, colima/lima/docker CLI for Qdrant + API).
-            // The app image must be linux/arm64 for Apple Silicon — build on
-            // an arm64 machine or via buildx.
+            // macOS target: OFFLINE bundle, then the portable runtime — which
+            // also stages the manager as SOURCE (dist/installer) + a
+            // dist/dffrnt-manager launcher that runs it on the vendored python
+            // (a Linux-frozen binary can't run on a Mac; the panel is browser
+            // UI, so no Tk). The app image must be linux/arm64 for Apple
+            // Silicon — build on an arm64 machine or via buildx.
             "name": "Package: macOS deployment",
             "type": "node-terminal",
             "request": "launch",
-            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE && rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && bash deploy/package-macos-portable.sh arm64 && echo '>> macOS dist complete: bundle + installer source + portable/macos'",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE && bash deploy/package-macos-portable.sh arm64 && echo '>> macOS dist complete: bundle + portable/macos + manager'",
             "cwd": "${workspaceFolder}"
         }
     ]

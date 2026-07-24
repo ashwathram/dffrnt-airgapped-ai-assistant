@@ -44,7 +44,19 @@ for arg in "$@"; do
        fi ;;
   esac
 done
-MODELS_DIR="${MODELS_DIR:-${OLLAMA_MODELS_DIR:-$HOME/.ollama/models}}"
+# Where the OFFLINE model store lives. An explicit arg / OLLAMA_MODELS_DIR env
+# wins. Otherwise prefer a NATIVE store (~/.ollama/models) when it actually
+# holds models, else fall back to this repo's CONTAINERIZED store
+# (deploy/ollama_models) — where `docker exec ollama ollama pull` lands them,
+# and the only place they exist on a box with no native Ollama installed.
+MODELS_DIR="${MODELS_DIR:-${OLLAMA_MODELS_DIR:-}}"
+if [ -z "$MODELS_DIR" ]; then
+  if [ -d "$HOME/.ollama/models/manifests" ]; then
+    MODELS_DIR="$HOME/.ollama/models"
+  else
+    MODELS_DIR="$ROOT/deploy/ollama_models"
+  fi
+fi
 TARGET="${TARGET:-${TARGET_SYSTEM:-OFFLINE}}"
 
 case "$(printf '%s' "$TARGET" | tr '[:lower:]' '[:upper:]')" in
@@ -120,8 +132,20 @@ fi
 
 echo ">> [4/4] Bundling models + runtime files"
 if [ "$MODE" = offline ]; then
-  [ -d "$MODELS_DIR" ] || { echo "!! $MODELS_DIR not found — pull models first (ollama pull $MODELS)" >&2; exit 1; }
+  if [ ! -d "$MODELS_DIR/manifests" ]; then
+    echo "!! No Ollama model store at $MODELS_DIR (expected a manifests/ directory)." >&2
+    echo "   This box has no native Ollama, so pull the models config.toml wants into" >&2
+    echo "   the containerized store first (the ollama container must be running):" >&2
+    for m in $MODELS; do echo "     docker exec ollama ollama pull $m" >&2; done
+    echo "   …or point the packager at an existing store: deploy/package.sh <models_dir> OFFLINE" >&2
+    exit 1
+  fi
+  echo "   Bundling model store from $MODELS_DIR"
   mkdir -p "$STAGE/ollama_models"
+  # deploy/ollama_models is root-owned (the containerized Ollama runs as root),
+  # but its files are world-readable, so `cp -a` reads them fine and — unable to
+  # chown-to-root as our non-root user — simply copies them owned by us. That's
+  # correct: the target container re-owns the store on first run.
   cp -a "$MODELS_DIR/." "$STAGE/ollama_models/"
 else
   echo "   (online — models pulled at deploy time: $MODELS)"

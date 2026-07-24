@@ -28,12 +28,14 @@ Runs unchanged on Linux, Windows, and macOS — stdlib only, end to end.
 the tarball in `dist/` (bootstrap install on a box that has only Docker)
 and inside the bundle (managing the installed stack from the app root).
 The binary is platform-specific — package on a machine matching the
-target, like the container images. macOS ships the package as *source*
-plus a **vendored relocatable CPython** fetched by
+target, like the container images. macOS instead ships the package as
+*source* plus a **vendored relocatable CPython** fetched by
 `package-macos-portable.sh` (python-build-standalone — macOS ships no
-system Python): the target runs
-`portable/macos/python/bin/python3 -m installer`, no Mac ever needed to
-build any of it.
+system Python), with a `dffrnt-manager` shell launcher that wraps them, so
+`./dffrnt-manager` works there too — no Mac ever needed to build any of it.
+The macOS install stages that same source + python + launcher into the
+install directory, so it self-manages afterwards exactly like the frozen
+binary does on Linux/Windows.
 
 **Status: preliminary.** The container pathway (Linux/Windows) is
 implemented; management verified against a real `docker compose` stack and
@@ -296,8 +298,8 @@ export → import → switch round-trip, and a full Install from a real
 config.toml) — on both a `gpu = false` and `gpu = true` config.
 
 **macOS checklist** (Apple Silicon, from a dist/ built by the "Package:
-macOS deployment" job): launch the manager with the vendored interpreter
-(`portable/macos/python/bin/python3 -m installer` — panel opens in the
+macOS deployment" job): bootstrap with `cd dist && ./dffrnt-manager` (the
+launcher runs the vendored interpreter — panel opens in the
 default browser); Install from scratch (runtime staging, colima
 first boot, image load skipping the ollama tar, first start); confirm
 Metal via the ollama-native.log (`gpu` layers / Metal lines) and that

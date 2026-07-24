@@ -102,27 +102,14 @@
             "group": "build"
         },
         {
-            // macOS only: the Linux-frozen dffrnt-manager binary can't run on
-            // a Mac, so ship the installer package as SOURCE next to the bundle.
-            // The target runs it with the RELOCATABLE PYTHON the portable-runtime
-            // task vendors (portable/macos/python/bin/python3 -m installer) — no
-            // host Python, no Tk (the panel UI is the browser). MUST follow
-            // package.sh (which wipes dist/).
-            "label": "Package: ship installer source (macOS)",
-            "type": "shell",
-            "command": "rm -rf dist/installer && cp -r installer dist/ && find dist/installer -type d -name __pycache__ -exec rm -rf {} + && echo '>> installer source shipped: dist/installer (macOS: portable/macos/python/bin/python3 -m installer)'",
-            "options": {
-                "cwd": "${workspaceFolder}",
-                "shell": { "executable": "bash", "args": ["-c"] }
-            },
-            "presentation": { "reveal": "always", "panel": "shared" }
-        },
-        {
-            // Portable macOS runtime -> dist/portable/macos: native Ollama
-            // (Metal automatic on Apple Silicon) + colima/lima/docker-CLI for
-            // the Qdrant + API containers. Networked build machine only; runs
-            // AFTER package.sh (which wipes dist/). Version pins live in the
-            // script. Pass x86_64 for Intel Macs (CPU-only inference).
+            // Portable macOS runtime -> dist/: native Ollama (Metal automatic on
+            // Apple Silicon) + colima/lima/docker-CLI for the Qdrant + API
+            // containers + a relocatable CPython, AND the manager itself
+            // (dist/installer source + a dist/dffrnt-manager launcher that runs
+            // it — the Linux ELF package.sh emits can't run on a Mac). One
+            // script produces the whole macOS deliverable. Networked build
+            // machine only; runs AFTER package.sh (which wipes dist/). Version
+            // pins live in the script. Pass x86_64 for Intel (CPU-only).
             "label": "Package: fetch macOS portable runtime (Ollama + Docker)",
             "type": "shell",
             "command": "bash deploy/package-macos-portable.sh arm64",
@@ -135,11 +122,11 @@
         {
             // Full macOS package: OFFLINE bundle (models cached; build the app
             // image on/for linux/arm64 so it runs in colima's VM on Apple
-            // Silicon), installer source, then the portable runtime.
-            "label": "Package: macOS deployment (bundle + installer source + portable runtime)",
+            // Silicon), then the portable runtime (which also stages the
+            // manager source + launcher into dist/).
+            "label": "Package: macOS deployment (bundle + portable runtime + manager)",
             "dependsOn": [
                 "Package: build bundle (OFFLINE)",
-                "Package: ship installer source (macOS)",
                 "Package: fetch macOS portable runtime (Ollama + Docker)"
             ],
             "dependsOrder": "sequence",
