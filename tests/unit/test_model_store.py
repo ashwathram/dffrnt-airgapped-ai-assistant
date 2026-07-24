@@ -7,6 +7,7 @@ synthetic stores in tmp_path — no docker, no network, no GUI.
 import hashlib
 import io
 import json
+import os
 import tarfile
 
 import pytest
@@ -117,6 +118,61 @@ def test_export_import_round_trip(tmp_path):
 
     # Re-import dedupes by hash: no error, nothing duplicated.
     assert import_tarball(tarball, dst, _quiet) == ["qwen3:14b"]
+
+
+def test_reimport_of_present_model_is_a_readonly_noop(tmp_path):
+    """Re-importing a model already fully in the store must not write into it
+    — the store may be root-owned (the Ollama container chowns it). The
+    pre-scan short-circuits before touching anything, so a read-only manifest
+    subtree is fine."""
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    _make_model(src, "qwen3:14b", weights=b"WEIGHTS" * 1000)
+    tarball = tmp_path / "qwen3.tar"
+    export_model(src, "qwen3:14b", tarball, _quiet)
+    assert import_tarball(tarball, dst, _quiet) == ["qwen3:14b"]
+
+    lines = []
+    qwen_dir = dst / "blobs"  # freeze the whole store read-only
+    for d in (dst, dst / "manifests", dst / "manifests/registry.ollama.ai",
+              dst / "manifests/registry.ollama.ai/library",
+              dst / "manifests/registry.ollama.ai/library/qwen3", qwen_dir):
+        os.chmod(d, 0o555)
+    try:
+        assert import_tarball(tarball, dst, lines.append) == ["qwen3:14b"]
+        assert any("already in the store" in ln for ln in lines)
+    finally:
+        for d in (dst, dst / "manifests", dst / "manifests/registry.ollama.ai",
+                  dst / "manifests/registry.ollama.ai/library",
+                  dst / "manifests/registry.ollama.ai/library/qwen3", qwen_dir):
+            os.chmod(d, 0o755)
+
+
+def test_import_of_new_content_into_readonly_store_is_clear(tmp_path):
+    """A genuine write into a store owned by another user surfaces an
+    actionable ModelStoreError, not a raw errno on a temp path."""
+    store = tmp_path / "store"
+    # Pre-seed the shared blob so the tar carries only a (new) manifest, and
+    # the failure lands on the manifest move, not a blob move.
+    shared = b"shared-layer"
+    digest = _blob(store, shared)
+    manifest = json.dumps({"config": {}, "layers": [
+        {"digest": digest.replace("sha256-", "sha256:", 1)}]}).encode()
+    tarball = tmp_path / "new.tar"
+    with tarfile.open(tarball, "w") as tar:
+        _tar_bytes_member(tar, "manifests/registry.ollama.ai/library/newmodel/latest", manifest)
+    (store / "manifests").mkdir()
+    os.chmod(store / "manifests", 0o555)  # can't create library/newmodel/ under it
+    try:
+        with pytest.raises(ModelStoreError) as exc:
+            import_tarball(tarball, store, _quiet)
+        msg = str(exc.value)
+        # Verbose, actionable, and literally runnable: the why, the numbered
+        # steps, and the store path interpolated into the chown command.
+        assert "chown -R" in msg and str(store) in msg
+        assert "dffrnt-manager stop" in msg and "models import" in msg
+        assert "1." in msg and "2." in msg  # numbered steps survived
+    finally:
+        os.chmod(store / "manifests", 0o755)
 
 
 def test_export_refuses_missing_model_and_missing_blob(tmp_path):

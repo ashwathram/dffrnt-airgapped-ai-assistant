@@ -101,12 +101,9 @@ def manifest_rel_to_name(rel: PurePosixPath) -> str:
 
 # ---- reading a store --------------------------------------------------------
 
-def manifest_digests(manifest_path: Path) -> list[str]:
-    """Blob digests a manifest references, as ``sha256-<hex>`` filenames."""
-    try:
-        doc = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise ModelStoreError(f"unreadable manifest {manifest_path.name}: {exc}") from exc
+def _digests_from_doc(doc: dict, label: str) -> list[str]:
+    """The blob digests (config + layers) a parsed manifest names, each as a
+    ``sha256-<hex>`` blob filename. ``label`` only names the manifest in errors."""
     digests = [doc.get("config", {}).get("digest", "")]
     digests += [layer.get("digest", "") for layer in doc.get("layers", [])]
     out = []
@@ -115,9 +112,18 @@ def manifest_digests(manifest_path: Path) -> list[str]:
             continue
         fname = digest.replace("sha256:", "sha256-", 1)
         if not _BLOB_RE.match(fname):
-            raise ModelStoreError(f"manifest {manifest_path.name} names a non-sha256 digest: {digest}")
+            raise ModelStoreError(f"manifest {label} names a non-sha256 digest: {digest}")
         out.append(fname)
     return out
+
+
+def manifest_digests(manifest_path: Path) -> list[str]:
+    """Blob digests a manifest file references, as ``sha256-<hex>`` filenames."""
+    try:
+        doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ModelStoreError(f"unreadable manifest {manifest_path.name}: {exc}") from exc
+    return _digests_from_doc(doc, manifest_path.name)
 
 
 def list_models(store: Path) -> list[ModelInfo]:
@@ -224,6 +230,18 @@ def import_tarball(tar_path: Path, store: Path, on_output) -> list[str]:
         if not manifest_members:
             raise ModelStoreError(f"{tar_path.name} contains no model manifest")
 
+        # Fast path / no-op: if every model in the tar is ALREADY fully in the
+        # store (manifest byte-identical + all its blobs present), there is
+        # nothing to do. Skip the (multi-GB) extract entirely AND avoid writing
+        # into the store — which matters because a store the Ollama container
+        # has run against is owned by root (it chowns manifests/ + blobs/), so
+        # a host-side rename over an identical file would fail with EACCES for
+        # no reason. This is the common "re-import what I already have" case.
+        already = _already_present(tar, manifest_members, store)
+        if already is not None:
+            on_output(f">> {', '.join(already)} already in the store — nothing to import.")
+            return already
+
         payload = sum(m.size for m in members)
         store.mkdir(parents=True, exist_ok=True)
         free = shutil.disk_usage(store).free
@@ -264,25 +282,109 @@ def import_tarball(tar_path: Path, store: Path, on_output) -> list[str]:
                             "already in the store")
                 names.append(manifest_rel_to_name(rel))
 
-            merged, deduped = 0, 0
-            for m in blob_members:
-                digest = PurePosixPath(m.name).parts[1]
-                target = store / "blobs" / digest
-                if target.is_file():
-                    deduped += 1
-                    continue
-                target.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(tmp / "blobs" / digest, target)  # same fs: atomic
-                merged += 1
-            for m in manifest_members:
-                target = store / PurePosixPath(m.name)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(tmp / PurePosixPath(m.name), target)
+            # Commit into the store. Blobs first so a manifest is never
+            # visible before the blobs it names. Both moves can hit EACCES
+            # when the store is owned by root (the Ollama container) — turn
+            # that into one actionable message instead of a raw errno on an
+            # opaque temp path.
+            try:
+                merged, deduped = 0, 0
+                for m in blob_members:
+                    digest = PurePosixPath(m.name).parts[1]
+                    target = store / "blobs" / digest
+                    if target.is_file():
+                        deduped += 1
+                        continue
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(tmp / "blobs" / digest, target)  # same fs: atomic
+                    merged += 1
+                for m in manifest_members:
+                    src = tmp / PurePosixPath(m.name)
+                    target = store / PurePosixPath(m.name)
+                    # An identical manifest already in place needs no write
+                    # (and the write might be unpermitted) — leave it.
+                    if target.is_file() and target.read_bytes() == src.read_bytes():
+                        continue
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(src, target)
+            except PermissionError as exc:
+                raise ModelStoreError(_ownership_help(store, exc)) from exc
             on_output(f">> Imported {', '.join(names)} "
                       f"({merged} blob(s) added, {deduped} already present)")
             return names
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _ownership_help(store: Path, exc: OSError) -> str:
+    """The verbose, copy-pasteable remedy for an import blocked by store
+    ownership. Kept as one raised string (newlines survive into the panel
+    console and the CLI); the store path is interpolated so the commands are
+    literally runnable. Deliberately does NOT suggest 'import while stopped'
+    — stopping the stack does not un-root a store the container already took,
+    so on any deployment that has run, reclaiming ownership is the only fix."""
+    return (
+        f"Cannot write the imported model into the store at {store} "
+        f"({exc.strerror}).\n"
+        "\n"
+        "WHY: the Ollama container runs as root, so the first time the stack "
+        "started it took ownership of the store's manifests/ and blobs/ "
+        "directories. Import writes those files from the host as your user, "
+        "which root now owns — so the write is denied. (Online pulls and "
+        "deletes don't hit this because Ollama performs them from inside the "
+        "container, as root; an offline import is the one path that writes "
+        "host-side.)\n"
+        "\n"
+        "FIX — reclaim ownership of the store, then re-run the import:\n"
+        "\n"
+        "  1. Stop the stack so nothing writes to the store mid-change:\n"
+        "       dffrnt-manager stop\n"
+        "     (or click Stop on the Manage tab). On the frozen binary use its\n"
+        "     path, e.g. ./dffrnt-manager stop.\n"
+        "\n"
+        "  2. Give the store back to your user (recursively). This needs sudo\n"
+        "     because the files are root-owned:\n"
+        f"       sudo chown -R \"$(id -un):$(id -gn)\" \"{store}\"\n"
+        "\n"
+        "  3. Re-run the import — Models -> Import in the panel, or:\n"
+        "       dffrnt-manager models import <the-tarball>\n"
+        "\n"
+        "  4. Start the stack again as usual:\n"
+        "       dffrnt-manager start\n"
+        "\n"
+        "NOTE: the imported model is now permanent, but starting the stack "
+        "re-roots the store's files (harmless — Ollama reads them fine), so "
+        "importing ANOTHER new model later means repeating steps 1-4. To stop "
+        "the re-rooting entirely, run the Ollama container as your host user "
+        "(a 'user:' entry on the ollama service in docker-compose.yml) so the "
+        "store stays yours and imports need no chown."
+    )
+
+
+def _already_present(tar, manifest_members, store: Path) -> list[str] | None:
+    """Names of the tar's models if EVERY one is already fully in ``store``
+    (each manifest byte-identical on disk and all its blobs present), else
+    None. Reads only the tiny manifest members — no blob extraction — so the
+    caller can short-circuit before unpacking anything. Any read/parse hiccup
+    returns None, falling back to the safe full import path."""
+    names = []
+    for m in manifest_members:
+        rel = PurePosixPath(m.name)
+        target = store / rel
+        if not target.is_file():
+            return None
+        try:
+            fh = tar.extractfile(m)
+            member_bytes = fh.read() if fh else b""
+            if not member_bytes or target.read_bytes() != member_bytes:
+                return None
+            digests = _digests_from_doc(json.loads(member_bytes), m.name)
+        except (OSError, ValueError, ModelStoreError):
+            return None
+        if any(not (store / "blobs" / d).is_file() for d in digests):
+            return None
+        names.append(manifest_rel_to_name(rel.relative_to("manifests")))
+    return names
 
 
 def _sha256_file(path: Path) -> str:
