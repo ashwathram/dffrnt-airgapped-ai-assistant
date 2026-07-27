@@ -1,0 +1,119 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // Run the API + UI on the host with the debugger, against the
+            // Qdrant + Ollama containers (started by the preLaunchTask).
+            "name": "DFFRNT AI Assistant (Dev: host API)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "dffrnt_assistant.api.app",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "QDRANT_URL": "http://localhost:6333",
+                "OLLAMA_URL": "http://localhost:11434"
+            },
+            "preLaunchTask": "Setup: All prerequisites",
+            "console": "integratedTerminal"
+        },
+        {
+            // Rebuild the app image from source, then run the containerized prod
+            // stack via the manager CLI (detached; stop with
+            // `uv run python -m installer stop`).
+            "name": "DFFRNT AI Assistant (Prod: Docker container)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && uv run python -m installer start",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            // Browser control panel (installer/manager): serves installer/web on
+            // 127.0.0.1 and opens it — install, manage, models, logs. Manages the
+            // stack itself, so — unlike the dev/eval configs — it has NO
+            // preLaunchTask that brings anything up.
+            "name": "DFFRNT Control Panel (browser)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "installer",
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONPATH": "${workspaceFolder}" },
+            "console": "integratedTerminal"
+        },
+        {
+            // Fast offline tests: tests/unit + the offline chunk-health checks.
+            "name": "Tests: unit",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["-v"],
+            "cwd": "${workspaceFolder}",
+            "env": { "PYTHONPATH": "${workspaceFolder}" },
+            "console": "integratedTerminal"
+        },
+        {
+            // Retrieval + answer quality against the live Qdrant + Ollama stack.
+            // Skips (with instructions) when the stack or corpus is missing.
+            "name": "Tests: evaluation (live stack)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["tests/eval", "-m", "eval", "-v", "-s"],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "QDRANT_URL": "http://localhost:6333",
+                "OLLAMA_URL": "http://localhost:11434"
+            },
+            "preLaunchTask": "Setup: All prerequisites",
+            "console": "integratedTerminal"
+        },
+        {
+            // Same as above, but first wipes the KB and re-ingests the corpus.
+            "name": "Tests: evaluation (reset corpus first)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["tests/eval", "-m", "eval", "-v", "-s", "--reset-corpus"],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "QDRANT_URL": "http://localhost:6333",
+                "OLLAMA_URL": "http://localhost:11434"
+            },
+            "preLaunchTask": "Setup: All prerequisites",
+            "console": "integratedTerminal"
+        },
+        {
+            // Package a deployment bundle into dist/ (see deploy/README.md).
+            // package.sh freezes installer/ into the dffrnt-manager binary and
+            // ships it inside the bundle AND next to the tarball — nothing
+            // else to copy.
+            "name": "Package: AWS deployment",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=AWS",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Package: Offline deployment",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            // macOS target: OFFLINE bundle, then the portable runtime — which
+            // also stages the manager as SOURCE (dist/installer) + a
+            // dist/dffrnt-manager launcher that runs it on the vendored python
+            // (a Linux-frozen binary can't run on a Mac; the panel is browser
+            // UI, so no Tk). The app image must be linux/arm64 for Apple
+            // Silicon — build on an arm64 machine or via buildx.
+            "name": "Package: macOS deployment",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE && bash deploy/package-macos-portable.sh arm64 && echo '>> macOS dist complete: bundle + portable/macos + manager'",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

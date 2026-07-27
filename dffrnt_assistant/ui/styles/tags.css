@@ -1,0 +1,92 @@
+/* Tag Manager: modal shell + taxonomy cards. */
+
+/* Library header actions (Manage Tags button sits beside the stat cards). */
+.lib-actions { display: flex; align-items: center; gap: 16px; }
+
+/* Generic modal shell (reusable). */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(9, 26, 41, 0.5);
+}
+.modal {
+  width: 100%; max-width: 640px; max-height: 90vh; display: flex; flex-direction: column;
+  background: var(--card); border-radius: 16px; box-shadow: 0 20px 60px rgba(9, 26, 41, 0.3); overflow: hidden;
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.modal-title { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 500; }
+.modal-title .icon { color: var(--accent); font-size: 16px; }
+.modal-close { padding: 6px; border-radius: 6px; color: var(--muted-foreground); display: flex; }
+.modal-close:hover { background: var(--muted); color: var(--foreground); }
+.modal-body { flex: 1; overflow-y: auto; padding: 16px 24px; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
+.modal-foot { padding: 16px 24px; border-top: 1px solid var(--border); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+.btn-sm { padding: 6px 14px; font-size: 13px; }
+
+/* Confirm dialog (compact modal variant) */
+.confirm-modal { max-width: 420px; }
+.confirm-body { display: flex; gap: 14px; padding: 24px 24px 8px; }
+.confirm-icon {
+  flex-shrink: 0; width: 40px; height: 40px; border-radius: 10px; display: flex;
+  align-items: center; justify-content: center; background: var(--muted); color: var(--muted-foreground); font-size: 20px;
+}
+.confirm-icon.danger { background: rgba(231,35,0,0.1); color: var(--destructive); }
+.confirm-text h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.confirm-text p { font-size: 13px; color: var(--muted-foreground); line-height: 1.5; }
+.confirm-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px 24px; }
+.btn-danger { background: var(--destructive); color: #fff; }
+.btn-danger:hover { filter: brightness(0.95); }
+
+/* Tag type cards */
+.tt-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.tt-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; transition: background 0.15s; }
+.tt-head:hover { filter: brightness(0.99); }
+.tt-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.tt-meta { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.tt-name { font-size: 14px; font-weight: 500; }
+.tt-desc { font-size: 12px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tt-count { font-size: 12px; color: var(--muted-foreground); flex-shrink: 0; }
+.tt-icon { padding: 4px; border-radius: 6px; color: var(--muted-foreground); display: flex; font-size: 13px; }
+.tt-icon:hover { background: var(--muted); color: var(--foreground); }
+.tt-del:hover { background: rgba(231, 35, 0, 0.08); color: var(--destructive); }
+.tt-chevron { color: var(--muted-foreground); display: flex; font-size: 14px; }
+
+.tt-body { padding: 8px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+.tt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tt-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 500; border: 1px solid transparent;
+}
+.tt-chip button { display: flex; color: inherit; opacity: 0.7; font-size: 9px; }
+.tt-chip button:hover { opacity: 1; }
+.tt-empty { font-size: 12px; color: var(--muted-foreground); }
+.tt-add { display: flex; gap: 8px; }
+
+.tt-input {
+  flex: 1; min-width: 0; padding: 7px 12px; font-size: 13px; font-family: inherit;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--card); outline: none; color: var(--foreground);
+}
+.tt-input:focus { border-color: var(--accent); }
+
+/* Edit + new-type forms */
+.tt-edit, .tt-newform { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.tt-newform { border: 2px dashed var(--border); }
+.tt-formtitle { font-size: 14px; font-weight: 500; }
+.tt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tt-actions { display: flex; gap: 8px; margin-top: 6px; }
+.tt-colorrow { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+/* Extra breathing room between the color swatches and the Create/Cancel row. */
+.tt-newform .tt-actions, .tt-edit .tt-actions { margin-top: 14px; }
+.tt-collabel { font-size: 12px; color: var(--muted-foreground); }
+
+.swatch-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.swatch { width: 20px; height: 20px; border-radius: 50%; border: none; cursor: pointer; transition: transform 0.1s; outline-offset: 2px; }
+.swatch.sel { transform: scale(1.15); outline: 2px solid currentColor; }
+
+.tt-newbtn {
+  display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 12px;
+  border: 2px dashed var(--border); font-size: 14px; color: var(--muted-foreground); transition: color 0.15s, border-color 0.15s;
+}
+.tt-newbtn:hover { color: var(--foreground); border-color: rgba(9, 26, 41, 0.2); }

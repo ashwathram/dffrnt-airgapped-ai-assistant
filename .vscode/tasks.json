@@ -1,0 +1,136 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Install dependencies",
+            "type": "shell",
+            "command": "uv sync",
+            "options": { "cwd": "${workspaceFolder}" },
+            "presentation": { "reveal": "silent", "panel": "shared" }
+        },
+        {
+            "label": "Create data and log directories",
+            "type": "shell",
+            "command": "mkdir -p data logs",
+            "options": { "cwd": "${workspaceFolder}" },
+            "presentation": { "reveal": "silent", "panel": "shared" }
+        },
+        {
+            // Dev loop: qdrant + ollama containers only (GPU-aware, from
+            // config.toml), waits for health and ensures the configured
+            // models are pulled — the API then runs on the host under the
+            // debugger. CLI twin of the manager's browser panel; see installer/cli.py.
+            "label": "Start services (config-driven)",
+            "type": "shell",
+            "command": "uv run python -m installer dev",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            "label": "Setup: All prerequisites",
+            "dependsOn": [
+                "Install dependencies",
+                "Create data and log directories",
+                "Start services (config-driven)"
+            ],
+            "dependsOrder": "parallel",
+            "group": "build"
+        },
+        {
+            // Build the API + UI image with uv (see deploy/Dockerfile).
+            "label": "Build API image (uv)",
+            "type": "shell",
+            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile .",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            // Production: (re)build the image from source, then bring up the
+            // full GPU-aware containerized stack (Qdrant + Ollama + API) via
+            // the manager CLI — ensures models, prunes, waits for health.
+            // Mirrors the deployed artifact.
+            "label": "Run production stack (Docker)",
+            "type": "shell",
+            "command": "docker build -t dffrnt-assistant:latest -f deploy/Dockerfile . && uv run python -m installer start",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "group": "build"
+        },
+        {
+            // Stop everything (both dev and prod containers).
+            "label": "Stop stack (Docker)",
+            "type": "shell",
+            "command": "uv run python -m installer stop",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            "label": "Package: build bundle (AWS)",
+            "type": "shell",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=AWS",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "group": "build"
+        },
+        {
+            // package.sh freezes installer/ into the dffrnt-manager binary and
+            // ships it both inside the bundle and next to the tarball — no
+            // separate "ship the installer" step exists anymore.
+            "label": "Package: build bundle (OFFLINE)",
+            "type": "shell",
+            "command": "bash deploy/package.sh TARGET_SYSTEM=OFFLINE",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "group": "build"
+        },
+        {
+            // Portable macOS runtime -> dist/: native Ollama (Metal automatic on
+            // Apple Silicon) + colima/lima/docker-CLI for the Qdrant + API
+            // containers + a relocatable CPython, AND the manager itself
+            // (dist/installer source + a dist/dffrnt-manager launcher that runs
+            // it — the Linux ELF package.sh emits can't run on a Mac). One
+            // script produces the whole macOS deliverable. Networked build
+            // machine only; runs AFTER package.sh (which wipes dist/). Version
+            // pins live in the script. Pass x86_64 for Intel (CPU-only).
+            "label": "Package: fetch macOS portable runtime (Ollama + Docker)",
+            "type": "shell",
+            "command": "bash deploy/package-macos-portable.sh arm64",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": { "executable": "bash", "args": ["-c"] }
+            },
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            // Full macOS package: OFFLINE bundle (models cached; build the app
+            // image on/for linux/arm64 so it runs in colima's VM on Apple
+            // Silicon), then the portable runtime (which also stages the
+            // manager source + launcher into dist/).
+            "label": "Package: macOS deployment (bundle + portable runtime + manager)",
+            "dependsOn": [
+                "Package: build bundle (OFFLINE)",
+                "Package: fetch macOS portable runtime (Ollama + Docker)"
+            ],
+            "dependsOrder": "sequence",
+            "group": "build"
+        }
+    ]
+}

@@ -1,0 +1,119 @@
+# Runtime: Qdrant + Ollama. For OFFLINE bundles the images and Ollama model store
+# come from the bundle (dffrnt-manager's install loads the images and finds the
+# cached models); for AWS/online bundles Docker pulls the images and the manager
+# pulls the models on first start.
+#
+# Base images are PINNED so every deployment runs the exact stack this bundle was
+# packaged and tested against — AWS bundles pull at deploy time, and an unpinned
+# tag would float to whatever is :latest that day. package.sh reads these image
+# names, so bumping a pin here is the single place to do it; re-run the eval
+# suite (pytest -m eval) after bumping.
+#
+# Do not run `docker compose` against this file directly. Use the control panel
+# (dffrnt-manager / python -m installer, GUI or CLI), which reads config.toml
+# and injects the GPU reservation + ports dynamically, plus HOST_CONFIG (the
+# ABSOLUTE path to config.toml for the api bind mount below). The `../config.toml`
+# fallback only fits the dev checkout, where deploy/ sits next to the repo-root
+# config; the flat installed layout relies on HOST_CONFIG being set.
+#
+# macOS (portable pathway): the GUI control panel starts ONLY qdrant + api from
+# this file — the ollama service below never runs there. Ollama runs natively on
+# the host for Metal acceleration, and a stdin override re-points the api at it
+# (OLLAMA_URL=http://host.docker.internal:<port>, extra_hosts host-gateway) and
+# !override-replaces the api dependency map to drop ollama. See
+# installer/backends/portable_backend.py; keep the ollama env tuning below in
+# sync with _OLLAMA_TUNING there.
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.18.3
+    container_name: qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+    # The image ships no curl/wget; bash's /dev/tcp probe is the documented check.
+    # start_interval gives fast checks while booting (Docker 25+); the steady-state
+    # interval stays long so the check doesn't spam the container logs forever.
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      start_period: 120s
+      start_interval: 3s
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.32.1
+    container_name: ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ./ollama_models:/root/.ollama/models
+    # Keep the LLM + embedder both resident so a RAG query (embed -> generate)
+    # never evicts the LLM and pays a full model reload per prompt:
+    #   KEEP_ALIVE=-1         never idle-unload a loaded model
+    #   MAX_LOADED_MODELS=2   the LLM and the embedder coexist
+    #   NUM_PARALLEL=1        one generation slot, so the KV cache is exactly
+    #                         num_ctx tokens (the "auto" default may reserve 4x)
+    #   FLASH_ATTENTION=1     faster prefill; required for KV quantization
+    #   KV_CACHE_TYPE=q8_0    halves KV-cache memory at negligible quality cost
+    # VRAM budget (qwen3:14b q4_K_M): ~9.3GB weights + ~1.4GB KV (16k ctx, q8_0)
+    # + ~1.2GB bge-m3 ≈ 12GB — fits a 16GB GPU (e.g. AWS g4dn / Tesla T4) with
+    # headroom. If the GPU is smaller, set embed_on_cpu = true in config.toml so
+    # the LLM stays resident and only ingestion embeds slow down.
+    environment:
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_MAX_LOADED_MODELS=2
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_KV_CACHE_TYPE=q8_0
+    # Every `ollama ls` logs two request lines and refreshes the model-list
+    # cache, so the steady-state interval is deliberately long (see qdrant note).
+    healthcheck:
+      test: ["CMD", "ollama", "ls"]
+      start_period: 120s
+      start_interval: 3s
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  # The API + web UI, behind the `prod` profile. The control panel's `start`
+  # always uses this profile, so it runs the full containerized stack — the
+  # deployed artifact.
+  # In development the API instead runs on the host (e.g. the VSCode debugger)
+  # against the qdrant/ollama containers above, brought up by the manager's
+  # `dev` command (python -m installer dev). The image
+  # talks to its siblings over the compose network (qdrant:6333 / ollama:11434),
+  # injected as env so they override the localhost URLs in the mounted config.toml.
+  api:
+    image: dffrnt-assistant:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: dffrnt-api
+    profiles: ["prod"]
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - DFFRNT_CONFIG=/app/config.toml
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=http://ollama:11434
+      # The container ALWAYS serves on 0.0.0.0:8000; the host port comes from the
+      # compose mapping above. Env beats the mounted config.toml (see config.py),
+      # so an operator editing api_host/api_port only moves the host side of the
+      # mapping — without this pin the app would bind the edited port INSIDE the
+      # container while compose still maps to 8000, making the API unreachable.
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+    volumes:
+      - ${HOST_CONFIG:-../config.toml}:/app/config.toml:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped

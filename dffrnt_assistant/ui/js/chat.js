@@ -1,0 +1,490 @@
+// Chat view: empty state, message rendering, sending, and the composer.
+import { $, esc, nowTime } from './util.js';
+import { svg } from './icons.js';
+import { state } from './state.js';
+import { renderMarkdown } from './markdown.js';
+import { queryStream, exportAnswerPdf, createConversation, updateConversation, getConversation } from './api.js';
+import { loadConversations, renderSidebar } from './sidebar.js';
+
+let nextId = 0;
+const mkId = () => 'm' + (++nextId);  // stable per-message id for actions/targeting
+let abortController = null;           // in-flight stream, so the Stop button can cancel it
+
+// Turn "[1]" markers into clickable citation chips (see focusSource). Operates
+// on already-escaped text so the Markdown inline hook can reuse it safely.
+function citeChips(sources, msgId) {
+  return (escaped) => escaped.replace(/\[(\d+)\]/g, (m, n) => {
+    const i = parseInt(n, 10);
+    if (sources && i >= 1 && i <= sources.length) {
+      return `<span class="cite-chip" data-msg="${msgId}" data-cite="${i}" title="${esc(sources[i - 1].filename)}">${i}</span>`;
+    }
+    return m;
+  });
+}
+
+// User turns: plain escaped text + citation chips (no Markdown).
+function renderContent(text, sources, msgId) {
+  return citeChips(sources, msgId)(esc(text));
+}
+
+// Assistant answers: Markdown to safe HTML, citation chips on plain-text runs.
+function renderAnswer(text, sources, msgId) {
+  return `<div class="md">${renderMarkdown(text, { inline: citeChips(sources, msgId) })}</div>`;
+}
+
+// Sources panel — sources the answer actually cited lead; the rest collapse
+// into a dimmed "other retrieved sources" group so they stay auditable.
+function sourcesHtml(m) {
+  const sources = m.sources || [];
+  if (!sources.length) return '';
+
+  const cited = new Set();
+  (m.content || '').replace(/\[(\d+)\]/g, (_, n) => {
+    const i = parseInt(n, 10);
+    if (i >= 1 && i <= sources.length) cited.add(i);
+    return '';
+  });
+
+  // Sources keep their original 1-based number so [n] still maps to badge n.
+  const row = (s, n) => `
+    <a class="source" id="src-${m.id}-${n}" href="/api/documents/${encodeURIComponent(s.filename)}/raw" target="_blank" rel="noopener" title="Open ${esc(s.filename)}">
+      <span class="num">${n}</span>
+      <span class="body">
+        <span class="fn">${esc(s.title || s.filename)}</span>
+        <span class="meta">${esc(s.filename)}${s.page ? ' · p. ' + esc(s.page) : ''}${s.score != null ? ' · score ' + s.score : ''}</span>
+        ${s.excerpt ? `<span class="excerpt">“${esc(s.excerpt)}”</span>` : ''}
+      </span>
+      ${svg('externalLink')}
+    </a>`;
+
+  // If nothing was cited (model omitted markers), show everything as primary.
+  const numbered = sources.map((s, idx) => [s, idx + 1]);
+  const anyCited = numbered.some(([, n]) => cited.has(n));
+  const primary = anyCited ? numbered.filter(([, n]) => cited.has(n)) : numbered;
+  const secondary = anyCited ? numbered.filter(([, n]) => !cited.has(n)) : [];
+
+  const n2 = secondary.length;
+  const secondaryHtml = n2
+    ? `<button class="src-toggle" data-srctoggle="${m.id}">${m.sourcesExpanded ? 'Hide' : 'Show'} ${n2} other retrieved source${n2 > 1 ? 's' : ''}</button>`
+      + (m.sourcesExpanded ? `<div class="sources-secondary">${secondary.map(([s, n]) => row(s, n)).join('')}</div>` : '')
+    : '';
+
+  return `
+    <div class="sources">
+      <div class="src-head"><span class="lbl">SOURCES</span></div>
+      ${primary.map(([s, n]) => row(s, n)).join('')}
+      ${secondaryHtml}
+    </div>`;
+}
+
+function emptyStateHtml() {
+  return `
+    <div class="empty">
+      <div>
+        <div class="orb">${svg('sparkles')}</div>
+        <h2>How can I help you today?</h2>
+        <p>Ask questions about your documents. Use the tag filter above to focus on specific document sets.</p>
+      </div>
+    </div>`;
+}
+
+// Collapsible reasoning trace ("Show thinking" on): open while streaming,
+// collapsed once done, with the currently streaming line highlighted.
+function thinkingBlockHtml(m) {
+  const openAttr = m.streaming ? ' open' : '';
+  const label = m.streaming ? 'Thinking…' : 'Thought process';
+  const cursor = m.streaming ? '<span class="stream-cursor"></span>' : '';
+  const lines = (m.thinking || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const line = (text, current) =>
+    `<div class="trace-line${current ? ' current' : ''}">`
+    + '<span class="trace-dot"></span>'
+    + `<span class="trace-text">${esc(text)}${current && m.streaming ? cursor : ''}</span>`
+    + '</div>';
+  const items = lines.length
+    ? lines.map((l, i) => line(l, i === lines.length - 1)).join('')
+    : line('', true);
+  return `<details class="thinking-block"${openAttr}>`
+    + `<summary>${svg('brain')} ${label}</summary>`
+    + `<div class="thinking-body"><p class="trace-label">Reasoning trace</p>${items}</div>`
+    + '</details>';
+}
+
+// Inner HTML of an assistant bubble — reused for live streaming updates.
+// Sources are shown only once streaming is complete.
+function bubbleInner(m) {
+  let html = '';
+  if (state.showThinking && m.thinking) {
+    html += thinkingBlockHtml(m);
+  } else if (!state.showThinking && m.streaming && !m.content) {
+    html += '<span class="thinking-label">Thinking…</span>';
+  }
+  if (m.content) {
+    html += renderAnswer(m.content, m.sources, m.id);
+    if (m.streaming) html += '<span class="stream-cursor"></span>';
+  }
+  if (!m.streaming) html += sourcesHtml(m);
+  return html;
+}
+
+// While generating, the only message control is Stop — Retry is withheld until
+// the answer is complete so it can't fire against a half-formed one.
+function streamActionsHtml() {
+  return `
+    <div class="stream-actions">
+      <button class="sa stop" data-msg-action="stop" title="Stop generating">${svg('square')}<span>Stop</span></button>
+    </div>`;
+}
+
+// "Download As…" formats. Client-only formats build a Blob from the answer
+// text; `server: true` POSTs it (PDF — the browser has no Markdown->PDF engine).
+const DOWNLOAD_FORMATS = [
+  { id: 'txt', label: 'Plain text (.txt)', ext: 'txt', mime: 'text/plain' },
+  { id: 'md', label: 'Markdown (.md)', ext: 'md', mime: 'text/markdown' },
+  { id: 'pdf', label: 'PDF (.pdf)', ext: 'pdf', server: true },
+];
+
+// Native <details> disclosure, so open/close needs no JS state.
+function downloadMenuHtml(m) {
+  const options = DOWNLOAD_FORMATS.map(
+    (f) => `<button data-msg-action="download" data-id="${m.id}" data-format="${f.id}">${f.label}</button>`
+  ).join('');
+  return `
+    <details class="dl-menu">
+      <summary class="ma" title="Download as…">${svg('download')}</summary>
+      <div class="dl-options">${options}</div>
+    </details>`;
+}
+
+// Hover action row under a finished assistant message.
+function actionRowHtml(m) {
+  return `
+    <div class="msg-actions">
+      <button class="ma" data-msg-action="copy" data-id="${m.id}" title="Copy">${svg('copy')}</button>
+      <button class="ma" data-msg-action="regenerate" data-id="${m.id}" title="Retry">${svg('refresh')}</button>
+      ${downloadMenuHtml(m)}
+      ${m.ts ? `<span class="ma-ts">${esc(m.ts)}</span>` : ''}
+    </div>`;
+}
+
+function messageHtml(m) {
+  if (m.role === 'notice') {
+    return `<div class="notice">${svg('alert')}<span>${esc(m.content)}</span></div>`;
+  }
+  const isUser = m.role === 'user';
+  const bubbleId = m.streaming ? ' id="streamBubble"' : '';
+  let footer = '';
+  if (isUser) footer = m.ts ? `<div class="ts">${esc(m.ts)}</div>` : '';
+  else if (m.streaming) footer = streamActionsHtml();
+  else footer = actionRowHtml(m);
+  return `
+    <div class="msg ${isUser ? 'user' : 'assistant'}">
+      ${isUser ? '' : '<div class="avatar">AI</div>'}
+      <div class="col">
+        <div class="bubble"${bubbleId}>${isUser ? renderContent(m.content, m.sources, m.id) : bubbleInner(m)}</div>
+        ${footer}
+      </div>
+    </div>`;
+}
+
+// Pre-token indicator: the model is working but nothing has streamed yet.
+function typingHtml() {
+  return `
+  <div class="msg assistant">
+    <div class="avatar">AI</div>
+    <div class="col">
+      <div class="bubble"><span class="typing"><span></span><span></span><span></span></span></div>
+      ${streamActionsHtml()}
+    </div>
+  </div>`;
+}
+
+export function renderMessages() {
+  const box = $('messages');
+  if (!state.messages.length && !state.busy) {
+    box.innerHTML = emptyStateHtml();
+    return;
+  }
+  box.innerHTML = '<div class="messages-inner">'
+    + state.messages.map(messageHtml).join('')
+    + (state.busy ? typingHtml() : '')
+    + '</div>';
+  box.querySelectorAll('.cite-chip').forEach((c) => {
+    c.onclick = () => focusSource(c.dataset.msg, parseInt(c.dataset.cite, 10));
+  });
+  box.querySelectorAll('[data-msg-action]').forEach((b) => {
+    b.onclick = () => onMessageAction(b.dataset.msgAction, b.dataset.id, b);
+  });
+  box.querySelectorAll('[data-srctoggle]').forEach((b) => {
+    b.onclick = () => {
+      const m = state.messages.find((x) => x.id === b.dataset.srctoggle);
+      if (m) { m.sourcesExpanded = !m.sourcesExpanded; renderMessages(); }
+    };
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+// Clicking a "[n]" chip scrolls to its source card and flashes it, expanding
+// the collapsed secondary group first if the card sits inside it.
+function focusSource(msgId, n) {
+  const m = state.messages.find((x) => x.id === msgId);
+  if (!m || !m.sources || n < 1 || n > m.sources.length) return;
+  if (!document.getElementById(`src-${msgId}-${n}`) && !m.sourcesExpanded) {
+    m.sourcesExpanded = true;
+    renderMessages();
+  }
+  const card = document.getElementById(`src-${msgId}-${n}`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.classList.remove('flash');
+  void card.offsetWidth; // restart the animation if the same card is re-clicked
+  card.classList.add('flash');
+}
+
+// Patch just the streaming bubble between full re-renders (cheap, per token).
+function updateStreamingBubble(m) {
+  const el = $('streamBubble');
+  if (!el) return;
+  el.innerHTML = bubbleInner(m);
+  const tb = el.querySelector('.thinking-body');
+  if (tb) tb.scrollTop = tb.scrollHeight; // keep the live reasoning scrolled to newest
+  const box = $('messages');
+  box.scrollTop = box.scrollHeight;
+}
+
+export async function sendMessage(text) {
+  text = (text || '').trim();
+  if (!text || state.busy) return;
+  state.messages.push({ id: mkId(), role: 'user', content: text, ts: nowTime() });
+  // The conversation title is its first user turn (mirrors persist()).
+  $('topbarTitle').textContent = (state.messages.find((m) => m.role === 'user') || {}).content || 'Conversation';
+  await runQuery();
+}
+
+// Persist the current conversation to the server (create on first turn, then
+// update). Only real turns are stored — thinking and UI flags are dropped.
+async function persist() {
+  const msgs = state.messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({ role: m.role, content: m.content, sources: m.sources || [], ts: m.ts || '' }));
+  if (!msgs.length) return;
+  if (!state.conversationId) {
+    const title = (state.messages.find((m) => m.role === 'user') || {}).content || 'New conversation';
+    const { ok, data } = await createConversation({ title: title.slice(0, 80), messages: msgs });
+    if (ok) state.conversationId = data.id;
+  } else {
+    await updateConversation(state.conversationId, { messages: msgs });
+  }
+  loadConversations();
+}
+
+// Load a saved conversation into the chat view (or clear it when id is null).
+export async function loadConversation(id) {
+  if (abortController) abortController.abort();
+  if (!id) { clearChat(); return; }
+  const { ok, data } = await getConversation(id);
+  if (!ok) { clearChat(); return; }
+  state.conversationId = id;
+  state.busy = false;
+  state.messages = (data.messages || []).map((m) => ({
+    id: mkId(), role: m.role, content: m.content, sources: m.sources || [], ts: m.ts || '',
+  }));
+  renderMessages();
+  refreshSendBtn();
+  renderSidebar();
+  $('topbarTitle').textContent = data.title || 'Conversation';
+}
+
+// Answer the most recent user turn. Used for both a fresh send and Regenerate,
+// so neither needs to re-add the user message.
+async function runQuery() {
+  const turns = state.messages.filter((m) => m.role === 'user' || m.role === 'assistant');
+  const last = turns[turns.length - 1];
+  if (!last || last.role !== 'user') return;
+  const question = last.content;
+  const history = turns.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
+
+  state.busy = true; // guard concurrent sends; shows typing indicator + Stop
+  renderMessages();
+  refreshSendBtn();
+
+  const assistant = { id: mkId(), role: 'assistant', content: '', thinking: '', sources: [], streaming: true };
+  let started = false;
+  // On the first token, swap the typing indicator for the assistant bubble.
+  const ensureStarted = () => {
+    if (started) return;
+    started = true;
+    state.busy = false;
+    state.messages.push(assistant);
+    renderMessages();
+    refreshSendBtn();
+  };
+
+  const controller = new AbortController();
+  abortController = controller;
+  try {
+    for await (const ev of queryStream(question, history, controller.signal, state.chatScope)) {
+      if (ev.type === 'sources') {
+        assistant.sources = ev.sources || [];
+      } else if (ev.type === 'thinking') {
+        assistant.thinking += ev.text;
+        ensureStarted();
+        if (state.showThinking) updateStreamingBubble(assistant);
+      } else if (ev.type === 'token') {
+        assistant.content += ev.text;
+        ensureStarted();
+        updateStreamingBubble(assistant);
+      } else if (ev.type === 'error') {
+        if (!started) state.messages.push({ id: mkId(), role: 'notice', content: ev.detail });
+        break;
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      // Stop pressed — keep whatever streamed so far.
+    } else if (!started) {
+      state.messages.push({ id: mkId(), role: 'notice', content: 'Could not reach the assistant. Check the server connection.' });
+    }
+  } finally {
+    // Only clear the shared ref if this run still owns it — a Retry may have
+    // already replaced it with a newer stream's controller.
+    if (abortController === controller) abortController = null;
+  }
+
+  state.busy = false;
+  assistant.streaming = false;
+  if (started) {
+    assistant.ts = nowTime();
+    // If Stop hit before anything streamed, drop the empty bubble.
+    if (!assistant.content.trim() && !assistant.thinking.trim()) {
+      const i = state.messages.indexOf(assistant);
+      if (i >= 0) state.messages.splice(i, 1);
+    }
+  }
+  renderMessages();
+  refreshSendBtn();
+  persist();
+}
+
+function stopStreaming() {
+  if (abortController) abortController.abort();
+}
+
+// -- Message actions (copy / regenerate / stop / download) -----------------
+function onMessageAction(action, id, btn) {
+  if (action === 'stop') { stopStreaming(); return; }
+  const m = state.messages.find((x) => x.id === id);
+  if (!m) return;
+  if (action === 'copy') { copyText(m.content, btn); return; }
+  if (action === 'download') {
+    downloadAnswer(m, btn && btn.dataset.format);
+    btn.closest('details')?.removeAttribute('open'); // close the menu after picking
+    return;
+  }
+  if (action === 'regenerate') regenerate(id);
+}
+
+// Save an assistant answer to a local file in the chosen format. The filename is
+// slugged from the question that produced the answer, falling back to "answer".
+async function downloadAnswer(m, formatId) {
+  const fmt = DOWNLOAD_FORMATS.find((f) => f.id === formatId);
+  if (!fmt || !m) return;
+  const name = `${answerFilename(m)}.${fmt.ext}`;
+  if (fmt.server) {
+    const { ok, blob } = await exportAnswerPdf(m.content || '', $('topbarTitle').textContent);
+    if (!ok) {
+      state.messages.push({ id: mkId(), role: 'notice', content: 'Could not generate the PDF. Check the server connection.' });
+      renderMessages();
+      return;
+    }
+    saveBlob(blob, name);
+  } else {
+    saveBlob(new Blob([m.content || ''], { type: fmt.mime }), name);
+  }
+}
+
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function answerFilename(m) {
+  const idx = state.messages.indexOf(m);
+  let question = '';
+  for (let i = idx - 1; i >= 0; i -= 1) {
+    if (state.messages[i].role === 'user') { question = state.messages[i].content; break; }
+  }
+  const slug = (question || 'answer')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return slug || 'answer';
+}
+
+async function copyText(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const el = document.createElement('textarea');
+    el.value = text; el.style.position = 'fixed'; el.style.opacity = '0';
+    document.body.appendChild(el); el.select();
+    try { document.execCommand('copy'); } finally { el.remove(); }
+  }
+  if (btn) { const html = btn.innerHTML; btn.textContent = '✓'; setTimeout(() => { btn.innerHTML = html; }, 1200); }
+}
+
+function regenerate(assistantId) {
+  if (state.busy) return;
+  const idx = state.messages.findIndex((m) => m.id === assistantId);
+  if (idx < 0) return;
+  state.messages = state.messages.slice(0, idx); // drop this answer (and anything after)
+  renderMessages();
+  runQuery();
+}
+
+// Toggle the composer button between Send and Stop based on stream state.
+function refreshSendBtn() {
+  const btn = $('sendBtn');
+  if (!btn) return;
+  if (state.busy) {
+    btn.innerHTML = svg('square');
+    btn.classList.add('stop', 'ready');
+    btn.title = 'Stop';
+  } else {
+    btn.innerHTML = svg('send');
+    btn.classList.remove('stop');
+    btn.classList.toggle('ready', ($('composer').value || '').trim().length > 0);
+    btn.title = 'Send (Enter)';
+  }
+}
+
+export function clearChat() {
+  if (abortController) abortController.abort();
+  state.messages = [];
+  state.busy = false;
+  state.conversationId = null;
+  renderMessages();
+  renderSidebar();
+  refreshSendBtn();
+  $('topbarTitle').textContent = 'New conversation';
+}
+
+export function initComposer() {
+  const composer = $('composer');
+  const sync = () => {
+    composer.style.height = 'auto';
+    composer.style.height = Math.min(composer.scrollHeight, 160) + 'px';
+    const len = composer.value.trim().length;
+    $('charCount').textContent = len ? String(len) : '';
+    refreshSendBtn();
+  };
+  const submit = () => { const v = composer.value; composer.value = ''; sync(); sendMessage(v); };
+
+  composer.addEventListener('input', sync);
+  composer.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!state.busy) submit(); }
+  });
+  $('sendBtn').onclick = () => { if (state.busy) stopStreaming(); else submit(); };
+  sync();
+}

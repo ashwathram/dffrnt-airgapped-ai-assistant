@@ -1,2 +1,0 @@
-# Core dependencies (add later)
-# For now it's empty or you can add common ones

@@ -1,0 +1,54 @@
+[project]
+name = "dffrnt-airgapped-ai-assistant"
+version = "0.1.0"
+description = "Private air-gapped RAG AI assistant for DFFRNT"
+requires-python = ">=3.14"
+dependencies = [
+    # API / presentation
+    "fastapi>=0.111.0",
+    "uvicorn>=0.29.0",
+    "python-multipart>=0.0.9",
+    # Vector database
+    "qdrant-client>=1.9.0",
+    # Document parsers (one library per format, no LangChain/unstructured)
+    "pymupdf>=1.24.0",
+    "python-docx>=1.1.0",
+    "python-pptx>=0.6.23",
+    "openpyxl>=3.1.0",
+    # Answer export: mistune renders Markdown -> HTML; PyMuPDF (above) renders
+    # that HTML -> PDF via its Story API, so no separate PDF engine is needed.
+    "mistune>=3.3.3",
+]
+# NOTE: Embeddings and generation are served by Ollama over HTTP using only the
+# Python standard library (urllib), so no LLM/embedding client library is needed.
+# CSV parsing uses the stdlib `csv` module; config parsing uses stdlib `tomllib`.
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+]
+# Used only by deploy/package.sh on the (networked) build machine to freeze
+# the control panel (installer/) into the dffrnt-manager binary. Never
+# installed on targets — they receive the finished binary.
+package = [
+    "pyinstaller>=6.16.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["dffrnt_assistant"]
+
+[project.scripts]
+dffrnt-api = "dffrnt_assistant.api.app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not integration and not eval'"
+markers = [
+    "integration: requires a live Qdrant + Ollama and a running API server",
+    "eval: retrieval/answer quality suite; requires live Qdrant + Ollama (run: pytest -m eval)",
+]

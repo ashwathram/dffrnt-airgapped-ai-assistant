@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="/assets/icon.png" />
+<title>DFFRNT — Control Panel</title>
+<!--
+  DFFRNT Control Panel — vanilla HTML/CSS/JS served by installer/web/server.py
+  (stdlib http.server on 127.0.0.1, token-gated). Design language ported from
+  dffrnt_assistant/ui (same sidebar/brand/nav-btn/card/pill vocabulary and
+  tokens), so the console reads as part of the product. No framework, no CDN,
+  no build step — works on an air-gapped box and inside the frozen binary.
+-->
+<link rel="stylesheet" href="/assets/style.css" />
+<script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+<div class="app">
+  <!-- ── Sidebar ──────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="logo" src="/assets/icon.png" alt="DFFRNT logo" />
+      <div class="brand-text">
+        <span class="name">DFFRNT</span>
+        <span class="sub">AI Assistant — Control Panel</span>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="nav-btn" data-view="install">Install</button>
+      <button class="nav-btn" data-view="manage">Manage</button>
+      <button class="nav-btn" data-view="models">Models</button>
+      <button class="nav-btn" data-view="logs">Logs</button>
+    </div>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer" id="platformFooter"></div>
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────────────── -->
+  <main class="main">
+    <div class="topbar"><span id="topbarTitle"></span></div>
+    <div class="content">
+
+      <!-- Install ─────────────────────────────────────────────────── -->
+      <section class="view" id="view-install">
+        <div class="card">
+          <div class="card-title">Installation</div>
+          <p class="card-muted" id="installStatusText"></p>
+        </div>
+        <div class="card">
+          <div class="card-title">Bundle</div>
+          <div class="form-row">
+            <label>Tarball</label>
+            <input id="bundlePath" list="bundleList" placeholder="/path/to/dffrnt-*.tar.gz" />
+            <datalist id="bundleList"></datalist>
+          </div>
+          <div class="form-row">
+            <label>Install to</label>
+            <input id="destPath" />
+          </div>
+          <label class="check-row">
+            <input type="checkbox" id="overwriteConfig" />
+            Overwrite an existing config.toml with the bundle default
+            (the current file is archived as config.toml.old)
+          </label>
+          <p class="card-muted" id="bundleInfo"></p>
+          <div class="actions"><button class="btn-primary" id="installBtn">Install</button></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Prerequisites</div>
+            <button class="btn-ghost" data-refresh="prereqs">Re-check</button>
+          </div>
+          <div class="rows" id="installPrereqs"></div>
+        </div>
+      </section>
+
+      <!-- Manage ──────────────────────────────────────────────────── -->
+      <section class="view" id="view-manage">
+        <div class="card">
+          <div class="card-title">Platform</div>
+          <p class="card-muted" id="platformDetail"></p>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Prerequisites</div>
+            <button class="btn-ghost" data-refresh="prereqs">Re-check</button>
+          </div>
+          <div class="rows" id="managePrereqs"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Services</div>
+            <button class="btn-ghost" data-refresh="status">Refresh status</button>
+          </div>
+          <div class="rows" id="serviceRows"></div>
+          <div class="actions">
+            <button class="btn-primary" data-verb="start">Start</button>
+            <button class="btn-ghost" data-verb="restart">Restart</button>
+            <button class="btn-danger" data-verb="stop">Stop</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Maintenance</div>
+          <p class="card-muted">Re-ingest every stored document in the live API.
+            Previews the affected files first; nothing changes until you confirm.</p>
+          <div class="actions"><button class="btn-ghost" id="reingestBtn">Reingest documents</button></div>
+        </div>
+      </section>
+
+      <!-- Models ──────────────────────────────────────────────────── -->
+      <section class="view" id="view-models">
+        <div class="card">
+          <div class="card-title">Active model</div>
+          <p class="card-muted" id="swapHint"></p>
+          <div class="form-row">
+            <label>LLM</label>
+            <input id="swapModel" list="llmList" />
+            <datalist id="llmList"></datalist>
+            <button class="btn-primary" id="applyModelBtn">Apply &amp; restart</button>
+          </div>
+          <p class="card-muted" id="embedNote"></p>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Installed models</div>
+            <button class="btn-ghost" data-refresh="models">Refresh</button>
+          </div>
+          <div class="rows" id="modelRows"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Import a model from a tarball</div>
+          <p class="card-muted">Merge a model archive exported on a networked machine into
+            this machine's store. Contents are checksum-verified before anything is placed;
+            imported models are kept until you delete them or switch to them.</p>
+          <div class="form-row">
+            <label>Tarball</label>
+            <input id="importPath" placeholder="/media/usb/model.ollama.tar" />
+            <button class="btn-primary" id="importBtn">Import</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Export a model to a tarball</div>
+          <p class="card-muted" id="exportHint"></p>
+          <div class="form-row">
+            <label>Model</label>
+            <input id="exportModel" list="allModelList" />
+            <datalist id="allModelList"></datalist>
+          </div>
+          <div class="form-row">
+            <label>Save as</label>
+            <input id="exportDest" placeholder="/media/usb/model.ollama.tar" />
+            <button class="btn-primary" id="exportBtn">Export</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Logs ────────────────────────────────────────────────────── -->
+      <section class="view" id="view-logs">
+        <div class="logs-bar">
+          <label>Service</label>
+          <select id="logService">
+            <option value="all">all</option>
+            <option value="qdrant">qdrant</option>
+            <option value="ollama">ollama</option>
+            <option value="api">api</option>
+          </select>
+          <button class="btn-primary" id="followBtn">Follow</button>
+          <button class="btn-ghost" id="stopFollowBtn" disabled>Stop</button>
+        </div>
+        <pre class="console console-tall" id="logConsole"></pre>
+      </section>
+
+      <!-- Shared job console (Install/Manage/Models) ──────────────── -->
+      <div id="consoleWrap">
+        <div class="console-label">Output</div>
+        <pre class="console" id="jobConsole"></pre>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Confirm modal (ported pattern from ui/js/confirm.js) -->
+<div class="modal-overlay hidden" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="modalCancel">Cancel</button>
+      <button class="btn-primary" id="modalConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

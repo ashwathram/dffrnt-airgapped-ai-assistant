@@ -1,0 +1,246 @@
+/* Chat view: empty state, message bubbles, citations, sources, composer. */
+.chat { display: flex; flex-direction: column; height: 100%; }
+
+/* Retrieval scope bar (tag filter for chat) */
+.chat-scope { flex-shrink: 0; border-bottom: 1px solid var(--border); }
+.chat-scope:empty { display: none; }
+.scope-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 32px; font-size: 13px; color: var(--muted-foreground); transition: background 0.15s; }
+.scope-head:hover { background: var(--muted); }
+.scope-head .icon { font-size: 14px; flex-shrink: 0; }
+.scope-count { background: var(--accent); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 500; padding: 1px 7px; }
+.scope-spacer { flex: 1; }
+.scope-docs { font-size: 12px; color: var(--muted-foreground); margin-right: 8px; }
+.scope-chev { font-size: 14px; }
+.scope-body { display: flex; flex-direction: column; gap: 10px; padding: 2px 32px 14px; }
+.scope-hint { font-size: 12px; color: var(--muted-foreground); line-height: 1.5; margin-bottom: 2px; }
+/* Content-sized cards that wrap and leave negative space, rather than a rigid
+   grid that stretches a few chips across the pane. As groups multiply they
+   simply wrap onto new rows. */
+.scope-groups { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+/* Each type is a light card sized to its content (bounded by min/max), with a
+   faint tag-type tint + colored left stripe echoing the reasoning-trace panel. */
+.scope-group { flex: 0 1 auto; min-width: 150px; max-width: 240px; border: 1px solid var(--border); border-left: 3px solid; border-radius: 8px; overflow: hidden; }
+/* The whole header is the dropdown trigger: clicking it collapses the card. */
+.scope-ghead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 10px; cursor: pointer; transition: background 0.15s; }
+.scope-ghead:hover { background: rgba(9,26,41,0.03); }
+/* Type header doubles as a "select all tags of this type" toggle; its fill
+   reflects selection state (outline: none selected, tinted: some, solid: all).
+   Sized up from the chips so a group reads as a group at a glance. */
+.scope-gname {
+  padding: 3px 12px; border-radius: 999px; border: 1px solid;
+  background: transparent; font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  cursor: pointer; transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.scope-gname:hover { opacity: 0.85; }
+/* An explicit bordered button so the collapse affordance is obvious. */
+.scope-gtoggle {
+  display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex-shrink: 0;
+  border-radius: 6px; border: 1px solid var(--border); background: var(--card);
+  color: var(--muted-foreground); transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.scope-ghead:hover .scope-gtoggle { border-color: rgba(9,26,41,0.25); color: var(--foreground); }
+.scope-gtoggle .icon { font-size: 14px; }
+.scope-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 10px; border-top: 1px solid var(--border); }
+.scope-chip { padding: 3px 11px; border-radius: 999px; font-size: 12px; font-weight: 500; border: 1px solid; background: transparent; transition: opacity 0.15s; }
+.scope-chip:hover { opacity: 0.85; }
+.scope-clear { align-self: flex-start; font-size: 12px; color: var(--muted-foreground); text-decoration: underline; padding: 3px 6px; }
+.scope-clear:hover { color: var(--foreground); }
+
+.messages { flex: 1; overflow-y: auto; }
+.messages-inner { max-width: 768px; margin: 0 auto; padding: 32px; display: flex; flex-direction: column; gap: 32px; }
+
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 32px; padding: 32px; }
+.empty .orb {
+  width: 48px; height: 48px; border-radius: 16px; margin: 0 auto 16px;
+  background: var(--primary); display: flex; align-items: center; justify-content: center; color: var(--highlight);
+}
+.empty h2 { font-size: 20px; font-weight: 500; margin-bottom: 4px; text-align: center; }
+.empty p { font-size: 14px; color: var(--muted-foreground); max-width: 24rem; text-align: center; }
+
+.msg { display: flex; gap: 12px; }
+.msg.user { flex-direction: row-reverse; }
+.msg .avatar {
+  width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; margin-top: 2px;
+  background: var(--primary); color: var(--highlight); display: flex; align-items: center;
+  justify-content: center; font-size: 11px; font-weight: 500; font-family: var(--font-mono);
+}
+.msg .col { display: flex; flex-direction: column; gap: 4px; max-width: 82%; }
+.msg.user .col { align-items: flex-end; }
+.bubble { padding: 12px 16px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
+.msg.user .bubble { background: var(--primary); color: var(--primary-foreground); border-radius: 18px 18px 4px 18px; }
+.msg.assistant .bubble { background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: 4px 18px 18px 18px; }
+.ts { font-size: 11px; color: var(--muted-foreground); padding: 0 4px; }
+
+/* Hover action row under a finished assistant message */
+.msg-actions { display: flex; align-items: center; gap: 2px; padding: 0 2px; opacity: 0; transition: opacity 0.15s; }
+.msg.assistant:hover .msg-actions { opacity: 1; }
+.ma { padding: 5px; border-radius: 6px; color: var(--muted-foreground); display: flex; font-size: 13px; transition: background 0.15s, color 0.15s; }
+.ma:hover { background: var(--muted); color: var(--foreground); }
+.ma-ts { font-size: 11px; color: var(--muted-foreground); margin-left: 4px; }
+
+/* "Download As…" menu — a native <details> disclosure. The summary reuses the
+   .ma icon-button styling; the popover floats above the row (which sits at the
+   bottom of the message) so it never pushes the layout. */
+.dl-menu { position: relative; display: inline-flex; }
+.dl-menu > summary { list-style: none; cursor: pointer; }
+.dl-menu > summary::-webkit-details-marker { display: none; }
+.dl-options {
+  position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 20;
+  display: flex; flex-direction: column; min-width: 150px; padding: 4px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(9,26,41,0.14);
+}
+.dl-options button {
+  text-align: left; padding: 7px 10px; border-radius: 6px; font-size: 12px;
+  color: var(--foreground); transition: background 0.15s;
+}
+.dl-options button:hover { background: var(--muted); }
+
+/* Stop / Retry controls shown next to the model output while it generates.
+   Always visible (unlike the hover-only .msg-actions) so an in-flight answer
+   can be interrupted without hunting for a control. */
+.stream-actions { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.sa {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 8px;
+  font-size: 12px; font-weight: 500; color: var(--muted-foreground);
+  border: 1px solid var(--border); background: var(--card);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.sa:hover { background: var(--muted); color: var(--foreground); }
+.sa .icon { font-size: 13px; }
+.sa.stop:hover { color: var(--destructive); border-color: rgba(231,35,0,0.4); background: rgba(231,35,0,0.06); }
+
+.cite-chip {
+  display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 4px;
+  font-size: 12px; font-family: var(--font-mono); background: rgba(93,39,184,0.12);
+  color: var(--accent); border: 1px solid rgba(93,39,184,0.25); cursor: pointer; vertical-align: baseline;
+}
+.cite-chip:hover { background: var(--accent); color: #fff; }
+
+/* white-space: normal resets the bubble's pre-wrap so the source template's
+   indentation doesn't render as blank lines (keeps the cards compact). */
+.sources { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; white-space: normal; }
+.src-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.sources .lbl { font-size: 11px; color: var(--muted-foreground); font-weight: 500; letter-spacing: 0.06em; }
+.src-toggle { display: block; padding: 2px 0; font-size: 11px; color: var(--muted-foreground); transition: color 0.15s; }
+.src-toggle:hover { color: var(--foreground); }
+/* Retrieved-but-uncited sources: present for auditing, visually de-emphasized. */
+.sources-secondary { margin-top: 6px; }
+.sources-secondary .source { opacity: 0.6; }
+.sources-secondary .source:hover { opacity: 1; }
+.sources-secondary .num { background: var(--muted); color: var(--muted-foreground); }
+.source {
+  display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 8px;
+  background: var(--muted); border: 1px solid var(--border); margin-bottom: 6px;
+  text-decoration: none; color: inherit; transition: background 0.15s, border-color 0.15s;
+}
+.source:hover { background: rgba(93,39,184,0.06); border-color: rgba(93,39,184,0.3); }
+.source.flash { animation: src-flash 1.6s ease; }
+@keyframes src-flash {
+  0%, 35% { background: rgba(93,39,184,0.18); border-color: var(--accent); box-shadow: 0 0 0 2px rgba(93,39,184,0.3); }
+  100% { background: var(--muted); border-color: var(--border); box-shadow: none; }
+}
+.source .num {
+  width: 18px; height: 18px; flex-shrink: 0; border-radius: 4px; font-size: 11px; font-weight: 500;
+  font-family: var(--font-mono); background: rgba(93,39,184,0.15); color: var(--accent);
+  display: flex; align-items: center; justify-content: center; margin-top: 1px;
+}
+.source .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.source .fn { font-size: 12px; font-weight: 500; color: var(--foreground); overflow-wrap: anywhere; }
+.source .meta { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.source .excerpt {
+  font-size: 11px; color: var(--muted-foreground); line-height: 1.45; margin-top: 2px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.source .icon { flex-shrink: 0; font-size: 13px; color: var(--muted-foreground); opacity: 0; transition: opacity 0.15s; margin-top: 1px; }
+.source:hover .icon { opacity: 0.8; }
+
+.notice {
+  align-self: center; display: flex; align-items: center; gap: 8px; max-width: 32rem;
+  padding: 12px 16px; border-radius: 12px; font-size: 12px; text-align: center;
+  background: rgba(231,35,0,0.06); border: 1px solid rgba(231,35,0,0.18); color: var(--destructive);
+}
+
+.typing { display: inline-flex; gap: 4px; align-items: center; }
+.typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-foreground); animation: blink 1.2s infinite both; }
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+/* Blinking caret shown at the end of an answer while it streams in. */
+.stream-cursor {
+  display: inline-block; width: 2px; height: 1em; margin-left: 2px;
+  background: var(--muted-foreground); vertical-align: text-bottom;
+  animation: blink 1s step-start infinite;
+}
+
+/* Composer */
+.composer-wrap { flex-shrink: 0; padding: 16px 32px 32px; max-width: 768px; margin: 0 auto; width: 100%; }
+.composer {
+  display: flex; flex-direction: column; border-radius: 16px; background: var(--card);
+  border: 1px solid var(--border); transition: box-shadow 0.15s;
+}
+.composer:focus-within { box-shadow: 0 1px 8px rgba(9,26,41,0.06); }
+.composer textarea {
+  width: 100%; resize: none; padding: 14px 16px 8px; background: transparent; outline: none;
+  border: none; font-size: 14px; line-height: 1.6; font-family: inherit; color: var(--foreground);
+  max-height: 160px; scrollbar-width: none;
+}
+.composer textarea::placeholder { color: var(--muted-foreground); }
+.composer .row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 12px 10px; }
+.composer .count { font-size: 11px; color: var(--muted-foreground); }
+.send-btn {
+  width: 32px; height: 32px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+  background: var(--muted); color: var(--muted-foreground); transition: background 0.15s, color 0.15s;
+}
+.send-btn.ready { background: var(--primary); color: var(--primary-foreground); }
+.disclaimer { text-align: center; font-size: 11px; color: var(--muted-foreground); margin-top: 8px; }
+
+/* Thinking toggle pill (sits above the composer, right-aligned) */
+.composer-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.think-toggle {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 8px;
+  font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: transparent;
+  color: var(--muted-foreground); transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.think-toggle:hover { background: var(--muted); }
+.think-toggle.on { background: rgba(93,39,184,0.08); border-color: rgba(93,39,184,0.3); color: var(--accent); }
+.think-toggle .icon { font-size: 13px; }
+
+.switch {
+  width: 34px; height: 20px; border-radius: 999px; background: var(--muted);
+  position: relative; flex-shrink: 0; transition: background 0.15s; border: 1px solid var(--border);
+}
+.switch.on { background: var(--accent); border-color: var(--accent); }
+.switch .knob {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; transition: left 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.switch.on .knob { left: 17px; }
+
+/* Reasoning ("thinking") output */
+.thinking-label { color: var(--muted-foreground); font-style: italic; font-size: 14px; animation: blink 1.5s infinite; }
+.thinking-block {
+  margin-bottom: 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: 8px; background: rgba(93,39,184,0.04); overflow: hidden;
+}
+.thinking-block summary {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none;
+  padding: 8px 12px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--accent); font-weight: 500;
+}
+.thinking-block summary::-webkit-details-marker { display: none; }
+.thinking-block summary .icon { font-size: 13px; }
+.thinking-body {
+  padding: 0 12px 10px; max-height: 220px; overflow-y: auto; scrollbar-width: thin;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.trace-label {
+  font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--muted-foreground); padding: 8px 0 2px;
+}
+.trace-line { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--muted-foreground); }
+.trace-line.current { color: var(--accent); }
+.trace-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); flex-shrink: 0; margin-top: 6px; }
+.trace-line.current .trace-dot { background: var(--accent); }
+.trace-text { min-width: 0; font-family: var(--font-mono); word-break: break-word; }
